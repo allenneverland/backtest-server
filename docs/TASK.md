@@ -24,6 +24,7 @@
 - ✅ 創建TimescaleDB資料庫Docker配置
 - ✅ 配置cargo-make任務
 - ✅ 建立開發和測試環境分離配置 `[config, toml]`
+- 📋 🔴 創建RabbitMQ Docker配置 `[docker-compose]`
 
 ### 3. 領域類型建立
 - ✅ 實現基本資產類型（`asset_types.rs`）`[serde, rust_decimal, thiserror]`
@@ -49,6 +50,16 @@
 - 📋 🟢 實現任務佇列操作（`redis/operations/queue.rs`）`[redis, tokio, serde_json]` ⚡(依賴任務21.2)
 - 📋 🟢 實現分散式鎖（`redis/operations/lock.rs`）`[redis, tokio, parking_lot]` ⚡(依賴任務21.2)
 
+### 新增：RabbitMQ消息系統模組
+- 📋 🔴 🚀 實現RabbitMQ連接管理（`messaging/rabbitmq/connection.rs`）`[lapin, tokio, deadpool-lapin]` ⚡(依賴任務7)
+- 📋 🔴 🚀 實現消息代理（`messaging/rabbitmq/broker.rs`）`[lapin, tokio, async-trait]` ⚡(依賴任務15.1)
+- 📋 🔴 實現消息客戶端（`messaging/rabbitmq/client.rs`）`[lapin, tokio, uuid]` ⚡(依賴任務15.1)
+- 📋 🔴 實現通訊協議（`messaging/protocol.rs`）`[serde, chrono, uuid]`
+- 📋 🟡 實現RPC模式（`messaging/rabbitmq/rpc.rs`）`[lapin, tokio, futures]` ⚡(依賴任務15.1, 15.2)
+- 📋 🟡 實現消息處理器（`messaging/handlers/`）`[lapin, serde_json, tokio]` ⚡(依賴任務15.2, 15.3)
+- 📋 🟡 實現消息模型（`messaging/models/`）`[serde, chrono, serde_json]`
+- 📋 🟢 實現消息認證（`messaging/auth.rs`）`[jsonwebtoken, sha2]` ⚡(依賴任務15.2)
+
 ### 5. 數據導入模組
 - 📋 🔴 🚀 實現CSV讀取功能（`csv_io.rs`）`[csv, serde, tokio]` ⚡(依賴任務3)
 - 📋 🔴 🚀 實現數據驗證流程（`validator.rs`）`[thiserror, serde]` ⚡(依賴任務3)
@@ -70,6 +81,7 @@
 - ✅ 🟡 實現配置驗證（`validation.rs`）`[thiserror, serde]`
 - ✅ 🟡 設定默認配置值（`defaults.rs`）`[once_cell, serde]`
 - ✅ 🟢 實現環境變量支持 `[config]`
+- 📋 🟡 實現RabbitMQ配置 `[config, serde, toml]`
 
 ## 第三階段：回測與執行模組（3-4週）
 
@@ -99,6 +111,7 @@
 - 📋 🔴 實現事件總線（`bus.rs`）`[tokio, futures, parking_lot]`
 - 📋 🟡 實現事件佇列（`queue.rs`）`[tokio, crossbeam]`
 - 📋 🟡 實現事件分發器（`dispatcher.rs`）`[tokio, futures, async-trait]` ⚡(依賴任務11.1, 11.2)
+- 📋 🟡 將事件發布整合到RabbitMQ `[lapin, tokio]` ⚡(依賴任務11.1, 15.1)
 
 ## 第四階段：策略與隔離運行時（3-4週）
 
@@ -122,21 +135,21 @@
 - 📋 🟢 實現策略快照管理（`snapshot.rs`）`[serde, serde_json, chrono]` ⚡(依賴任務14.3)
 - 📋 🟢 實現配置文件監控（`config_watcher.rs`）`[tokio, futures, glob]`
 
-## 第五階段：API與伺服器功能（2-3週）
+## 第五階段：消息系統集成與伺服器功能（2-3週）
 
-### 15. API服務模組
-- 📋 🔴 🚀 實現API請求處理（`handlers.rs`）`[axum, tokio, serde_json]` ⚡(依賴任務10, 14)
-- 📋 🔴 🚀 定義API路由（`routes/`）`[axum, tower-http]`
-- 📋 🔴 實現請求參數驗證（`validators.rs`）`[serde, thiserror]`
-- 📋 🟡 實現認證和授權（`auth.rs`）`[tower, jsonwebtoken, sha2]`
-- 📋 🟡 實現API中間件（`middleware.rs`）`[tower, tower-http, tracing]`
-- 📋 🟡 實現API錯誤處理（`error.rs`）`[axum, thiserror, serde]`
-- 📋 🟢 實現API響應格式化（`responses/`）`[serde, serde_json]`
+### 15. 消息系統集成
+- 📋 🔴 🚀 實現回測消息處理器（`messaging/handlers/backtest.rs`）`[lapin, tokio, serde_json]` ⚡(依賴任務10, 15.2)
+- 📋 🔴 🚀 實現策略消息處理器（`messaging/handlers/strategy.rs`）`[lapin, tokio, serde_json]` ⚡(依賴任務14, 15.2)
+- 📋 🔴 實現數據消息處理器（`messaging/handlers/data.rs`）`[lapin, tokio, serde_json]` ⚡(依賴任務5, 6, 15.2)
+- 📋 🟡 實現消息協議文檔 `[markdown]`
+- 📋 🟡 實現消息錯誤處理 `[thiserror, serde_json]`
+- 📋 🟢 實現消息響應格式標準化 `[serde, serde_json]`
 
 ### 16. 伺服器模組
-- 📋 🔴 🚀 實現伺服器構建器（`builder.rs`）`[axum, tokio, tower]` ⚡(依賴任務15)
+- 📋 🔴 🚀 實現伺服器構建器（`builder.rs`）`[lapin, tokio]` ⚡(依賴任務15)
 - 📋 🔴 實現伺服器配置結構（`config.rs`）`[serde, config]`
 - 📋 🟡 實現伺服器錯誤處理（`error.rs`）`[thiserror, tracing]`
+- 📋 🟡 實現優雅關閉機制 `[tokio, futures]`
 
 ## 第六階段：集成與測試（3-4週）
 
@@ -144,22 +157,23 @@
 - 📋 🔴 🚀 實現數據導入和提供模組測試 `[mockall, tokio-test, fake]`
 - 📋 🔴 實現回測系統測試 `[mockall, tokio-test, proptest]`
 - 📋 🟡 實現策略DSL測試 `[assert_matches, test-case]`
-- 📋 🟡 實現API集成測試 `[tokio-test, reqwest]`
+- 📋 🟡 實現消息系統測試 `[tokio-test, lapin-test-utils]`
 - 📋 🟢 實現性能基準測試 `[criterion, fake]`
 
 ### 18. 示例代碼
 - 📋 🔴 實現簡單策略示例 `[serde_yaml_bw, chrono, rust_decimal]`
 - 📋 🟡 實現完整回測流程示例 `[tokio, serde_yaml_bw, chrono]`
-- 📋 🟢 實現API使用示例 `[reqwest, serde_json, tokio]`
+- 📋 🟡 實現消息客戶端示例 `[lapin, serde_json, tokio]`
+- 📋 🟢 實現系統監控示例 `[lapin, tokio, tracing]`
 
 ### 19. 文檔
-- 📋 🔴 🚀 完善API參考文檔
+- 📋 🔴 🚀 完善消息協議參考文檔
 - 📋 🔴 完善使用者指南
 - 📋 🟡 建立開發者文檔
 - 📋 🟢 建立部署指南
 
 ### 20. 部署
-- 📋 🔴 建立生產環境配置 `[config, toml]`
+- 📋 🔴 建立生產環境配置 `[config, toml, rabbitmq-conf]`
 - 📋 🟡 優化Docker配置
 - 📋 🟡 建立自動部署流程
 - 📋 🟢 實現性能監控和日誌管理 `[tracing, metrics-exporter-prometheus]`

@@ -1,0 +1,80 @@
+{
+    "exchanges": [
+        {
+            "name": "backtest.direct",
+            "vhost": "/",
+            "type": "direct",
+            "durable": true,
+            "auto_delete": false,
+            "internal": false,
+            "arguments": {}
+        },
+        {
+            "name": "backtest.topic",
+            "vhost": "/",
+            "type": "topic",
+            "durable": true,
+            "auto_delete": false,
+            "internal": false,
+            "arguments": {}
+        },
+        {
+            "name": "backtest.events",
+            "vhost": "/",
+            "type": "topic",
+            "durable": true,
+            "auto_delete": false,
+            "internal": false,
+            "arguments": {}
+        }
+    ],
+    "queues": [
+        {
+            "name": "backtest.requests",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "strategy.requests",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "data.requests",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        }
+    ],
+    "bindings": [
+        {
+            "source": "backtest.direct",
+            "vhost": "/",
+            "destination": "backtest.requests",
+            "destination_type": "queue",
+            "routing_key": "backtest.run",
+            "arguments": {}
+        },
+        {
+            "source": "backtest.direct",
+            "vhost": "/",
+            "destination": "strategy.requests",
+            "destination_type": "queue",
+            "routing_key": "strategy.load",
+            "arguments": {}
+        },
+        {
+            "source": "backtest.direct",
+            "vhost": "/",
+            "destination": "data.requests",
+            "destination_type": "queue",
+            "routing_key": "data.query",
+            "arguments": {}
+        }
+    ]
+}

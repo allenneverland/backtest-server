@@ -18,7 +18,7 @@
   - [3.6 隔離運行時模組](#36-隔離運行時模組)
   - [3.7 執行模擬器模組](#37-執行模擬器模組)
   - [3.8 風險管理模組](#38-風險管理模組)
-  - [3.9 API服務模組](#39-api服務模組)
+  - [3.9 消息系統模組](#39-消息系統模組)
   - [3.10 配置管理模組](#310-配置管理模組)
   - [3.11 伺服器模組](#311-伺服器模組)
   - [3.12 回測模組](#312-回測模組)
@@ -63,6 +63,7 @@ backtest_server/                # 專案根目錄
 │       └── release.yml         # 發布流程配置
 ├── Dockerfile                  # Docker容器定義
 ├── Dockerfile.db               # TimescaleDB數據庫容器定義
+├── Dockerfile.rabbitmq         # RabbitMQ容器定義
 ├── docker-compose.yml          # Docker Compose配置
 ├── docs/                       # 文檔目錄
 ├── config/                     # 配置文件目錄
@@ -91,11 +92,15 @@ docs/                           # 文檔目錄
 
 config/                         # 配置文件目錄
 ├── development.toml            # 開發環境配置
-└── production.toml             # 生產環境配置
+├── production.toml             # 生產環境配置
+└── rabbitmq.conf               # RabbitMQ配置文件
 
 scripts/                        # 輔助腳本目錄
 ├── db/                         # 數據庫相關腳本
 │   └── init.sql                # 數據庫初始化腳本
+├── rabbitmq/                   # RabbitMQ相關腳本
+│   ├── init.sh                 # RabbitMQ初始化腳本
+│   └── definitions.json        # RabbitMQ預設定義
 ├── install.sh                  # 安裝依賴腳本
 ├── setup_db.sh                 # 設置數據庫腳本
 └── benchmark.sh                # 運行基準測試腳本
@@ -119,7 +124,7 @@ src/                            # 源代碼目錄
 ├── event.rs                    # 事件處理系統模組，宣告子模組
 ├── runtime.rs                  # 隔離運行時模組，宣告子模組
 ├── risk.rs                     # 風險管理模組，宣告子模組
-├── api.rs                      # API服務模組，宣告子模組
+├── messaging.rs                # 消息系統模組，宣告子模組
 ├── server.rs                   # 伺服器核心組件，宣告子模組
 ├── storage.rs                  # 存儲系統模組，宣告子模組
 ├── backtest.rs                 # 回測系統模組，宣告子模組
@@ -212,6 +217,27 @@ src/event/                          # 事件處理系統模組目錄
 ├── queue.rs                        # 事件佇列
 └── dispatcher.rs                   # 事件分發器
 
+# 消息系統模組
+src/messaging/                      # 消息系統模組目錄
+├── rabbitmq/                       # RabbitMQ實現
+│   ├── connection.rs               # 連接管理
+│   ├── broker.rs                   # 消息代理實現
+│   ├── client.rs                   # 客戶端實現
+│   ├── consumer.rs                 # 消費者實現
+│   ├── publisher.rs                # 發布者實現
+│   ├── rpc.rs                      # RPC實現
+│   └── error.rs                    # 錯誤處理
+├── protocol.rs                     # 通訊協議定義
+├── handlers/                       # 消息處理器目錄
+│   ├── backtest.rs                 # 回測相關消息處理
+│   ├── strategy.rs                 # 策略相關消息處理
+│   └── data.rs                     # 數據相關消息處理
+├── models/                         # 消息模型目錄
+│   ├── commands.rs                 # 命令消息模型
+│   ├── events.rs                   # 事件消息模型
+│   └── responses.rs                # 回應消息模型
+└── auth.rs                         # 消息認證和授權
+
 # 回測系統模組
 src/backtest/                       # 回測系統模組目錄
 ├── engine.rs                       # 回測引擎核心實現
@@ -223,20 +249,7 @@ src/backtest/                       # 回測系統模組目錄
 ├── metrics.rs                      # 回測性能指標計算
 └── storage.rs                      # 回測結果存儲
 
-# 服務與API模組
-src/api/                            # API服務模組目錄
-├── handlers.rs                     # API請求處理邏輯
-├── validators.rs                   # 請求參數驗證邏輯
-├── auth.rs                         # 認證和授權
-├── middleware.rs                   # 認證中間件
-├── error.rs                        # API錯誤類型定義和處理
-├── types.rs                        # API共用類型定義
-├── routes/                         # API路由定義目錄
-├── responses.rs                    # 響應模組入口點
-└── responses/                      # API響應格式化
-    ├── common.rs                   # 通用響應結構
-    └── error.rs                    # 錯誤響應格式
-
+# 服務與消息系統模組
 src/server/                         # 伺服器模組目錄
 ├── builder.rs                      # 伺服器構建器模式實現
 ├── config.rs                       # 伺服器特定配置結構
@@ -276,16 +289,19 @@ tests/                              # 集成測試目錄
 ├── data_provider_tests.rs          # 數據提供模組測試
 ├── strategy_tests.rs               # 策略模組測試
 ├── backtest_tests.rs               # 回測系統測試
+├── messaging_tests.rs              # 消息系統測試
 └── dsl_tests.rs                    # DSL解釋器測試
 
 benches/                            # 性能基準測試目錄
 ├── data_loading.rs                 # 數據加載性能測試
 ├── stock_filtering.rs              # 股票篩選性能測試
-└── strategy_execution.rs           # 策略執行性能測試
+├── strategy_execution.rs           # 策略執行性能測試
+└── messaging_performance.rs        # 消息系統性能測試
 
 examples/                           # 示例代碼目錄
 ├── simple_strategy.rs              # 簡單策略示例
-└── backtest_runner.rs              # 回測運行器示例
+├── backtest_runner.rs              # 回測運行器示例
+└── messaging_client.rs             # 消息客戶端示例
 ```
 
 ## 3. 核心模組
@@ -334,7 +350,7 @@ examples/                           # 示例代碼目錄
 
 ### 3.3 數據提供模組
 
-此模組作為系統中其他部分（如回測引擎、API服務）獲取處理後數據的統一接口。它負責從存儲系統中高效地檢索數據並提供必要的轉換功能。
+此模組作為系統中其他部分（如回測引擎、消息系統）獲取處理後數據的統一接口。它負責從存儲系統中高效地檢索數據並提供必要的轉換功能。
 
 **主要功能**:
 - 提供統一的數據訪問接口。
@@ -426,26 +442,31 @@ examples/                           # 示例代碼目錄
 - `limits.rs`: 定義風險限制規則
 - `metrics.rs`: 計算風險指標
 
-### 3.9 API服務模組
+### 3.9 消息系統模組
 
-API服務模組提供RESTful接口，允許外部系統和用戶與回測伺服器交互。
+消息系統模組提供基於 RabbitMQ 的消息中間件機制，允許外部系統和用戶與回測伺服器交互。
 
 **主要功能**:
-- 提供RESTful API接口
-- 實現用戶認證和授權
-- 處理API請求和響應
+- 提供可靠的消息通訊機制
+- 實現多種消息模式（請求/回應、發布/訂閱、工作佇列）
+- 處理命令和事件消息
+- 提供消息認證和授權
 
-**主要組件** (`src/api/`):
-- `handlers.rs`: 實現API請求處理邏輯
-- `validators.rs`: 實現請求參數驗證
-- `auth.rs`: 管理認證和授權
-- `middleware.rs`: 實現API中間件（如認證、日誌）
-- `error.rs`: 定義API錯誤類型
-- `types.rs`: 定義API共用類型
-- `routes/`: 定義API路由
-- `responses.rs`: 管理API響應格式
-- `responses/common.rs`: 定義通用響應結構
-- `responses/error.rs`: 定義錯誤響應格式
+**主要組件** (`src/messaging/`):
+- `rabbitmq/connection.rs`: 管理 RabbitMQ 連接
+- `rabbitmq/broker.rs`: 實現消息代理和路由
+- `rabbitmq/client.rs`: 提供客戶端使用的 API
+- `rabbitmq/consumer.rs`: 處理消息消費邏輯
+- `rabbitmq/publisher.rs`: 處理消息發布邏輯
+- `rabbitmq/rpc.rs`: 實現 RPC 調用模式
+- `protocol.rs`: 定義通訊協議和格式
+- `handlers/backtest.rs`: 處理回測相關請求
+- `handlers/strategy.rs`: 處理策略相關請求
+- `handlers/data.rs`: 處理數據相關請求
+- `models/commands.rs`: 定義命令消息結構
+- `models/events.rs`: 定義事件消息結構
+- `models/responses.rs`: 定義回應消息結構
+- `auth.rs`: 處理消息認證和授權
 
 ### 3.10 配置管理模組
 
@@ -463,10 +484,10 @@ API服務模組提供RESTful接口，允許外部系統和用戶與回測伺服�
 
 ### 3.11 伺服器模組
 
-伺服器模組管理HTTP服務的生命週期和配置。
+伺服器模組管理消息服務的生命週期和配置。
 
 **主要功能**:
-- 初始化和配置HTTP服務器
+- 初始化和配置消息服務系統
 - 管理服務生命週期
 - 處理基礎設施相關邏輯
 
@@ -499,6 +520,19 @@ API服務模組提供RESTful接口，允許外部系統和用戶與回測伺服�
 
 ### 3.13 存儲系統模組
 
+存儲系統模組負責管理系統的持久化存儲，包括數據庫和快取操作。
+
+**主要功能**:
+- 管理數據庫連接和操作
+- 提供數據模型和ORM功能
+- 管理Redis快取和分佈式功能
+
+**主要組件** (`src/storage/`):
+- `database.rs`: 數據庫連接管理
+- `models.rs`: 數據模型定義
+- `migrations.rs`: 數據庫遷移管理
+- `redis/*`: Redis相關功能實現
+
 ## 4. 配置文件
 
 專案使用以下配置文件管理設置：
@@ -508,6 +542,7 @@ API服務模組提供RESTful接口，允許外部系統和用戶與回測伺服�
 - **Makefile.toml**: cargo-make任務定義
 - **config/development.toml**: 開發環境配置
 - **config/production.toml**: 生產環境配置
+- **config/rabbitmq.conf**: RabbitMQ配置
 
 ## 5. 資料庫結構
 
@@ -568,10 +603,15 @@ API服務模組提供RESTful接口，允許外部系統和用戶與回測伺服�
   - 基於timescale/timescaledb:latest-pg14鏡像
   - 自動加載數據庫遷移文件
   - 配置TimescaleDB優化參數
+- **Dockerfile.rabbitmq**: 定義RabbitMQ環境，包括：
+  - 基於rabbitmq:3.11-management鏡像
+  - 加載預設交換機和佇列定義
+  - 配置管理界面和插件
 - **docker-compose.yml**: 配置多服務開發環境，包括：
   - Rust開發容器
   - TimescaleDB數據庫
   - Redis緩存和消息系統
+  - RabbitMQ消息代理
 
 Docker環境配置確保開發和生產環境的一致性，簡化部署流程。
 
@@ -597,6 +637,7 @@ Docker環境配置確保開發和生產環境的一致性，簡化部署流程�
 - **篩選和查詢性能**: 測試資產篩選和數據查詢效率
 - **策略執行性能**: 測試在不同數據量下的策略執行效率
 - **DSL解析和執行性能**: 測試DSL解析器和運行時的效率
+- **消息系統性能**: 測試RabbitMQ消息傳輸效率和延遲
 
 基準測試結果用於識別性能瓶頸和驗證優化效果。
 
@@ -606,6 +647,7 @@ Docker環境配置確保開發和生產環境的一致性，簡化部署流程�
 
 - `simple_strategy.rs`: 展示如何創建和測試簡單交易策略
 - `backtest_runner.rs`: 展示如何配置和運行完整回測
+- `messaging_client.rs`: 展示如何使用RabbitMQ客戶端與系統交互
 - 其他專用示例，如技術指標計算、自定義DSL策略等
 
 示例代碼提供了實際使用場景的參考，幫助用戶快速上手。
@@ -620,7 +662,7 @@ Docker環境配置確保開發和生產環境的一致性，簡化部署流程�
 - **docs/STRUCTURE.md**: 本文檔，詳細的專案結構
 - **docs/DB_SCHEMA.md**: 數據庫結構設計
 - **docs/BACKTEST_ARCHITECTURE.md**: 回測系統架構細節
-- **API文檔**: 自動生成的API參考文檔
+- **消息協議文檔**: 描述RabbitMQ消息格式和協議
 - **用戶指南**: 策略開發和系統使用手冊
 
 文檔通過`cargo doc`生成，並可通過GitHub Pages或專用文檔網站訪問。
@@ -734,7 +776,7 @@ strategies/
 ┌─── 初始化階段 ───┐   ┌─── 數據準備階段 ───┐   ┌─── 策略執行階段 ───┐   ┌─── 結果收集階段 ───┐   ┌─── 結果分析階段 ───┐
 │  使用模組:        │   │  使用模組:          │   │  使用模組:          │   │  使用模組:          │   │  使用模組:          │
 │  - 回測模組       │   │  - 數據提供模組     │   │  - 策略模組         │   │  - 執行模擬器模組   │   │  - 回測模組         │
-│  - 配置管理模組   │   │  - 運行時模組       │   │  - DSL模組          │   │  - 風險管理模組     │   │  - 事件處理模組     │
+│  - 配置管理模組   │   │  - 運行時模組       │   │  - DSL模組          │   │  - 風險管理模組     │   │  - 消息系統模組    │
 │                  │   │  - 回測模組         │   │  - 運行時模組       │   │  - 回測模組         │   │                    │
 │                  │   │                    │   │  - 執行模擬器模組    │   │                    │   │                    │
 └──────────────────┘   └────────────────────┘   └────────────────────┘   └────────────────────┘   └────────────────────┘

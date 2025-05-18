@@ -1,0 +1,65 @@
+## 開發環境配置
+
+[database]
+# 使用開發環境數據庫
+host = "db"  # 在Docker環境中使用服務名稱而非localhost
+port = 5432
+username = "finrust"
+password = "finrust"
+database = "finrust"
+connection_pool_size = 10
+max_connections = 10
+min_connections = 2
+max_lifetime_secs = 1800  # 秒, 30分鐘
+acquire_timeout_secs = 15  # 秒，增加超時時間
+idle_timeout_secs = 600   # 秒, 10分鐘
+
+[data_source]
+source_type = "File"  # 可選值: "File", "Database", "Api"
+path = "data"         # 數據文件夾路徑
+format = "Csv"        # 可選值: "Csv", "Json", "Parquet", "Database"
+api_endpoint = ""     # API端點（當source_type為Api時使用）
+api_token = ""        # API認證令牌（當source_type為Api時使用）
+
+[log]
+# 開發環境使用更詳細的日誌
+level = "debug"
+format = "pretty" 
+
+[app]
+# 開發環境使用不同端口
+threads = 4
+
+[strategy]
+# 策略配置
+directory = "strategies"               # 策略目錄路徑
+hot_update_enabled = true              # 是否啟用熱更新
+hot_update_interval_secs = 30          # 熱更新檢查間隔（秒）
+config_watch_interval_secs = 15        # 配置文件監控間隔（秒）
+max_parallel_updates = 5               # 最大並行更新數量
+auto_reload_on_config_change = true    # 配置更新自動重載
+
+[server]
+# 伺服器配置
+host = "127.0.0.1"
+port = 3000  # 使用與原來 app.port 相同的端口
+worker_threads = 4
+request_timeout = 30  # 秒
+max_connections = 1000
+use_https = false
+cert_path = ""  # 空字符串
+key_path = ""   # 空字符串
+enable_compression = true
+max_body_size = 10485760  # 10MB
+enable_cors = true  # 伺服器本身的CORS設定
+cors_allowed_origins = ["http://localhost:8080"]  # 允許從前端頁面訪問
+static_files_dir = "static"  # 靜態文件目錄
+
+[rest_api]
+# REST API 配置
+base_path = "/api"  # API基礎路徑
+api_key = "FM0FiHngsmgigP1NGCsciD6pQfTlDJM"  # 開發環境API密鑰
+secret_key = "7MQa0zB91flUHPpcGnVIHhahLNKpAAMUvpevjMqOFse8xGVO88XrwJayb8KNcf"  # 開發環境密鑰
+request_timeout = 30  # API請求超時時間(秒)
+cors_allow_all = false  # API是否允許所有跨域請求
+cors_origins = ["http://localhost:8080", "http://127.0.0.1:8080"]  # API允許的跨域來源

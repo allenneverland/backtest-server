@@ -1,0 +1,85 @@
+services:
+  # 開發環境
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache:/app/target
+    environment:
+      - RUST_BACKTRACE=${RUST_BACKTRACE}
+      - RUST_LOG=${RUST_LOG}
+      - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+      - REDIS_URL=redis://${REDIS_HOST}:${REDIS_PORT}
+    depends_on:
+      - db
+      - redis
+    command: >
+      bash -c "
+        echo '等待数据库就绪...' &&
+        sqlx migrate run --source migrations &&
+        echo '迁移完成，进入开发模式' &&
+        tail -f /dev/null
+      "
+    networks:
+      - finrust-network
+
+  # TimescaleDB 數據庫
+  db:
+    image: timescale/timescaledb:latest-pg14
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile.db
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # 掛載遷移目錄到容器中
+      - ./migrations:/app/migrations
+    ports:
+      - "${DB_PORT}:5432"
+    networks:
+      - finrust-network
+    command: >
+      -c shared_buffers=${TIMESCALEDB_SHARED_BUFFERS}
+      -c max_connections=${TIMESCALEDB_MAX_CONNECTIONS}
+      -c effective_cache_size=${TIMESCALEDB_EFFECTIVE_CACHE_SIZE}
+      -c timescaledb.max_background_workers=${TIMESCALEDB_MAX_BACKGROUND_WORKERS}
+      -c timescaledb.telemetry_level=off
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis 用於緩存和消息傳遞
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - finrust-network
+    command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+
+volumes:
+  cargo-cache:
+  target-cache:
+  db-data:
+  redis-data:
+  grafana-data:
+
+networks:
+  finrust-network:
+    driver: bridge

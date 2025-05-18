@@ -1,0 +1,43 @@
+# 全局 Cargo 配置
+
+# 編譯設置
+[build]
+# 使用所有可用的CPU核心進行編譯
+jobs = 8
+
+# 啟用增量編譯，以提高重複編譯速度
+incremental = true
+
+# 針對發布版本的優化設置
+[profile.release]
+# 優化級別 (0-3)，3為最高級別優化
+opt-level = 3
+
+# 啟用鏈接時間優化 (LTO)
+lto = "thin"
+
+# 啟用調試信息，允許在發布模式下捕獲更好的錯誤信息
+debug = 1
+
+# 啟用代碼分割，減小二進制大小
+codegen-units = 1
+
+# 針對開發版本的設置
+[profile.dev]
+# 開發版本使用較低的優化級別，以提高編譯速度
+opt-level = 0
+
+# 開發時啟用完整的調試信息
+debug = 2
+
+# 包和依賴設置
+[source.crates-io]
+
+# 添加自定義編譯目標(如果需要)
+# [target.x86_64-unknown-linux-gnu]
+# rustflags = ["-C", "target-cpu=native"]
+
+# 環境特定的配置
+[env]
+# 設置RUST_BACKTRACE=1，以便在崩潰時顯示完整堆棧跟踪
+RUST_BACKTRACE = "1"

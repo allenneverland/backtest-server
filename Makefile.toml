@@ -1,0 +1,203 @@
+[config]
+default_to_workspace = false
+min_version = "0.35.0"
+
+[env]
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
+RUST_BACKTRACE = "1"
+
+#--------------------------------------------------
+# 基本構建任務
+#--------------------------------------------------
+
+[tasks.default]
+description = "默認任務 = 運行開發模式"
+dependencies = ["run"]
+
+[tasks.check]
+description = "檢查代碼能否編譯，不生成二進制文件"
+command = "cargo"
+args = ["check", "--all-features"]
+
+[tasks.build]
+description = "構建開發版本"
+command = "cargo"
+args = ["build", "--all-features"]
+
+[tasks.build-release]
+description = "構建發布版本"
+command = "cargo"
+args = ["build", "--release", "--all-features"]
+
+[tasks.clean]
+description = "清理構建文件"
+command = "cargo"
+args = ["clean"]
+
+[tasks.run]
+description = "運行開發版本"
+dependencies = ["build"]
+command = "cargo"
+args = ["run"]
+
+[tasks.run-release]
+description = "運行發布版本"
+dependencies = ["build-release"]
+command = "cargo"
+args = ["run", "--release"]
+
+#--------------------------------------------------
+# 代碼質量與測試任務
+#--------------------------------------------------
+
+[tasks.format]
+description = "格式化代碼"
+command = "cargo"
+args = ["fmt", "--all"]
+
+[tasks.format-check]
+description = "檢查代碼格式"
+command = "cargo"
+args = ["fmt", "--all", "--check"]
+
+[tasks.lint]
+description = "運行代碼檢查"
+command = "cargo"
+args = ["clippy", "--all-targets", "--all-features", "--", "-D", "warnings"]
+
+[tasks.test]
+description = "運行單元測試"
+command = "cargo"
+args = ["test", "--lib"]
+
+[tasks.test-integration]
+description = "運行集成測試"
+command = "cargo"
+args = ["test", "--test", "*"]
+
+[tasks.test-all]
+description = "運行所有測試"
+dependencies = ["format", "lint", "test", "test-integration"]
+
+[tasks.bench]
+description = "運行性能基準測試"
+command = "cargo"
+args = ["bench"]
+
+[tasks.coverage]
+description = "生成代碼覆蓋率報告"
+install_crate = "cargo-llvm-cov"
+command = "cargo"
+args = ["llvm-cov", "--html"]
+
+#--------------------------------------------------
+# 文檔與示例
+#--------------------------------------------------
+
+[tasks.docs]
+description = "生成本地文檔"
+command = "cargo"
+args = ["doc", "--no-deps", "--open"]
+
+[tasks.run-example]
+description = "運行指定示例"
+env = { EXAMPLE = "${@}" }
+command = "cargo"
+args = ["run", "--example", "${EXAMPLE}"]
+
+#--------------------------------------------------
+# 項目任務
+#--------------------------------------------------
+
+[tasks.dev-setup]
+description = "設置開發環境"
+script = '''
+#!/usr/bin/env bash
+set -e
+echo "安裝開發工具..."
+rustup component add rustfmt clippy
+cargo install cargo-edit cargo-watch cargo-llvm-cov
+echo "設置開發環境完成"
+'''
+
+[tasks.dev-setup.windows]
+script = '''
+echo "安裝開發工具..."
+rustup component add rustfmt clippy
+cargo install cargo-edit cargo-watch cargo-llvm-cov
+echo "設置開發環境完成"
+'''
+
+[tasks.watch]
+description = "監視代碼變更並自動構建和測試"
+install_crate = "cargo-watch"
+command = "cargo"
+args = ["watch", "-x", "check -x test -x clippy"]
+
+[tasks.ci]
+description = "執行CI流程"
+dependencies = ["format-check", "lint", "test-all", "build-release"]
+
+#--------------------------------------------------
+# Docker 相關任務
+#--------------------------------------------------
+
+[tasks.docker-build]
+description = "構建Docker開發環境"
+command = "docker"
+args = ["compose","build"]
+
+[tasks.docker-up]
+description = "啟動Docker開發環境"
+command = "docker"
+args = ["compose","up", "-d"]
+
+[tasks.docker-ps]
+description = "查看Docker開發環境"
+command = "docker"
+args = ["compose","ps"]
+
+[tasks.docker-logs]
+description = "查看Docker開發環境日志"
+command = "docker"
+args = ["compose","logs", "-f"]
+
+[tasks.docker-exec]
+description = "進入Docker開發環境"
+command = "docker"
+args = ["compose","exec", "dev", "bash"]
+
+[tasks.docker-c]
+description = "執行Docker開發環境命令"
+command = "docker"
+args = ["compose","exec", "dev", "${@}"]
+
+[tasks.docker-down]
+description = "停止Docker開發環境"
+command = "docker"
+args = ["compose","down"]
+
+[tasks.docker-restart-dev]
+description = "重啟Docker開發環境"
+command = "docker"
+args = ["compose","restart", "dev"]
+
+[tasks.docker-clean]
+description = "清理Docker開發環境"
+command = "docker"
+args = ["compose","down", "--volumes", "--rmi", "all", "--remove-orphans"]
+
+#--------------------------------------------------
+# 數據管理
+#--------------------------------------------------
+
+[tasks.generate-index]
+description = "生成數據索引和預計算結果"
+command = "cargo"
+args = ["run", "--bin", "generate-index"]
+
+[tasks.backtest]
+description = "運行回測"
+dependencies = ["build"]
+command = "cargo"
+args = ["run", "--", "backtest", "--config", "backtest-config.toml"]

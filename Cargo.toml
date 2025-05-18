@@ -1,0 +1,132 @@
+[package]
+name = "finrust"
+version = "0.1.0"
+edition = "2021"
+authors = ["FinRust Team"]
+description = "Rust based financial backtesting server"
+readme = "README.md"
+repository = "https://github.com/allen3680/finrust"
+license = "MIT"
+
+[[bin]]
+name = "finrust"
+path = "src/bin/main.rs"
+
+[[bin]]
+name = "migrate"
+path = "src/bin/migrate.rs"
+
+[dependencies]
+# 核心功能
+chrono = { version = "0.4.41", features = ["serde"] }
+tokio = { version = "1.45.0", features = ["full"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+config = "0.15.11"
+thiserror = "2.0.12"
+lazy_static = "1.5.0"
+uuid = { version = "1.16.0", features = ["v4", "serde"] }
+async-trait = "0.1.88"
+once_cell = "1.21.3"  # 單次初始化 Cell
+anyhow = "1.0.98"
+flate2 = "1.1.1"
+num_cpus = "1.16.0"  # CPU 核心數量檢測
+rust_decimal_macros = "1.37.1"  # 用於Decimal字面量
+
+# 數據處理
+ndarray = { version = "0.16.1", features = ["serde"] }
+csv = "1.3.1"
+polars = { version = "0.47.1", features = ["ndarray", "temporal", "performant"] }
+rust_decimal = { version = "1.37.1", features = ["serde"] }
+statrs = "0.18.0"
+parquet = "55.0.0"  # Apache Parquet 文件支持
+arrow = "55.0.0"  # DataFusion Arrow 數據格式
+toml = "0.8.22"  # TOML 配置文件解析
+glob = "0.3.2"
+regex = "1.11.1"
+rand = "0.9.1"
+
+# 資料庫
+sqlx = { version = "0.8.5", features = ["runtime-tokio-native-tls", "postgres", "chrono", "json", "uuid", "rust_decimal"] }
+md5 = "0.7.0"
+
+# 效能優化
+dashmap = "6.1.0"
+rayon = "1.10.0"
+parking_lot = "0.12.3"
+crossbeam = "0.8.4"
+mimalloc = { version = "0.1.46", default-features = false }
+
+# 日誌與監控
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+tracing-appender = "0.2.3"
+metrics = "0.24.2"
+metrics-exporter-prometheus = "0.17.0"
+
+# 命令行工具
+clap = { version = "4.5.38", features = ["derive"] }
+semver = { version = "1.0.26", features = ["serde"] }
+sha2 = "0.10.9"
+jsonpath_lib = "0.3.0"
+fastrand = "2.3.0"
+futures-util = "0.3.31"
+futures = "0.3.31"
+
+# API
+axum = { version = "0.8.4", features = ["macros", "ws", "multipart"] }
+tower-http = { version = "0.6.4", features = ["cors", "trace", "compression-gzip", "limit", "timeout"] }
+tower = "0.5.2"
+hex = "0.4.3"
+serde_yaml_bw = "1.0.4"
+
+
+
+[dev-dependencies]
+# 測試框架
+rstest = "0.25.0"  # 參數化測試
+mockall = "0.13.1" # 模擬對象
+tokio-test = "0.4.4" # Tokio 異步測試工具
+criterion = "0.5.1" # 基準測試
+fake = "4.3.0" # 生成測試數據
+proptest = "1.6.0" # 屬性測試
+assert_matches = "1.5.0" # 斷言與模式匹配
+serial_test = "3.2.0" # 序列化測試執行
+tempfile = "3.19.1" # 臨時文件處理
+rust_decimal_macros = "1.37.1"
+test-case = "3.3.1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+debug = false
+panic = "abort"
+strip = true
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev]
+debug = true
+opt-level = 0
+
+[package.metadata.rust-analyzer]
+# 啟用所有功能
+all-features = true
+# 啟用過程宏
+proc-macro = { enable = true }
+# 啟用診斷
+diagnostics = { enable = true }
+# 啟用代碼導航
+navigation = { enable = true }
+
+[[bench]]
+name = "main"
+harness = false
+path = "benches/main.rs"
+
+[[bench]]
+name = "event_queue_benchmark"
+harness = false
+path = "benches/event_queue_benchmark.rs"

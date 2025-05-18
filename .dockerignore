@@ -1,0 +1,13 @@
+# 忽略版本控制文件
+.git
+.github
+.gitignore
+
+# 忽略構建輸出
+target/
+*.rs.bk
+
+# 忽略配置和文檔
+Dockerfile*
+docker-compose*.yml
+.dockerignore

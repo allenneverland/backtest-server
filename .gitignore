@@ -1,0 +1,124 @@
+# Rust專案相關
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# 調試文件
+*.o
+*.obj
+*.elf
+*.ilk
+*.map
+*.exp
+*.gch
+*.dSYM/
+*.su
+*.idb
+*.mod*
+*.cmd
+.tmp_versions/
+modules.order
+Module.symvers
+Mkfile.old
+dkms.conf
+
+# 編譯產物
+*.so
+*.dylib
+*.dll
+*.exe
+*.test
+*.out
+
+# 數據和日誌文件
+*.log
+*.csv
+*.dat
+*.out
+*.pid
+*.seed
+*.sqlite
+*.sqlite3
+*.db
+!Dockerfile.db
+
+# 環境相關
+/.env
+/.env.local
+/.env.development.local
+/.env.test.local
+/.env.production.local
+.direnv/
+.envrc
+
+# IDE和編輯器
+## Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+## JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
+*.iws
+.idea_modules/
+out/
+
+## Vim
+*~
+.*.swp
+.*.swo
+
+## Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# OS相關
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker相關
+.docker/data/
+
+# 專案特定
+# 系統產生的測試報告和性能數據
+/benchmark-results/
+/coverage/
+/report/
+/perf/
+
+# TimescaleDB和PostgreSQL相關
+/pgdata/
+/timescaledb/
+
+# Redis相關
+/redis/
+dump.rdb
+
+# 暫存文件和目錄
+/tmp/
+.tmp/
+/temp/
+
+# 文檔生成
+/docs/api/
+/docs/generated/
+/target/doc/
+
+# 特定於本專案的忽略項目
+# 回測數據
+/backtest-results/
+
+/src-old
+raw/

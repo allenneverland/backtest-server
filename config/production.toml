@@ -1,0 +1,66 @@
+## 生產環境配置
+
+[database]
+# 使用生產環境數據庫
+host = "db.production"
+port = 5432
+username = "finrust"
+password = "production_password"
+database = "finrust_prod"
+connection_pool_size = 20
+max_connections = 50
+min_connections = 10
+# 優化連接生命週期
+max_lifetime_secs = 1800  # 秒, 30分鐘
+acquire_timeout_secs = 5  # 秒
+idle_timeout_secs = 600   # 秒, 10分鐘
+
+[data_source]
+source_type = "Database"  # 生產環境使用數據庫作為數據源
+format = "Database"       # 使用數據庫格式
+path = ""                 # 文件路徑（當source_type為File時使用）
+api_endpoint = ""         # API端點（當source_type為Api時使用）
+api_token = ""           # API認證令牌（當source_type為Api時使用）
+
+[log]
+# 生產環境使用更簡潔的日誌
+level = "info"
+format = "json"
+
+[app]
+# 生產環境使用標準端口
+threads = 16
+
+[strategy]
+# 策略配置
+directory = "strategies"   # 策略目錄路徑
+hot_update_enabled = true                  # 是否啟用熱更新
+hot_update_interval_secs = 60              # 熱更新檢查間隔（秒）
+config_watch_interval_secs = 30            # 配置文件監控間隔（秒）
+max_parallel_updates = 5                   # 最大並行更新數量
+auto_reload_on_config_change = true        # 配置更新自動重載 
+
+[server]
+# 伺服器配置
+host = "0.0.0.0"  # 生產環境監聽所有網路接口
+port = 80  # 使用與原來 app.port 相同的端口
+worker_threads = 16
+request_timeout = 30  # 秒
+max_connections = 5000
+use_https = true
+cert_path = "/etc/finrust/ssl/cert.pem"
+key_path = "/etc/finrust/ssl/key.pem"
+enable_compression = true
+max_body_size = 5242880  # 5MB
+enable_cors = true
+cors_allowed_origins = ["https://app.finrust.com", "https://api.finrust.com"]
+static_files_dir = "/var/www/finrust/static"
+
+[rest_api]
+# REST API 配置
+base_path = "/api"  # API基礎路徑
+api_key = "FMM5y2XKvDpfmVlYtN3ZhJdG7RqSb8P"  # 生產環境API密鑰
+secret_key = "9KQa6zB32flUHPpcGnVIHhahLNKpAAMUvpevjMqOFse8xGVO88XrwJayb8KNcf"  # 生產環境密鑰
+request_timeout = 60  # API請求超時時間(秒)
+cors_allow_all = false  # API是否允許所有跨域請求
+cors_origins = ["https://app.finrust.com", "https://api.finrust.com"]  # API允許的跨域來源

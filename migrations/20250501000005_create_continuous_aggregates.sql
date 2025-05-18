@@ -12,7 +12,8 @@ SELECT
     sum(amount) AS total_amount,
     max(open_interest) AS max_open_interest
 FROM minute_bar
-GROUP BY bucket, instrument_id;
+GROUP BY bucket, instrument_id
+WITH NO DATA;
 
 -- 添加自動刷新策略（每日刷新）
 SELECT add_continuous_aggregate_policy('daily_volume_by_instrument',
@@ -30,7 +31,8 @@ SELECT
     last(total_value, time) AS end_of_day_value,
     last(equity, time) AS end_of_day_equity
 FROM backtest_portfolio_snapshot
-GROUP BY bucket, result_id;
+GROUP BY bucket, result_id
+WITH NO DATA;
 
 -- 添加自動刷新策略（每日刷新）
 SELECT add_continuous_aggregate_policy('backtest_daily_returns',

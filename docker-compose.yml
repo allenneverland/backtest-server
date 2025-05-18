@@ -18,9 +18,9 @@ services:
       - redis
     command: >
       bash -c "
-        echo '等待数据库就绪...' &&
+        echo '等待數據庫就緒...' &&
         sqlx migrate run --source migrations &&
-        echo '迁移完成，进入开发模式' &&
+        echo '遷移完成，進入開發模式' &&
         tail -f /dev/null
       "
     networks:

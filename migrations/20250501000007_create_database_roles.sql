@@ -15,4 +15,3 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO backtest_server_app;
 
 GRANT SELECT, INSERT ON minute_bar, tick TO backtest_server_importer;
 GRANT SELECT ON instrument, exchange TO backtest_server_importer;
-GRANT USAGE, SELECT ON SEQUENCE minute_bars_id_seq, ticks_id_seq TO backtest_server_importer; 

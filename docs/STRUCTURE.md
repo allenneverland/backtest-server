@@ -228,15 +228,17 @@ src/messaging/                      # 消息系統模組目錄
 │   ├── rpc.rs                      # RPC實現
 │   └── error.rs                    # 錯誤處理
 ├── protocol.rs                     # 通訊協議定義
-├── handlers/                       # 消息處理器目錄
-│   ├── backtest.rs                 # 回測相關消息處理
-│   ├── strategy.rs                 # 策略相關消息處理
-│   └── data.rs                     # 數據相關消息處理
+├── handlers/                       # 消息處理器目錄（待實現）
+│   ├── backtest.rs                 # 回測相關消息處理（待實現）
+│   ├── strategy.rs                 # 策略相關消息處理（待實現）
+│   └── data.rs                     # 數據相關消息處理（待實現）
 ├── models/                         # 消息模型目錄
 │   ├── commands.rs                 # 命令消息模型
 │   ├── events.rs                   # 事件消息模型
 │   └── responses.rs                # 回應消息模型
-└── auth.rs                         # 消息認證和授權
+│── rabbitmq.rs                     # RabbitMQ導出
+│── models.rs                       # 模組定義與導出
+└── auth.rs                         # 消息認證和授權（待實現）
 
 # 回測系統模組
 src/backtest/                       # 回測系統模組目錄
@@ -459,14 +461,17 @@ examples/                           # 示例代碼目錄
 - `rabbitmq/consumer.rs`: 處理消息消費邏輯
 - `rabbitmq/publisher.rs`: 處理消息發布邏輯
 - `rabbitmq/rpc.rs`: 實現 RPC 調用模式
+- `rabbitmq/error.rs`: 處理 RabbitMQ 相關錯誤
 - `protocol.rs`: 定義通訊協議和格式
-- `handlers/backtest.rs`: 處理回測相關請求
-- `handlers/strategy.rs`: 處理策略相關請求
-- `handlers/data.rs`: 處理數據相關請求
+- `handlers/backtest.rs`: 處理回測相關請求（待實現）
+- `handlers/strategy.rs`: 處理策略相關請求（待實現）
+- `handlers/data.rs`: 處理數據相關請求（待實現）
 - `models/commands.rs`: 定義命令消息結構
 - `models/events.rs`: 定義事件消息結構
 - `models/responses.rs`: 定義回應消息結構
-- `auth.rs`: 處理消息認證和授權
+- `auth.rs`: 處理消息認證和授權（待實現）
+
+消息系統使用 RabbitMQ 作為消息代理，支持多種消息模式，包括請求/回應模式、發布/訂閱模式和工作佇列模式。系統中的命令和事件被定義為標準化的消息模型，以確保一致性和可擴展性。
 
 ### 3.10 配置管理模組
 
@@ -529,7 +534,7 @@ examples/                           # 示例代碼目錄
 
 **主要組件** (`src/storage/`):
 - `database.rs`: 數據庫連接管理
-- `models.rs`: 數據模型定義
+- `models.rs`: 數據模型
 - `migrations.rs`: 數據庫遷移管理
 - `redis/*`: Redis相關功能實現
 

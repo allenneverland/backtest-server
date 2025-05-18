@@ -1,4 +1,4 @@
-use config::{Config, ConfigError, Environment, File};
+use config::{Config, ConfigError, Environment as ConfigEnvironment, File};
 use serde::Deserialize;
 use std::env;
 use std::path::Path;
@@ -44,7 +44,7 @@ impl ConfigLoader {
         
         // 從環境變數加載配置（優先級高於文件配置）
         config_builder = config_builder.add_source(
-            Environment::with_prefix("BACKTEST")
+            ConfigEnvironment::with_prefix("BACKTEST")
                 .separator("__")
                 .try_parsing(true)
         );

@@ -6,9 +6,6 @@ use std::sync::Arc;
 
 /// 技術指標儲存庫特徵
 pub trait IndicatorRepository: Send + Sync {
-    /// 獲取數據庫連接池
-    fn get_pool(&self) -> &PgPool;
-
     /// 創建技術指標定義
     async fn create_technical_indicator(&self, indicator: TechnicalIndicatorInsert) -> Result<TechnicalIndicator>;
 
@@ -56,10 +53,6 @@ impl DbExecutor for PgIndicatorRepository {
 }
 
 impl IndicatorRepository for PgIndicatorRepository {
-    fn get_pool(&self) -> &PgPool {
-        &self.pool
-    }
-
     async fn create_technical_indicator(&self, indicator: TechnicalIndicatorInsert) -> Result<TechnicalIndicator> {
         let result = sqlx::query_as!(
             TechnicalIndicator,
@@ -78,7 +71,7 @@ impl IndicatorRepository for PgIndicatorRepository {
             indicator.description,
             indicator.parameters as _
         )
-        .fetch_one(self.get_pool())
+        .fetch_one(DbExecutor::get_pool(self))
         .await?;
 
         Ok(result)
@@ -96,7 +89,7 @@ impl IndicatorRepository for PgIndicatorRepository {
             "#,
             indicator_id
         )
-        .fetch_optional(self.get_pool())
+        .fetch_optional(DbExecutor::get_pool(self))
         .await?;
 
         Ok(result)
@@ -114,7 +107,7 @@ impl IndicatorRepository for PgIndicatorRepository {
             "#,
             code
         )
-        .fetch_optional(self.get_pool())
+        .fetch_optional(DbExecutor::get_pool(self))
         .await?;
 
         Ok(result)
@@ -131,7 +124,7 @@ impl IndicatorRepository for PgIndicatorRepository {
             ORDER BY code
             "#
         )
-        .fetch_all(self.get_pool())
+        .fetch_all(DbExecutor::get_pool(self))
         .await?;
 
         Ok(results)
@@ -152,14 +145,14 @@ impl IndicatorRepository for PgIndicatorRepository {
             indicator.parameters as _,
             indicator.values as _
         )
-        .execute(self.get_pool())
+        .execute(DbExecutor::get_pool(self))
         .await?;
 
         Ok(())
     }
 
     async fn add_instrument_daily_indicators(&self, indicators: Vec<InstrumentDailyIndicatorInsert>) -> Result<()> {
-        let mut tx = self.get_pool().begin().await?;
+        let mut tx = DbExecutor::get_pool(self).begin().await?;
         
         for indicator in indicators {
             sqlx::query!(
@@ -213,7 +206,7 @@ impl IndicatorRepository for PgIndicatorRepository {
             page.page_size,
             offset
         )
-        .fetch_all(self.get_pool())
+        .fetch_all(DbExecutor::get_pool(self))
         .await?;
 
         let total: i64 = sqlx::query_scalar(
@@ -223,7 +216,7 @@ impl IndicatorRepository for PgIndicatorRepository {
         .bind(indicator_id)
         .bind(time_range.start)
         .bind(time_range.end)
-        .fetch_one(self.get_pool())
+        .fetch_one(DbExecutor::get_pool(self))
         .await?;
 
         Ok(Page::new(indicators, total, page.page, page.page_size))

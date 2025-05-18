@@ -1,11 +1,40 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
-use sqlx::types::Json;
 use sqlx::PgPool;
-use std::collections::HashMap;
 use std::sync::Arc;
 use crate::storage::models::strategy_version::*;
+
+/// 版本比較結果
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VersionCompareResult {
+    /// 第一個版本比第二個版本新
+    Newer,
+    /// 第一個版本比第二個版本舊
+    Older,
+    /// 兩個版本相同
+    Equal,
+}
+
+/// 版本相關錯誤
+#[derive(Debug, thiserror::Error)]
+pub enum VersionError {
+    /// 無效的版本格式
+    #[error("無效的版本格式: {0}")]
+    InvalidVersionFormat(String),
+
+    /// 資料庫錯誤
+    #[error("資料庫錯誤: {0}")]
+    DatabaseError(String),
+
+    /// 版本不存在
+    #[error("版本不存在: {0}")]
+    VersionNotFound(i32),
+
+    /// 其他錯誤
+    #[error("其他錯誤: {0}")]
+    Other(String),
+}
 
 /// 策略版本倉庫特性
 #[async_trait]
@@ -26,7 +55,7 @@ pub trait StrategyVersionRepository: Send + Sync {
     async fn get_latest_stable_version(&self, strategy_id: &str) -> Result<Option<StrategyVersion>, VersionError>;
     
     /// 更新策略版本
-    async fn update_version(&self, version_id: i32, is_stable: bool, metadata: Option<Json<HashMap<String, String>>>) -> Result<StrategyVersion, VersionError>;
+    async fn update_version(&self, version_id: i32, is_stable: bool) -> Result<StrategyVersion, VersionError>;
     
     /// 刪除策略版本
     async fn delete_version(&self, version_id: i32) -> Result<bool, VersionError>;
@@ -80,14 +109,13 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
             r#"
             INSERT INTO strategy_version (
                 strategy_id, version, source_path, is_stable, 
-                description, created_by, metadata, created_at, updated_at
+                description, created_by, created_at, updated_at
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9
+                $1, $2, $3, $4, $5, $6, $7, $8
             )
             RETURNING 
                 version_id, strategy_id, version, source_path, is_stable, 
-                description, created_by, metadata as "metadata: Json<HashMap<String, String>>", 
-                created_at, updated_at
+                description, created_by, created_at, updated_at
             "#,
             version.strategy_id,
             version.version,
@@ -95,7 +123,6 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
             version.is_stable,
             version.description,
             version.created_by,
-            version.metadata as _,
             version.created_at,
             version.updated_at
         )
@@ -112,8 +139,7 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
             r#"
             SELECT 
                 version_id, strategy_id, version, source_path, is_stable, 
-                description, created_by, metadata as "metadata: Json<HashMap<String, String>>", 
-                created_at, updated_at
+                description, created_by, created_at, updated_at
             FROM strategy_version
             WHERE version_id = $1
             "#,
@@ -132,8 +158,7 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
             r#"
             SELECT 
                 version_id, strategy_id, version, source_path, is_stable, 
-                description, created_by, metadata as "metadata: Json<HashMap<String, String>>", 
-                created_at, updated_at
+                description, created_by, created_at, updated_at
             FROM strategy_version
             WHERE strategy_id = $1
             ORDER BY created_at DESC
@@ -153,8 +178,7 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
             r#"
             SELECT 
                 version_id, strategy_id, version, source_path, is_stable, 
-                description, created_by, metadata as "metadata: Json<HashMap<String, String>>", 
-                created_at, updated_at
+                description, created_by, created_at, updated_at
             FROM strategy_version
             WHERE strategy_id = $1
             ORDER BY created_at DESC
@@ -175,8 +199,7 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
             r#"
             SELECT 
                 version_id, strategy_id, version, source_path, is_stable, 
-                description, created_by, metadata as "metadata: Json<HashMap<String, String>>", 
-                created_at, updated_at
+                description, created_by, created_at, updated_at
             FROM strategy_version
             WHERE strategy_id = $1 AND is_stable = true
             ORDER BY created_at DESC
@@ -191,7 +214,7 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
         Ok(result)
     }
     
-    async fn update_version(&self, version_id: i32, is_stable: bool, metadata: Option<Json<HashMap<String, String>>>) -> Result<StrategyVersion, VersionError> {
+    async fn update_version(&self, version_id: i32, is_stable: bool) -> Result<StrategyVersion, VersionError> {
         let updated_at = Utc::now();
         
         let result = sqlx::query_as!(
@@ -200,16 +223,13 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
             UPDATE strategy_version
             SET 
                 is_stable = $1,
-                metadata = $2,
-                updated_at = $3
-            WHERE version_id = $4
+                updated_at = $2
+            WHERE version_id = $3
             RETURNING 
                 version_id, strategy_id, version, source_path, is_stable, 
-                description, created_by, metadata as "metadata: Json<HashMap<String, String>>", 
-                created_at, updated_at
+                description, created_by, created_at, updated_at
             "#,
             is_stable,
-            metadata as _,
             updated_at,
             version_id
         )

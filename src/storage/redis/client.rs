@@ -76,10 +76,10 @@ impl Client {
     }
 
     /// 建立異步連接
-    pub async fn get_async_connection(&self) -> Result<redis::aio::Connection, RedisClientError> {
+    pub async fn get_async_connection(&self) -> Result<redis::aio::MultiplexedConnection, RedisClientError> {
         let connect_timeout = Duration::from_secs(self.config.connection_timeout_secs);
 
-        let connection_future = self.client.get_async_connection();
+        let connection_future = self.client.get_multiplexed_async_connection();
         match timeout(connect_timeout, connection_future).await {
             Ok(result) => {
                 match result {
@@ -117,8 +117,8 @@ impl Client {
     /// 使用重試策略執行Redis操作
     async fn with_retry_connection<F, Fut, T>(&self, operation: F) -> Result<T, RedisClientError>
     where
-        F: Fn(redis::aio::Connection) -> Fut + Send + Sync,
-        Fut: std::future::Future<Output = Result<(redis::aio::Connection, T), RedisError>> + Send,
+        F: Fn(redis::aio::MultiplexedConnection) -> Fut + Send + Sync,
+        Fut: std::future::Future<Output = Result<(redis::aio::MultiplexedConnection, T), RedisError>> + Send,
         T: Send,
     {
         let mut attempts = 0;
@@ -264,12 +264,12 @@ impl RedisOperations for Client {
             // 設置操作超時
             let op_timeout = Duration::from_secs(self.config.write_timeout_secs);
             
-            let fut = conn.expire(key.as_ref(), seconds as usize);
+            let fut = conn.expire(key.as_ref(), seconds as i64);
             let result = timeout(op_timeout, fut).await;
 
             match result {
                 Ok(redis_result) => match redis_result {
-                    Ok(changed) => Ok((conn, changed)),
+                    Ok(set) => Ok((conn, set)),
                     Err(err) => Err(err),
                 },
                 Err(_) => Err(RedisError::from(std::io::Error::new(

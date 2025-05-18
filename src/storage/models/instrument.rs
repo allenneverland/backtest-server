@@ -113,6 +113,7 @@ impl InstrumentInsert {
             is_active: self.is_active,
             trading_start_date: self.trading_start_date,
             trading_end_date: self.trading_end_date,
+            attributes: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }
@@ -228,6 +229,7 @@ pub struct Instrument {
     pub is_active: bool,
     pub trading_start_date: Option<NaiveDate>,
     pub trading_end_date: Option<NaiveDate>,
+    pub attributes: Option<Json<serde_json::Value>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

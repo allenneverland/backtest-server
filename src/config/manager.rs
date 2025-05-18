@@ -3,6 +3,7 @@ use config::ConfigError;
 use tracing::{warn, debug};
 use crate::config::types::ApplicationConfig;
 use crate::config::loader::{ConfigLoader, Environment};
+use crate::config::validation::Validator;
 
 // 全局配置實例
 static CONFIG: OnceCell<ApplicationConfig> = OnceCell::new();

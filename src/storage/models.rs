@@ -17,5 +17,10 @@ pub use portfolio::*;
 pub use strategy::*;
 pub use strategy_version::*;
 pub use backtest::*;
-pub use aggregate::*;
-pub use indicator::*;
+// Remove these ambiguous imports
+// pub use aggregate::*;
+// pub use indicator::*;
+
+// Explicitly import types from modules that have name conflicts
+pub use backtest::BacktestDailyReturns;
+pub use indicator::InstrumentDailyIndicator;

@@ -91,6 +91,33 @@ impl<P: RedisPool> CacheManager<P> {
         // 可以在這裡添加應用名稱或其他前綴
         format!("cache:{}", key.as_ref())
     }
+
+    /// 設置緩存，帶過期時間
+    pub async fn set_with_ttl<K: AsRef<str>, V: Serialize>(&self, key: K, value: &V, ttl_secs: u64) -> RedisResult<()> {
+        let prefixed_key = self.prefix_key(key);
+        let serialized = serde_json::to_string(value).map_err(|e| {
+            RedisError::from((
+                ErrorKind::ClientError,
+                "序列化失敗",
+                e.to_string(),
+            ))
+        })?;
+        
+        debug!("設置緩存 [{}] 帶過期時間: {}秒", prefixed_key, ttl_secs);
+        
+        let mut conn = self.pool.get_conn().await?;
+        
+        // 使用SET命令帶EX選項在一個原子操作中設置值和過期時間
+        redis::cmd("SET")
+            .arg(&prefixed_key)
+            .arg(serialized.as_str())
+            .arg("EX")
+            .arg(ttl_secs as i64)
+            .query_async(&mut *conn)
+            .await?;
+            
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -212,7 +239,7 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
         let prefixed_key = self.prefix_key(key);
         let mut conn = self.pool.get_conn().await?;
 
-        match conn.expire(&prefixed_key, ttl_secs as usize).await {
+        match conn.expire(&prefixed_key, ttl_secs as i64).await {
             Ok(set) => {
                 debug!(
                     "快取過期時間設置 {}: {} ({}秒)",

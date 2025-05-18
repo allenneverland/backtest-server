@@ -2,9 +2,9 @@ use crate::messaging::protocol::Message;
 use crate::messaging::rabbitmq::connection::{RabbitMQConnectionManager, RabbitMQConnectionError};
 use lapin::{
     options::{
-        BasicConsumeOptions, BasicPublishOptions, QueueDeclareOptions
+        BasicAckOptions, BasicConsumeOptions, BasicPublishOptions, QueueDeclareOptions
     },
-    types::FieldTable,
+    types::{FieldTable, ShortString},
     BasicProperties, Channel, Consumer, Error as LapinError
 };
 use std::sync::Arc;
@@ -15,6 +15,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 use std::time::Duration;
 use thiserror::Error;
+use futures::StreamExt;
 
 /// RabbitMQ 客戶端錯誤
 #[derive(Error, Debug)]
@@ -36,6 +37,13 @@ pub enum ClientError {
     
     #[error("Other error: {0}")]
     Other(#[from] anyhow::Error),
+}
+
+// Add implementation for oneshot channel error conversion
+impl From<oneshot::error::RecvError> for ClientError {
+    fn from(_: oneshot::error::RecvError) -> Self {
+        ClientError::ChannelClosed
+    }
 }
 
 /// RabbitMQ 客戶端
@@ -175,7 +183,7 @@ impl RabbitMQClient {
     /// 處理來自回應佇列的消息
     async fn handle_responses(
         mut consumer: Consumer,
-        pending_responses: Arc<Mutex<HashMap<String, oneshot::Sender<Vec<u8>>>>
+        pending_responses: Arc<Mutex<HashMap<String, oneshot::Sender<Vec<u8>>>>>
     ) {
         while let Some(delivery) = consumer.next().await {
             if let Ok(delivery) = delivery {
@@ -194,7 +202,7 @@ impl RabbitMQClient {
                     debug!("Received response without correlation_id");
                 }
                 
-                if let Err(e) = delivery.ack(BasicConsumeOptions::default()).await {
+                if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
                     error!("Failed to acknowledge response: {}", e);
                 }
             }
@@ -236,7 +244,7 @@ impl RabbitMQClient {
             BasicPublishOptions::default(),
             &message_data,
             BasicProperties::default()
-                .with_reply_to(reply_queue)
+                .with_reply_to(reply_queue.into())
                 .with_correlation_id(correlation_id.clone().into()),
         ).await?;
         

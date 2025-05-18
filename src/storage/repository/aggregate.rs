@@ -6,9 +6,6 @@ use std::sync::Arc;
 
 /// 連續聚合視圖儲存庫特徵
 pub trait AggregateRepository: Send + Sync {
-    /// 獲取數據庫連接池
-    fn get_pool(&self) -> &PgPool;
-
     /// 獲取指定商品的日級成交量聚合數據
     async fn get_daily_volume_by_instrument(&self, instrument_id: i32, time_range: TimeRange) -> Result<Vec<DailyVolumeByInstrument>>;
 
@@ -41,16 +38,13 @@ impl DbExecutor for PgAggregateRepository {
 }
 
 impl AggregateRepository for PgAggregateRepository {
-    fn get_pool(&self) -> &PgPool {
-        &self.pool
-    }
-
     async fn get_daily_volume_by_instrument(&self, instrument_id: i32, time_range: TimeRange) -> Result<Vec<DailyVolumeByInstrument>> {
         let results = sqlx::query_as!(
             DailyVolumeByInstrument,
             r#"
             SELECT
-                bucket, instrument_id, 
+                bucket as "bucket!", 
+                instrument_id as "instrument_id!", 
                 open as "open!: _",
                 high as "high!: _",
                 low as "low!: _",
@@ -67,7 +61,7 @@ impl AggregateRepository for PgAggregateRepository {
             time_range.start,
             time_range.end
         )
-        .fetch_all(self.get_pool())
+        .fetch_all(DbExecutor::get_pool(self))
         .await?;
 
         Ok(results)
@@ -78,7 +72,8 @@ impl AggregateRepository for PgAggregateRepository {
             DailyVolumeByInstrument,
             r#"
             SELECT
-                bucket, instrument_id, 
+                bucket as "bucket!",
+                instrument_id as "instrument_id!", 
                 open as "open!: _",
                 high as "high!: _",
                 low as "low!: _",
@@ -95,7 +90,7 @@ impl AggregateRepository for PgAggregateRepository {
             time_range.start,
             time_range.end
         )
-        .fetch_all(self.get_pool())
+        .fetch_all(DbExecutor::get_pool(self))
         .await?;
 
         Ok(results)
@@ -106,7 +101,8 @@ impl AggregateRepository for PgAggregateRepository {
             BacktestDailyReturns,
             r#"
             SELECT
-                bucket, result_id, 
+                bucket as "bucket!", 
+                result_id as "result_id!", 
                 daily_return as "daily_return!: _",
                 end_of_day_value as "end_of_day_value!: _",
                 end_of_day_equity as "end_of_day_equity!: _"
@@ -119,7 +115,7 @@ impl AggregateRepository for PgAggregateRepository {
             time_range.start,
             time_range.end
         )
-        .fetch_all(self.get_pool())
+        .fetch_all(DbExecutor::get_pool(self))
         .await?;
 
         Ok(results)
@@ -130,7 +126,8 @@ impl AggregateRepository for PgAggregateRepository {
             BacktestDailyReturns,
             r#"
             SELECT
-                bucket, result_id, 
+                bucket as "bucket!", 
+                result_id as "result_id!", 
                 daily_return as "daily_return!: _",
                 end_of_day_value as "end_of_day_value!: _",
                 end_of_day_equity as "end_of_day_equity!: _"
@@ -143,7 +140,7 @@ impl AggregateRepository for PgAggregateRepository {
             time_range.start,
             time_range.end
         )
-        .fetch_all(self.get_pool())
+        .fetch_all(DbExecutor::get_pool(self))
         .await?;
 
         Ok(results)

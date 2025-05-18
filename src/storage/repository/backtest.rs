@@ -6,9 +6,6 @@ use std::sync::Arc;
 
 /// 回測系統儲存庫特徵
 pub trait BacktestRepository: Send + Sync {
-    /// 獲取數據庫連接池
-    fn get_pool(&self) -> &PgPool;
-
     /// 創建回測配置
     async fn create_backtest_config(&self, config: BacktestConfigInsert) -> Result<BacktestConfig>;
 
@@ -80,10 +77,6 @@ impl DbExecutor for PgBacktestRepository {
 }
 
 impl BacktestRepository for PgBacktestRepository {
-    fn get_pool(&self) -> &PgPool {
-        &self.pool
-    }
-
     async fn create_backtest_config(&self, config: BacktestConfigInsert) -> Result<BacktestConfig> {
         let result = sqlx::query_as!(
             BacktestConfig,
@@ -112,7 +105,7 @@ impl BacktestRepository for PgBacktestRepository {
             config.execution_settings as _,
             config.risk_settings as _
         )
-        .fetch_one(self.get_pool())
+        .fetch_one(DbExecutor::get_pool(self))
         .await?;
 
         Ok(result)
@@ -132,7 +125,7 @@ impl BacktestRepository for PgBacktestRepository {
             "#,
             config_id
         )
-        .fetch_optional(self.get_pool())
+        .fetch_optional(DbExecutor::get_pool(self))
         .await?;
 
         Ok(result)
@@ -156,11 +149,11 @@ impl BacktestRepository for PgBacktestRepository {
             page.page_size,
             offset
         )
-        .fetch_all(self.get_pool())
+        .fetch_all(DbExecutor::get_pool(self))
         .await?;
 
         let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM backtest_config")
-            .fetch_one(self.get_pool())
+            .fetch_one(DbExecutor::get_pool(self))
             .await?;
 
         Ok(Page::new(configs, total, page.page, page.page_size))
@@ -190,7 +183,7 @@ impl BacktestRepository for PgBacktestRepository {
             result.benchmark_comparison as _,
             result.error_message,
         )
-        .fetch_one(self.get_pool())
+        .fetch_one(DbExecutor::get_pool(self))
         .await?;
 
         Ok(result)
@@ -224,7 +217,7 @@ impl BacktestRepository for PgBacktestRepository {
             result.benchmark_comparison as _,
             result.error_message,
         )
-        .fetch_one(self.get_pool())
+        .fetch_one(DbExecutor::get_pool(self))
         .await?;
 
         Ok(result)
@@ -243,7 +236,7 @@ impl BacktestRepository for PgBacktestRepository {
             "#,
             result_id
         )
-        .fetch_optional(self.get_pool())
+        .fetch_optional(DbExecutor::get_pool(self))
         .await?;
 
         Ok(result)
@@ -264,7 +257,7 @@ impl BacktestRepository for PgBacktestRepository {
             "#,
             config_id
         )
-        .fetch_optional(self.get_pool())
+        .fetch_optional(DbExecutor::get_pool(self))
         .await?;
 
         Ok(result)
@@ -295,14 +288,14 @@ impl BacktestRepository for PgBacktestRepository {
             trade.order_type,
             trade.metadata as _,
         )
-        .execute(self.get_pool())
+        .execute(DbExecutor::get_pool(self))
         .await?;
 
         Ok(())
     }
 
     async fn add_backtest_trades(&self, trades: Vec<BacktestTradeInsert>) -> Result<()> {
-        let mut tx = self.get_pool().begin().await?;
+        let mut tx = DbExecutor::get_pool(self).begin().await?;
         
         for trade in trades {
             sqlx::query!(
@@ -360,7 +353,7 @@ impl BacktestRepository for PgBacktestRepository {
             page.page_size,
             offset
         )
-        .fetch_all(self.get_pool())
+        .fetch_all(DbExecutor::get_pool(self))
         .await?;
 
         let total: i64 = sqlx::query_scalar(
@@ -369,7 +362,7 @@ impl BacktestRepository for PgBacktestRepository {
         .bind(result_id)
         .bind(time_range.start)
         .bind(time_range.end)
-        .fetch_one(self.get_pool())
+        .fetch_one(DbExecutor::get_pool(self))
         .await?;
 
         Ok(Page::new(trades, total, page.page, page.page_size))
@@ -395,14 +388,14 @@ impl BacktestRepository for PgBacktestRepository {
             snapshot.realized_pl,
             snapshot.margin_used,
         )
-        .execute(self.get_pool())
+        .execute(DbExecutor::get_pool(self))
         .await?;
 
         Ok(())
     }
 
     async fn add_backtest_position_snapshots(&self, snapshots: Vec<BacktestPositionSnapshotInsert>) -> Result<()> {
-        let mut tx = self.get_pool().begin().await?;
+        let mut tx = DbExecutor::get_pool(self).begin().await?;
         
         for snapshot in snapshots {
             sqlx::query!(
@@ -454,7 +447,7 @@ impl BacktestRepository for PgBacktestRepository {
             page.page_size,
             offset
         )
-        .fetch_all(self.get_pool())
+        .fetch_all(DbExecutor::get_pool(self))
         .await?;
 
         let total: i64 = sqlx::query_scalar(
@@ -463,7 +456,7 @@ impl BacktestRepository for PgBacktestRepository {
         .bind(result_id)
         .bind(time_range.start)
         .bind(time_range.end)
-        .fetch_one(self.get_pool())
+        .fetch_one(DbExecutor::get_pool(self))
         .await?;
 
         Ok(Page::new(snapshots, total, page.page, page.page_size))
@@ -492,14 +485,14 @@ impl BacktestRepository for PgBacktestRepository {
             snapshot.total_return,
             snapshot.metadata as _,
         )
-        .execute(self.get_pool())
+        .execute(DbExecutor::get_pool(self))
         .await?;
 
         Ok(())
     }
 
     async fn add_backtest_portfolio_snapshots(&self, snapshots: Vec<BacktestPortfolioSnapshotInsert>) -> Result<()> {
-        let mut tx = self.get_pool().begin().await?;
+        let mut tx = DbExecutor::get_pool(self).begin().await?;
         
         for snapshot in snapshots {
             sqlx::query!(
@@ -554,7 +547,7 @@ impl BacktestRepository for PgBacktestRepository {
             page.page_size,
             offset
         )
-        .fetch_all(self.get_pool())
+        .fetch_all(DbExecutor::get_pool(self))
         .await?;
 
         let total: i64 = sqlx::query_scalar(
@@ -563,7 +556,7 @@ impl BacktestRepository for PgBacktestRepository {
         .bind(result_id)
         .bind(time_range.start)
         .bind(time_range.end)
-        .fetch_one(self.get_pool())
+        .fetch_one(DbExecutor::get_pool(self))
         .await?;
 
         Ok(Page::new(snapshots, total, page.page, page.page_size))
@@ -574,7 +567,8 @@ impl BacktestRepository for PgBacktestRepository {
             BacktestDailyReturns,
             r#"
             SELECT
-                bucket, result_id, 
+                bucket as "bucket!", 
+                result_id as "result_id!", 
                 daily_return as "daily_return!: _",
                 end_of_day_value as "end_of_day_value!: _",
                 end_of_day_equity as "end_of_day_equity!: _"
@@ -587,7 +581,7 @@ impl BacktestRepository for PgBacktestRepository {
             time_range.start,
             time_range.end
         )
-        .fetch_all(self.get_pool())
+        .fetch_all(DbExecutor::get_pool(self))
         .await?;
 
         Ok(returns)

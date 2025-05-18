@@ -59,6 +59,23 @@ impl Validator for DatabaseConfig {
     }
 }
 
+impl DatabaseConfig {
+    /// 獲取最大生命週期持續時間
+    pub fn max_lifetime(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.max_lifetime_secs)
+    }
+    
+    /// 獲取獲取連接超時持續時間
+    pub fn acquire_timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.acquire_timeout_secs)
+    }
+    
+    /// 獲取閒置超時持續時間
+    pub fn idle_timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.idle_timeout_secs)
+    }
+}
+
 /// 日誌配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogConfig {
@@ -71,14 +88,14 @@ impl Validator for LogConfig {
         // 驗證日誌級別
         ValidationUtils::one_of(
             &self.level.to_lowercase(), 
-            &["trace", "debug", "info", "warn", "error"], 
+            &["trace", "debug", "info", "warn", "error"].iter().map(|s| s.to_string()).collect::<Vec<String>>(), 
             "log.level"
         )?;
         
         // 驗證日誌格式
         ValidationUtils::one_of(
             &self.format.to_lowercase(),
-            &["pretty", "json"],
+            &["pretty", "json"].iter().map(|s| s.to_string()).collect::<Vec<String>>(),
             "log.format"
         )?;
         
@@ -285,15 +302,15 @@ impl Validator for RabbitMQConfig {
         ValidationUtils::not_empty(&self.url, "rabbitmq.url")?;
         ValidationUtils::in_range(self.pool_size, 1, 100, "rabbitmq.pool_size")?;
         ValidationUtils::in_range(self.connection_timeout_secs, 1, 60, "rabbitmq.connection_timeout_secs")?;
-        ValidationUtils::in_range(self.retry_interval_secs, 1, 30, "rabbitmq.retry_interval_secs")?;
-        ValidationUtils::in_range(self.max_retries, 1, 10, "rabbitmq.max_retries")?;
+        
+        // 驗證交換機類型
         ValidationUtils::one_of(
             &self.default_exchange_type.to_lowercase(),
-            &["direct", "topic", "fanout", "headers"],
+            &["direct", "topic", "fanout", "headers"].iter().map(|s| s.to_string()).collect::<Vec<String>>(),
             "rabbitmq.default_exchange_type"
         )?;
+        
         ValidationUtils::not_empty(&self.default_exchange, "rabbitmq.default_exchange")?;
-        ValidationUtils::in_range(self.prefetch_count, 1, 1000, "rabbitmq.prefetch_count")?;
         ValidationUtils::not_empty(&self.consumer_tag_prefix, "rabbitmq.consumer_tag_prefix")?;
         
         Ok(())

@@ -45,6 +45,8 @@ rand = "0.9.1"
 
 # 資料庫
 sqlx = { version = "0.8.5", features = ["runtime-tokio-native-tls", "postgres", "chrono", "json", "uuid", "rust_decimal"] }
+redis = { version = "0.31.0", features = ["tokio-comp", "connection-manager"] }
+bb8-redis = "0.23.0"
 
 # 效能優化
 dashmap = "6.1.0"

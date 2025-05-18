@@ -22,6 +22,7 @@
   - [3.10 配置管理模組](#310-配置管理模組)
   - [3.11 伺服器模組](#311-伺服器模組)
   - [3.12 回測模組](#312-回測模組)
+  - [3.13 存儲系統模組](#313-存儲系統模組)
 - [4. 配置文件](#4-配置文件)
 - [5. 資料庫結構](#5-資料庫結構)
   - [5.1 數據庫遷移文件](#51-數據庫遷移文件)
@@ -250,7 +251,17 @@ src/config/                         # 配置管理模組目錄
 src/storage/                        # 存儲系統模組目錄
 ├── database.rs                     # 數據庫連接管理
 ├── models.rs                       # 數據模型
-└── migrations.rs                   # 數據庫遷移管理(對應/migrations目錄)
+├── migrations.rs                   # 數據庫遷移管理(對應/migrations目錄)
+└── redis/                          # Redis模組目錄
+    ├── client.rs                   # Redis客戶端實現
+    ├── config.rs                   # Redis配置結構
+    ├── error.rs                    # Redis錯誤處理
+    ├── pool.rs                     # 連接池管理
+    └── operations/                 # 特定業務操作封裝
+        ├── cache.rs                # 通用快取操作
+        ├── pubsub.rs               # 發布/訂閱操作
+        ├── queue.rs                # 任務佇列操作
+        └── lock.rs                 # 分散式鎖實現
 
 src/utils/                          # 公共工具模組目錄
 ├── serde_helpers.rs                # 序列化與反序列化幫助函數
@@ -486,6 +497,8 @@ API服務模組提供RESTful接口，允許外部系統和用戶與回測伺服�
 - `storage.rs`: 存儲回測結果
 
 請參閱 [BACKTEST_ARCHITECTURE.md](docs/BACKTEST_ARCHITECTURE.md) 獲取更詳細的回測系統架構說明。
+
+### 3.13 存儲系統模組
 
 ## 4. 配置文件
 

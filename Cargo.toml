@@ -68,13 +68,11 @@ semver = { version = "1.0.26", features = ["serde"] }
 sha2 = "0.10.9"
 jsonpath_lib = "0.3.0"
 futures = { version = "0.3.31", features = ["std"] }
-
-# API
-axum = { version = "0.8.4", features = ["macros", "ws", "multipart"] }
-tower-http = { version = "0.6.4", features = ["cors", "trace", "compression-gzip", "limit", "timeout"] }
-tower = "0.5.2"
 hex = "0.4.3"
 serde_yaml_bw = "1.0.4"
+
+# RABBITMQ
+lapib = "2.5.3"
 
 [dev-dependencies]
 # 測試框架

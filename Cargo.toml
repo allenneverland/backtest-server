@@ -72,7 +72,7 @@ hex = "0.4.3"
 serde_yaml_bw = "1.0.4"
 
 # RABBITMQ
-lapib = "2.5.3"
+lapin = "2.5.3"
 
 [dev-dependencies]
 # 測試框架

@@ -93,7 +93,7 @@ volumes:
   target-cache:
   db-data:
   redis-data:
-  grafana-data:
+  rabbitmq_data:
 
 networks:
   backtest_server-network:

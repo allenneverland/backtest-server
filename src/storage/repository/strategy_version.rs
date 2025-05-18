@@ -5,16 +5,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use crate::storage::models::strategy_version::*;
 
-/// 版本比較結果
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VersionCompareResult {
-    /// 第一個版本比第二個版本新
-    Newer,
-    /// 第一個版本比第二個版本舊
-    Older,
-    /// 兩個版本相同
-    Equal,
-}
+
 
 /// 版本相關錯誤
 #[derive(Debug, thiserror::Error)]
@@ -60,8 +51,6 @@ pub trait StrategyVersionRepository: Send + Sync {
     /// 刪除策略版本
     async fn delete_version(&self, version_id: i32) -> Result<bool, VersionError>;
     
-    /// 比較兩個版本
-    async fn compare_versions(&self, version1: &str, version2: &str) -> Result<VersionCompareResult, VersionError>;
 }
 
 /// PostgreSQL 實現的策略版本儲存庫
@@ -255,18 +244,4 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
         Ok(result.rows_affected() > 0)
     }
     
-    async fn compare_versions(&self, version1: &str, version2: &str) -> Result<VersionCompareResult, VersionError> {
-        let v1 = self.parse_version(version1)?;
-        let v2 = self.parse_version(version2)?;
-        
-        for i in 0..3 {
-            if v1[i] > v2[i] {
-                return Ok(VersionCompareResult::Newer);
-            } else if v1[i] < v2[i] {
-                return Ok(VersionCompareResult::Older);
-            }
-        }
-        
-        Ok(VersionCompareResult::Equal)
-    }
 }

@@ -13,7 +13,7 @@
 - [4. 關鍵協作機制](#4-關鍵協作機制)
   - [4.1 策略模組與DSL模組協作](#41-策略模組與dsl模組協作)
   - [4.2 運行時模組與沙箱隔離](#42-運行時模組與沙箱隔離)
-  - [4.3 數據提供模組與延遲加載](#43-數據提供模組與延遲加載)
+  - [4.3 數據提供模組](#43-數據提供模組)
   - [4.4 執行模擬器與交易處理](#44-執行模擬器與交易處理)
   - [4.5 風險管理模組的整合](#45-風險管理模組的整合)
 - [5. 高級特性](#5-高級特性)
@@ -22,7 +22,6 @@
   - [5.3 回測任務調度](#53-回測任務調度)
 - [6. 錯誤處理與恢復](#6-錯誤處理與恢復)
   - [6.1 錯誤偵測與分類](#61-錯誤偵測與分類)
-  - [6.2 策略回滾機制](#62-策略回滾機制)
   - [6.3 資源清理與釋放](#63-資源清理與釋放)
 
 ## 1. 簡介
@@ -99,7 +98,7 @@ async fn initialize_backtest(&self, task: &BacktestTask) -> Result<BacktestConte
 
 **參與模組：**
 - **回測模組 (backtest)**：協調整個數據準備流程，更新任務進度
-- **數據提供模組 (data_provider)**：創建延遲加載器，預取初始數據，準備技術指標
+- **數據提供模組 (data_provider)**：預取初始數據，準備技術指標
 - **運行時模組 (runtime)**：為沙箱準備數據訪問環境
 - **領域類型模組 (domain_types)**：提供數據結構和類型定義
 
@@ -131,8 +130,8 @@ async fn prepare_data(&self, context: &mut BacktestContext) -> Result<(), Error>
         
         log::debug!("[數據準備階段] 建立數據加載器: {}", instrument);
         
-        // 3.2 [數據提供模組] 使用LazyLoader延遲加載機制
-        let data_loader = self.data_provider.create_lazy_loader(request)?;
+        // 3.2 [數據提供模組] 
+        let data_loader = self.data_provider.create_loader(request)?;
         
         // 3.3 [回測模組] 存儲數據加載器到上下文
         context.add_data_loader(instrument.clone(), data_loader);
@@ -502,10 +501,9 @@ impl RuntimeService {
         // 4. [運行時模組] 設置錯誤處理
         sandbox.set_error_handler(|error| {
             // 處理策略執行中的錯誤
-            // 如果錯誤嚴重，觸發回滾機制
             if error.is_critical() {
                 log::error!("策略執行嚴重錯誤: {}", error);
-                return ErrorAction::Rollback;
+                return ErrorAction::Stop;
             }
             log::warn!("策略執行非嚴重錯誤: {}", error);
             ErrorAction::Continue
@@ -535,7 +533,7 @@ impl StrategySandbox {
 }
 ```
 
-### 4.3 數據提供模組與延遲加載
+### 4.3 數據提供模組
 
 **參與模組：**
 - **數據提供模組 (data_provider)**
@@ -543,87 +541,6 @@ impl StrategySandbox {
 - **存儲模組 (storage)**
 
 **協作內容：** 高效的歷史數據訪問
-
-```rust
-// data_provider/service.rs
-impl DataProviderService {
-    // 創建延遲加載器
-    pub fn create_lazy_loader(&self, request: DataRequest) -> Result<Box<dyn LazyLoader>, Error> {
-        log::debug!("創建延遲加載器: {:?}", request);
-        
-        match request.data_type {
-            DataType::OHLCV => {
-                // [數據提供模組] 創建OHLCV數據加載器
-                let loader = LazyOHLCVLoader::new(
-                    request.instrument,
-                    request.start_time,
-                    request.end_time,
-                    request.frequency,
-                    self.db_pool.clone(),
-                )?;
-                Ok(Box::new(loader))
-            },
-            DataType::Tick => {
-                // [數據提供模組] 創建Tick數據加載器
-                let loader = LazyTickLoader::new(
-                    request.instrument,
-                    request.start_time,
-                    request.end_time,
-                    self.db_pool.clone(),
-                )?;
-                Ok(Box::new(loader))
-            },
-            // ... 其他數據類型 ...
-        }
-    }
-}
-
-// data_provider/lazy_loader/ohlcv_loader.rs
-impl LazyOHLCVLoader {
-    // 預取數據頭部（驗證可用性）
-    pub fn prefetch_head(&self, count: usize) -> Result<Vec<OHLCVPoint>, Error> {
-        log::debug!("預取數據頭部: {} 筆", count);
-        
-        // [數據提供模組 -> 存儲模組] 從數據庫加載一小部分數據
-        let data = self.db.query_ohlcv_head(
-            &self.instrument,
-            self.start_time,
-            count,
-        )?;
-        
-        // [數據提供模組] 存入內部快取
-        self.cache.insert_head(data.clone());
-        
-        log::debug!("預取完成，獲取到 {} 筆數據", data.len());
-        
-        Ok(data)
-    }
-    
-    // 按時間窗口獲取數據
-    pub async fn get_window(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<Vec<OHLCVPoint>, Error> {
-        // 1. [數據提供模組] 先查詢快取
-        if let Some(cached_data) = self.cache.get_window(start, end) {
-            return Ok(cached_data);
-        }
-        
-        log::debug!("快取未命中，從數據庫加載時間窗口: {} - {}", start, end);
-        
-        // 2. [數據提供模組 -> 存儲模組] 從數據庫加載
-        let data = self.db.query_ohlcv_window(
-            &self.instrument,
-            start,
-            end,
-        )?;
-        
-        // 3. [數據提供模組] 存入快取
-        self.cache.insert_window(start, end, data.clone());
-        
-        log::debug!("時間窗口數據加載完成: {} 筆", data.len());
-        
-        Ok(data)
-    }
-}
-```
 
 ### 4.4 執行模擬器與交易處理
 
@@ -1100,73 +1017,6 @@ impl StrategySandbox {
 }
 ```
 
-### 6.2 策略回滾機制
-
-**參與模組：**
-- **策略模組 (strategy)**
-- **運行時模組 (runtime)**
-- **回測模組 (backtest)**
-
-**協作內容：** 處理策略執行錯誤並回滾到穩定版本
-
-```rust
-// runtime/sandbox.rs
-impl StrategySandbox {
-    // 執行策略步驟，包含錯誤處理和回滾機制
-    pub fn execute_strategy_step(&self) -> Result<Vec<Signal>, Error> {
-        // 嘗試執行策略
-        match self.monitor_execution(|| self.try_execute_strategy_step()) {
-            Ok(signals) => Ok(signals),
-            Err(err) => {
-                // 判斷錯誤嚴重程度
-                if err.is_critical() {
-                    // 嚴重錯誤，執行回滾
-                    log::error!("策略執行嚴重錯誤，觸發回滾: {}", err);
-                    self.execute_rollback()?;
-                    return Err(err.into());
-                } else {
-                    // 非嚴重錯誤，記錄後繼續
-                    log::warn!("策略執行遇到非嚴重錯誤: {}", err);
-                    Ok(Vec::new()) // 返回空信號集
-                }
-            }
-        }
-    }
-    
-    // 執行回滾
-    fn execute_rollback(&self) -> Result<(), Error> {
-        log::info!("開始執行策略回滾");
-        
-        // 1. [運行時模組] 停止當前版本
-        self.runtime.stop_execution()?;
-        
-        // 2. [策略模組] 獲取上一個穩定版本
-        let previous_version = self.version_manager.get_last_stable_version()?;
-        log::info!("獲取到上一個穩定版本: {}", previous_version);
-        
-        // 3. [運行時模組 + 策略模組] 加載上一個版本
-        let strategy = self.strategy_service.load_strategy_version(&previous_version).await?;
-        self.runtime.load_strategy(strategy)?;
-        
-        // 4. [運行時模組] 恢復策略狀態
-        if let Some(checkpoint) = self.last_checkpoint.as_ref() {
-            log::debug!("從檢查點恢復策略狀態: {}", checkpoint.id);
-            self.runtime.restore_checkpoint(checkpoint)?;
-        }
-        
-        // 5. [回測模組 + 事件處理模組] 記錄回滾事件
-        self.event_recorder.record_rollback_event(
-            &self.id,
-            &previous_version,
-            "策略執行錯誤，自動回滾到上一個穩定版本"
-        )?;
-        
-        log::info!("策略回滾完成");
-        
-        Ok(())
-    }
-}
-```
 
 ### 6.3 資源清理與釋放
 
@@ -1232,6 +1082,6 @@ impl BacktestEngine {
 
 FinRust回測執行器採用模組化設計，通過回測模組作為中央協調器，整合了數據提供、策略管理、運行時隔離、執行模擬和風險管理等核心模組，實現了高效、穩定、可擴展的策略回測系統。
 
-回測流程分為初始化、數據準備、策略執行、結果收集和結果分析五個主要階段，每個階段都有明確的模組協作關係。系統支持多策略並行回測、數據延遲加載、快取與批處理、錯誤恢復機制等高級特性，確保了在大規模回測場景下的性能和穩定性。
+回測流程分為初始化、數據準備、策略執行、結果收集和結果分析五個主要階段，每個階段都有明確的模組協作關係。系統支持多策略並行回測、快取與批處理、錯誤恢復機制等高級特性，確保了在大規模回測場景下的性能和穩定性。
 
 通過細緻的協作設計和清晰的責任劃分，回測系統充分利用了Rust語言的安全性和高效性，為策略開發和驗證提供了堅實的基礎。

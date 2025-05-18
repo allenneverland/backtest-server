@@ -1,21 +1,21 @@
 use tracing::{info, error};
 use tokio::signal;
-use finrust::config;
-use finrust::storage::{database, run_migrations, repository};
+use backtest_server::config;
+use backtest_server::storage::{database, run_migrations, repository};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::fs;
 use tracing::Level;
 use tracing_subscriber::{FmtSubscriber, EnvFilter};
 use anyhow::{Result, anyhow};
-use finrust::strategy::loader::DefaultStrategyLoader;
-use finrust::strategy::registry::InMemoryRegistry;
-use finrust::strategy::lifecycle::LifecycleManager;
-use finrust::strategy::types::RollbackPolicy;
-use finrust::strategy::snapshot::{DefaultSnapshotManager, SnapshotConfig, SnapshotStorage, CleanupPolicy};
-use finrust::strategy::config_watcher::ConfigurationWatcher;
-use finrust::strategy::version::VersionManagerConfig;
-use finrust::api::rest::RestApi;
+use backtest_server::strategy::loader::DefaultStrategyLoader;
+use backtest_server::strategy::registry::InMemoryRegistry;
+use backtest_server::strategy::lifecycle::LifecycleManager;
+use backtest_server::strategy::types::RollbackPolicy;
+use backtest_server::strategy::snapshot::{DefaultSnapshotManager, SnapshotConfig, SnapshotStorage, CleanupPolicy};
+use backtest_server::strategy::config_watcher::ConfigurationWatcher;
+use backtest_server::strategy::version::VersionManagerConfig;
+use backtest_server::api::rest::RestApi;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -90,7 +90,7 @@ async fn main() -> Result<()> {
     );
     
     // 創建配置監視器（使用資料庫來源）
-    let mut config_watcher = finrust::strategy::config_watcher::ConfigWatcher::new(
+    let mut config_watcher = backtest_server::strategy::config_watcher::ConfigWatcher::new(
         strategy_repo,
         lifecycle_arc.clone(),
         loader_arc.clone(),
@@ -104,7 +104,7 @@ async fn main() -> Result<()> {
     
     // 初始化版本管理器和服務
     let version_repo = Arc::new(repository::strategy_version::PgStrategyVersionRepository::new(Arc::new(db_pool.clone())));
-    let _version_manager = Arc::new(finrust::strategy::version::DefaultVersionManager::new(
+    let _version_manager = Arc::new(backtest_server::strategy::version::DefaultVersionManager::new(
         version_repo,
         lifecycle_arc.clone(),
         loader_arc.clone()

@@ -1,15 +1,15 @@
 [package]
-name = "finrust"
+name = "backtest_server"
 version = "0.1.0"
 edition = "2021"
-authors = ["FinRust Team"]
+authors = ["BacktestServer Team"]
 description = "Rust based financial backtesting server"
 readme = "README.md"
-repository = "https://github.com/allen3680/finrust"
+repository = "https://github.com/allen3680/backtest_server"
 license = "MIT"
 
 [[bin]]
-name = "finrust"
+name = "backtest_server"
 path = "src/bin/main.rs"
 
 [[bin]]

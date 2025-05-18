@@ -186,21 +186,6 @@ fn default_auto_reload() -> bool {
     true
 }
 
-/// 數據源配置
-#[derive(Debug, Clone, Deserialize)]
-pub struct DataSourceConfig {
-    /// 數據源類型
-    pub source_type: DataSourceType,
-    /// 數據文件路徑（當 source_type 為 File 時使用）
-    pub path: Option<String>,
-    /// 數據格式
-    pub format: DataFormat,
-    /// API 端點（當 source_type 為 Api 時使用）
-    pub api_endpoint: Option<String>,
-    /// API 認證令牌（當 source_type 為 Api 時使用）
-    pub api_token: Option<String>,
-}
-
 // 定義配置相關錯誤
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigurationError {
@@ -244,7 +229,7 @@ impl AppConfig {
     /// 根據運行環境載入配置
     pub fn load() -> std::result::Result<Self, ConfigurationError> {
         // 獲取環境，預設為開發環境
-        let env = std::env::var("FINRUST_ENV").unwrap_or_else(|_| "development".into());
+        let env = std::env::var("BacktestServer_ENV").unwrap_or_else(|_| "development".into());
         
         // 檢查環境是否有效
         if env != "development" && env != "production" {
@@ -256,7 +241,7 @@ impl AppConfig {
             // 僅載入環境特定配置
             .add_source(File::with_name(&format!("config/{}", env)).required(true))
             // 環境變量（優先級最高）
-            .add_source(Environment::with_prefix("FINRUST").separator("__"))
+            .add_source(Environment::with_prefix("BacktestServer").separator("__"))
             .build()?;
 
         // 解析配置到結構體
@@ -304,21 +289,6 @@ impl AppConfig {
         // 檢查端口號有效
         if config.app.threads == 0 {
             return Err(ConfigurationError::ValidationError("應用線程數不能為零".to_string()));
-        }
-        
-        // 驗證數據源配置
-        match config.data_source.source_type {
-            DataSourceType::File => {
-                if config.data_source.path.is_none() {
-                    return Err(ConfigurationError::ValidationError("文件數據源必須指定路徑".to_string()));
-                }
-            },
-            DataSourceType::Api => {
-                if config.data_source.api_endpoint.is_none() {
-                    return Err(ConfigurationError::ValidationError("API數據源必須指定端點".to_string()));
-                }
-            },
-            _ => {}
         }
         
         // 驗證策略配置

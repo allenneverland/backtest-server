@@ -4,22 +4,15 @@
 # 使用開發環境數據庫
 host = "db"  # 在Docker環境中使用服務名稱而非localhost
 port = 5432
-username = "finrust"
-password = "finrust"
-database = "finrust"
+username = "backtest_server"
+password = "backtest_server"
+database = "backtest_server"
 connection_pool_size = 10
 max_connections = 10
 min_connections = 2
 max_lifetime_secs = 1800  # 秒, 30分鐘
 acquire_timeout_secs = 15  # 秒，增加超時時間
 idle_timeout_secs = 600   # 秒, 10分鐘
-
-[data_source]
-source_type = "File"  # 可選值: "File", "Database", "Api"
-path = "data"         # 數據文件夾路徑
-format = "Csv"        # 可選值: "Csv", "Json", "Parquet", "Database"
-api_endpoint = ""     # API端點（當source_type為Api時使用）
-api_token = ""        # API認證令牌（當source_type為Api時使用）
 
 [log]
 # 開發環境使用更詳細的日誌

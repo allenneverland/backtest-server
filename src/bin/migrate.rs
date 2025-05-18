@@ -1,11 +1,11 @@
 use anyhow::{Result, Context};
 use clap::{Parser, Subcommand};
-use finrust::storage;
+use backtest_server::storage;
 use tracing::info;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser)]
-#[command(name = "migrate", about = "FinRust 數據庫遷移工具")]
+#[command(name = "migrate", about = "BacktestServer 數據庫遷移工具")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -24,7 +24,7 @@ enum Commands {
 async fn main() -> Result<()> {
     // 初始化日誌系統
     tracing_subscriber::fmt()
-        .with_env_filter("finrust=info")
+        .with_env_filter("backtest_server=info")
         .with_span_events(FmtSpan::CLOSE)
         .init();
     

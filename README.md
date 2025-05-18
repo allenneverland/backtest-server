@@ -1,8 +1,8 @@
-# FinRust - 高性能金融回測伺服器
+# BacktestServer - 高性能金融回測伺服器
 
 ## 概述
 
-FinRust是一個使用Rust語言開發的高性能金融回測伺服器，專為支持DSL策略、多數據類型和動態策略管理而設計。系統採用模組化架構，以事件驅動方式構建，優化處理金融交易數據。本系統主要用於運行一個網站服務，讓客戶通過API將DSL策略傳輸到伺服器進行編譯和回測，完成後將結果回傳給客戶。
+BacktestServer是一個使用Rust語言開發的高性能金融回測伺服器，專為支持DSL策略、多數據類型和動態策略管理而設計。系統採用模組化架構，以事件驅動方式構建，優化處理金融交易數據。本系統主要用於運行一個網站服務，讓客戶通過API將DSL策略傳輸到伺服器進行編譯和回測，完成後將結果回傳給客戶。
 
 ### 主要特性
 
@@ -20,8 +20,8 @@ FinRust是一個使用Rust語言開發的高性能金融回測伺服器，專為
 
 ```bash
 # 克隆存儲庫
-git clone https://github.com/allen3680/finrust.git
-cd finrust
+git clone https://github.com/allen3680/backtest_server.git
+cd backtest_server
 
 # 安裝依賴
 ./scripts/install.sh
@@ -54,7 +54,7 @@ cargo run --example import_example
 
 ## 系統架構
 
-FinRust採用模組化的架構設計，目前已實現的主要模組：
+BacktestServer採用模組化的架構設計，目前已實現的主要模組：
 
 ### 核心組件
 
@@ -88,11 +88,11 @@ FinRust採用模組化的架構設計，目前已實現的主要模組：
 
 ## 使用範例
 
-以下是使用FinRust導入市場數據的簡單範例：
+以下是使用BacktestServer導入市場數據的簡單範例：
 
 ```rust
-use finrust::DataEngine;
-use finrust::market_types::{AssetType, Exchange};
+use backtest_server::DataEngine;
+use backtest_server::market_types::{AssetType, Exchange};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -113,7 +113,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 ## 開發工具
 
-FinRust專案使用以下工具簡化開發和部署流程：
+BacktestServer專案使用以下工具簡化開發和部署流程：
 
 ### Cargo-Make
 

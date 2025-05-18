@@ -24,7 +24,7 @@ services:
         tail -f /dev/null
       "
     networks:
-      - finrust-network
+      - backtest_server-network
 
   # TimescaleDB 數據庫
   db:
@@ -43,7 +43,7 @@ services:
     ports:
       - "${DB_PORT}:5432"
     networks:
-      - finrust-network
+      - backtest_server-network
     command: >
       -c shared_buffers=${TIMESCALEDB_SHARED_BUFFERS}
       -c max_connections=${TIMESCALEDB_MAX_CONNECTIONS}
@@ -64,7 +64,7 @@ services:
     volumes:
       - redis-data:/data
     networks:
-      - finrust-network
+      - backtest_server-network
     command: redis-server --save 60 1 --loglevel warning
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -81,5 +81,5 @@ volumes:
   grafana-data:
 
 networks:
-  finrust-network:
+  backtest_server-network:
     driver: bridge

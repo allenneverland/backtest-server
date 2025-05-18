@@ -254,8 +254,7 @@ src/backtest/                       # 回測系統模組目錄
 # 服務與消息系統模組
 src/server/                         # 伺服器模組目錄
 ├── builder.rs                      # 伺服器構建器模式實現
-├── config.rs                       # 伺服器特定配置結構
-└── error.rs                        # 伺服器級別錯誤處理
+├── error.rs                        # 伺服器級別錯誤處理
 
 # 基礎設施模組
 src/config/                         # 配置管理模組目錄
@@ -498,7 +497,6 @@ examples/                           # 示例代碼目錄
 
 **主要組件** (`src/server/`):
 - `builder.rs`: 實現伺服器構建器模式
-- `config.rs`: 定義伺服器特定配置
 - `error.rs`: 處理伺服器級別錯誤
 
 ### 3.12 回測模組

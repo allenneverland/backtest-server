@@ -13,7 +13,7 @@ pub mod error;
 
 // 重新導出核心組件，簡化外部使用
 pub use builder::ServerBuilder;
-pub use crate::config::ServerConfig;
+pub use crate::config::types::ServerConfig;
 pub use error::{ServerError, ServerResult};
 
 /// 伺服器狀態枚舉
@@ -27,4 +27,4 @@ pub enum ServerState {
     ShuttingDown,
     /// 伺服器已停止
     Stopped,
-} 
+}

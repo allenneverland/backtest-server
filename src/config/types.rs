@@ -10,6 +10,7 @@ pub struct ApplicationConfig {
     pub strategy: StrategyConfig,
     pub server: ServerConfig,
     pub rest_api: RestApiConfig,
+    pub redis: RedisConfig,
 }
 
 impl Validator for ApplicationConfig {
@@ -21,6 +22,7 @@ impl Validator for ApplicationConfig {
         self.strategy.validate()?;
         self.server.validate()?;
         self.rest_api.validate()?;
+        self.redis.validate()?;
         
         Ok(())
     }
@@ -199,6 +201,32 @@ impl Validator for RestApiConfig {
                 "未指定允許的CORS來源，且未啟用允許所有來源".to_string()
             ));
         }
+        
+        Ok(())
+    }
+}
+
+/// Redis配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RedisConfig {
+    pub url: String,
+    pub pool_size: u32,
+    pub connection_timeout_secs: u64,
+    pub read_timeout_secs: u64,
+    pub write_timeout_secs: u64,
+    pub reconnect_attempts: u32,
+    pub reconnect_delay_secs: u64,
+}
+
+impl Validator for RedisConfig {
+    fn validate(&self) -> Result<(), ValidationError> {
+        // 驗證Redis配置
+        ValidationUtils::not_empty(&self.url, "redis.url")?;
+        ValidationUtils::in_range(self.pool_size, 1, 100, "redis.pool_size")?;
+        ValidationUtils::in_range(self.connection_timeout_secs, 1, 60, "redis.connection_timeout_secs")?;
+        ValidationUtils::in_range(self.read_timeout_secs, 1, 60, "redis.read_timeout_secs")?;
+        ValidationUtils::in_range(self.write_timeout_secs, 1, 60, "redis.write_timeout_secs")?;
+        ValidationUtils::in_range(self.reconnect_attempts, 0, 10, "redis.reconnect_attempts")?;
         
         Ok(())
     }

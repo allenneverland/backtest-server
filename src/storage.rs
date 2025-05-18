@@ -2,6 +2,7 @@ pub mod database;
 pub mod repository;
 pub mod models;
 pub mod migrations;
+pub mod redis;
 
 // 只匯出必要的數據庫功能
 pub use database::*;
@@ -32,3 +33,10 @@ pub use repository::{
 
 // 匯出遷移功能
 pub use migrations::*;
+
+// 匯出Redis功能
+pub use redis::{
+    client::{Client as RedisClient, RedisOperations, RedisClientError},
+    pool::{ConnectionPool as RedisConnectionPool, RedisPool, RedisPoolError},
+    operations::cache::{CacheManager, CacheOperations, CacheError},
+};

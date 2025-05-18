@@ -61,12 +61,12 @@
 - 📋 🟢 實現消息認證（`messaging/auth.rs`）`[jsonwebtoken, sha2]` ⚡(依賴任務15.2)
 
 ### 5. 數據導入模組
-- 📋 🔴 🚀 實現CSV讀取功能（`csv_io.rs`）`[csv, serde, tokio]` ⚡(依賴任務3)
-- 📋 🔴 🚀 實現數據驗證流程（`validator.rs`）`[thiserror, serde]` ⚡(依賴任務3)
-- 📋 🔴 實現OHLCV數據驗證與清洗（`ohlcv_validator.rs`, `ohlcv_cleaner.rs`）`[chrono, rust_decimal, thiserror]`
-- 📋 🟡 實現Tick數據驗證與清洗（`tick_validator.rs`, `tick_cleaner.rs`）`[chrono, rust_decimal, thiserror]`
-- 📋 🟡 實現時間序列整體驗證（`time_series_validator.rs`）`[chrono, statrs]`
-- 📋 🟢 實現驗證器註冊表（`registry.rs`）`[once_cell]`
+- ✅ 實現CSV讀取功能（`csv_io.rs`）`[csv, serde, tokio]` ⚡(依賴任務3)
+- ✅ 實現數據驗證流程（`validator.rs`）`[thiserror, serde]` ⚡(依賴任務3)
+- ✅ 實現OHLCV數據驗證與清洗（`ohlcv_validator.rs`, `ohlcv_cleaner.rs`）`[chrono, rust_decimal, thiserror]`
+- ✅ 實現Tick數據驗證與清洗（`tick_validator.rs`, `tick_cleaner.rs`）`[chrono, rust_decimal, thiserror]`
+- ✅ 實現時間序列整體驗證（`time_series_validator.rs`）`[chrono, statrs]`
+- ✅ 實現驗證器註冊表（`registry.rs`）`[once_cell]`
 - 📋 🟢 實現驗證報告生成（`report.rs`）`[serde, serde_json]`
 
 ### 6. 數據提供模組
@@ -77,11 +77,11 @@
 - 📋 🟡 實現技術指標計算（`precalculator.rs`）`[ndarray, statrs, rayon]`
 
 ### 7. 配置管理模組
-- ✅ 🔴 🚀 實現配置加載功能（`loader.rs`）`[config, serde, toml]`
-- ✅ 🟡 實現配置驗證（`validation.rs`）`[thiserror, serde]`
-- ✅ 🟡 設定默認配置值（`defaults.rs`）`[once_cell, serde]`
-- ✅ 🟢 實現環境變量支持 `[config]`
-- 📋 🟡 實現RabbitMQ配置 `[config, serde, toml]`
+- ✅ 實現配置加載功能（`loader.rs`）`[config, serde, toml]`
+- ✅ 實現配置驗證（`validation.rs`）`[thiserror, serde]`
+- ✅ 設定默認配置值（`defaults.rs`）`[once_cell, serde]`
+- ✅ 實現環境變量支持 `[config]`
+- ✅ 實現RabbitMQ配置 `[config, serde, toml]`
 
 ## 第三階段：回測與執行模組（3-4週）
 

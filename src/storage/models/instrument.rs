@@ -4,10 +4,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::types::Json;
 use sqlx::FromRow;
 
-// 用於將視圖資料轉換為API響應的特性
-pub trait ViewToSymbolInfo {
-    fn to_symbol_info(&self) -> crate::api::handlers::data::SymbolInfo;
-}
 
 /// 股票特定屬性模型
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -414,83 +410,3 @@ pub struct CryptoComplete {
     pub whitepaper_url: Option<String>,
     pub github_url: Option<String>,
 }
-
-// 為 FutureComplete 實現視圖轉換特性
-impl ViewToSymbolInfo for FutureComplete {
-    fn to_symbol_info(&self) -> crate::api::handlers::data::SymbolInfo {
-        crate::api::handlers::data::SymbolInfo {
-            symbol: self.symbol.clone(),
-            name: self.name.clone(),
-            asset_type: self.instrument_type.clone(),
-            exchange: self.exchange_name.clone(),
-            sector: None,
-            industry: None,
-            listing_date: self.trading_start_date.map(|d| d.to_string()),
-            is_active: self.is_active,
-        }
-    }
-}
-
-// 為 StockComplete 實現視圖轉換特性
-impl ViewToSymbolInfo for StockComplete {
-    fn to_symbol_info(&self) -> crate::api::handlers::data::SymbolInfo {
-        crate::api::handlers::data::SymbolInfo {
-            symbol: self.symbol.clone(),
-            name: self.name.clone(),
-            asset_type: self.instrument_type.clone(),
-            exchange: self.exchange_name.clone(),
-            sector: self.sector.clone(),
-            industry: self.industry.clone(),
-            listing_date: self.listing_date.map(|d| d.to_string()),
-            is_active: self.is_active,
-        }
-    }
-}
-
-// 為 OptionComplete 實現視圖轉換特性
-impl ViewToSymbolInfo for OptionComplete {
-    fn to_symbol_info(&self) -> crate::api::handlers::data::SymbolInfo {
-        crate::api::handlers::data::SymbolInfo {
-            symbol: self.symbol.clone(),
-            name: self.name.clone(),
-            asset_type: self.instrument_type.clone(),
-            exchange: self.exchange_name.clone(),
-            sector: None,
-            industry: None,
-            listing_date: Some(self.expiration_date.to_string()),
-            is_active: self.is_active,
-        }
-    }
-}
-
-// 為 ForexComplete 實現視圖轉換特性
-impl ViewToSymbolInfo for ForexComplete {
-    fn to_symbol_info(&self) -> crate::api::handlers::data::SymbolInfo {
-        crate::api::handlers::data::SymbolInfo {
-            symbol: self.symbol.clone(),
-            name: self.name.clone(),
-            asset_type: self.instrument_type.clone(),
-            exchange: self.exchange_name.clone(),
-            sector: Some("Currencies".to_string()),
-            industry: Some("Forex".to_string()),
-            listing_date: None,
-            is_active: self.is_active,
-        }
-    }
-}
-
-// 為 CryptoComplete 實現視圖轉換特性
-impl ViewToSymbolInfo for CryptoComplete {
-    fn to_symbol_info(&self) -> crate::api::handlers::data::SymbolInfo {
-        crate::api::handlers::data::SymbolInfo {
-            symbol: self.symbol.clone(),
-            name: self.name.clone(),
-            asset_type: self.instrument_type.clone(),
-            exchange: self.exchange_name.clone(),
-            sector: Some("Cryptocurrencies".to_string()),
-            industry: None,
-            listing_date: None,
-            is_active: self.is_active,
-        }
-    }
-} 

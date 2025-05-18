@@ -26,7 +26,7 @@ pub use repository::{
     InstrumentRepository,
     ExchangeRepository,
     MarketDataRepository,
-    StrategyConfigRepository,
+    StrategyRepository,
     StrategyVersionRepository,
     PortfolioRepository,
 };
@@ -36,7 +36,7 @@ pub use migrations::*;
 
 // 匯出Redis功能
 pub use redis::{
-    client::{Client as RedisClient, RedisOperations, RedisClientError},
-    pool::{ConnectionPool as RedisConnectionPool, RedisPool, RedisPoolError},
+    client::{Client, RedisOperations, RedisClientError},
+    pool::{ConnectionPool, RedisPool, RedisPoolError},
     operations::cache::{CacheManager, CacheOperations, CacheError},
 };

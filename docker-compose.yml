@@ -13,7 +13,9 @@ services:
       - RUST_LOG=${RUST_LOG}
       - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
       - REDIS_URL=redis://${REDIS_HOST}:${REDIS_PORT}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@${RABBITMQ_HOST}:${RABBITMQ_PORT}
     depends_on:
+      - rabbitmq
       - db
       - redis
     command: >
@@ -26,12 +28,25 @@ services:
     networks:
       - backtest_server-network
 
+  rabbitmq:
+    image: rabbitmq:3.11-management
+    ports:
+      - "${RABBITMQ_PORT}:5672"    # AMQP 協議端口
+      - "${RABBITMQ_MANAGEMENT_PORT}:15672"  # 管理界面端口
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   # TimescaleDB 數據庫
   db:
     image: timescale/timescaledb:latest-pg14
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile.db
     environment:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}

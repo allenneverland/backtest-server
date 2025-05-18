@@ -105,7 +105,7 @@ migrations/                       # 數據庫遷移文件目錄
 
 ```
 src/                              # 源代碼目錄
-├── main.rs                       # 程序入口點
+├── bin/                          # 程序入口點
 ├── lib.rs                        # 庫入口點，宣告主要模組
 ├── config.rs                     # 配置管理模組，宣告子模組
 ├── domain_types.rs               # 核心領域類型模組
@@ -240,6 +240,10 @@ src/server/                           # 伺服器模組目錄
 └── error.rs                          # 伺服器級別錯誤處理
 
 # 基礎設施模組
+src/bin/                           # 
+├── main.rs                         # 
+└── migrate.rs                       # 
+
 src/config/                           # 配置管理模組目錄
 ├── loader.rs                         # 配置加載（環境變量、文件等）
 ├── validation.rs                     # 配置驗證

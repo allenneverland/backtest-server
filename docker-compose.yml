@@ -87,6 +87,21 @@ services:
       timeout: 5s
       retries: 5
 
+  python_server:
+    build:
+      context: ./test-server
+      dockerfile: Dockerfile.python
+    ports:
+      - "5000:5000"
+    environment:
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASS=${RABBITMQ_PASSWORD}
+    depends_on:
+      - rabbitmq
+    networks:
+      - backtest_server-network
 
 volumes:
   cargo-cache:

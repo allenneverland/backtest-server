@@ -49,10 +49,6 @@ cors_allowed_origins = ["http://localhost:8080"]  # 允許從前端頁面訪問
 static_files_dir = "static"  # 靜態文件目錄
 
 [rest_api]
-# REST API 配置
-base_path = "/api"  # API基礎路徑
-api_key = "FM0FiHngsmgigP1NGCsciD6pQfTlDJM"  # 開發環境API密鑰
-secret_key = "7MQa0zB91flUHPpcGnVIHhahLNKpAAMUvpevjMqOFse8xGVO88XrwJayb8KNcf"  # 開發環境密鑰
 request_timeout = 30  # API請求超時時間(秒)
 cors_allow_all = false  # API是否允許所有跨域請求
 cors_origins = ["http://localhost:8080", "http://127.0.0.1:8080"]  # API允許的跨域來源

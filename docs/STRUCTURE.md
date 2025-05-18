@@ -245,8 +245,7 @@ src/server/                         # 伺服器模組目錄
 # 基礎設施模組
 src/config/                         # 配置管理模組目錄
 ├── loader.rs                       # 配置加載（環境變量、文件等）
-├── validation.rs                   # 配置驗證
-└── defaults.rs                     # 默認配置值
+└── validation.rs                   # 配置驗證
 
 src/storage/                        # 存儲系統模組目錄
 ├── database.rs                     # 數據庫連接管理

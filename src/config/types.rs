@@ -11,6 +11,7 @@ pub struct ApplicationConfig {
     pub server: ServerConfig,
     pub rest_api: RestApiConfig,
     pub redis: RedisConfig,
+    pub rabbitmq: RabbitMQConfig,
 }
 
 impl Validator for ApplicationConfig {
@@ -23,6 +24,7 @@ impl Validator for ApplicationConfig {
         self.server.validate()?;
         self.rest_api.validate()?;
         self.redis.validate()?;
+        self.rabbitmq.validate()?;
         
         Ok(())
     }
@@ -227,6 +229,72 @@ impl Validator for RedisConfig {
         ValidationUtils::in_range(self.read_timeout_secs, 1, 60, "redis.read_timeout_secs")?;
         ValidationUtils::in_range(self.write_timeout_secs, 1, 60, "redis.write_timeout_secs")?;
         ValidationUtils::in_range(self.reconnect_attempts, 0, 10, "redis.reconnect_attempts")?;
+        
+        Ok(())
+    }
+}
+
+/// RabbitMQ配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RabbitMQConfig {
+    /// AMQP URL (例如: "amqp://user:pass@localhost:5672/")
+    pub url: String,
+    /// 連接池大小
+    pub pool_size: u32,
+    /// 連接超時（秒）
+    pub connection_timeout_secs: u64,
+    /// 重試間隔（秒）
+    pub retry_interval_secs: u64,
+    /// 最大重試次數
+    pub max_retries: u32,
+    /// 預設交換機類型
+    pub default_exchange_type: String,
+    /// 預設交換機名稱
+    pub default_exchange: String,
+    /// 是否持久化消息
+    pub durable_messages: bool,
+    /// 發佈確認
+    pub publish_confirm: bool,
+    /// 預取計數
+    pub prefetch_count: u16,
+    /// 消費者標籤前綴
+    pub consumer_tag_prefix: String,
+}
+
+impl Default for RabbitMQConfig {
+    fn default() -> Self {
+        Self {
+            url: "amqp://guest:guest@localhost:5672/".to_string(),
+            pool_size: 10,
+            connection_timeout_secs: 5,
+            retry_interval_secs: 1,
+            max_retries: 5,
+            default_exchange_type: "direct".to_string(),
+            default_exchange: "backtest.direct".to_string(),
+            durable_messages: true,
+            publish_confirm: true,
+            prefetch_count: 10,
+            consumer_tag_prefix: "backtest_server".to_string(),
+        }
+    }
+}
+
+impl Validator for RabbitMQConfig {
+    fn validate(&self) -> Result<(), ValidationError> {
+        // 驗證RabbitMQ配置
+        ValidationUtils::not_empty(&self.url, "rabbitmq.url")?;
+        ValidationUtils::in_range(self.pool_size, 1, 100, "rabbitmq.pool_size")?;
+        ValidationUtils::in_range(self.connection_timeout_secs, 1, 60, "rabbitmq.connection_timeout_secs")?;
+        ValidationUtils::in_range(self.retry_interval_secs, 1, 30, "rabbitmq.retry_interval_secs")?;
+        ValidationUtils::in_range(self.max_retries, 1, 10, "rabbitmq.max_retries")?;
+        ValidationUtils::one_of(
+            &self.default_exchange_type.to_lowercase(),
+            &["direct", "topic", "fanout", "headers"],
+            "rabbitmq.default_exchange_type"
+        )?;
+        ValidationUtils::not_empty(&self.default_exchange, "rabbitmq.default_exchange")?;
+        ValidationUtils::in_range(self.prefetch_count, 1, 1000, "rabbitmq.prefetch_count")?;
+        ValidationUtils::not_empty(&self.consumer_tag_prefix, "rabbitmq.consumer_tag_prefix")?;
         
         Ok(())
     }

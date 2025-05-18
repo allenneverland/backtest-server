@@ -1,5 +1,5 @@
 use crate::messaging::protocol::Message;
-use crate::messaging::rabbitmq::connection::RabbitMQPool;
+use crate::messaging::rabbitmq::connection::{RabbitMQConnectionManager, RabbitMQConnectionError};
 use lapin::{
     options::{
         BasicAckOptions, BasicConsumeOptions, BasicPublishOptions, 
@@ -9,13 +9,33 @@ use lapin::{
     BasicProperties, Channel, Consumer, Error as LapinError
 };
 use std::sync::Arc;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use tokio::sync::RwLock;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use serde::{Serialize, de::DeserializeOwned};
 use async_trait::async_trait;
+use thiserror::Error;
+
+/// 代理錯誤類型
+#[derive(Error, Debug)]
+pub enum BrokerError {
+    #[error("Connection error: {0}")]
+    Connection(#[from] RabbitMQConnectionError),
+    
+    #[error("Lapin error: {0}")]
+    Lapin(#[from] LapinError),
+    
+    #[error("Serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
+    
+    #[error("Handler not found for routing key: {0}")]
+    HandlerNotFound(String),
+    
+    #[error("Handler error: {0}")]
+    Handler(#[from] anyhow::Error),
+}
 
 /// 消息處理器特徵
 #[async_trait]
@@ -25,28 +45,24 @@ pub trait MessageHandler: Send + Sync {
 
 /// RabbitMQ 代理
 pub struct RabbitMQBroker {
-    pool: RabbitMQPool,
+    connection_manager: RabbitMQConnectionManager,
     handlers: Arc<RwLock<HashMap<String, Arc<dyn MessageHandler>>>>,
 }
 
 impl RabbitMQBroker {
     /// 創建新的消息代理
-    pub fn new(pool: RabbitMQPool) -> Self {
+    pub fn new(connection_manager: RabbitMQConnectionManager) -> Self {
         Self {
-            pool,
+            connection_manager,
             handlers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
     
     /// 初始化必要的交換機和佇列
-    pub async fn initialize(&self) -> Result<(), LapinError> {
+    pub async fn initialize(&self) -> Result<(), BrokerError> {
         debug!("Initializing RabbitMQ broker");
         
-        let conn = self.pool.get().await.map_err(|e| {
-            error!("Failed to get connection: {}", e);
-            LapinError::ChannelError("Failed to get connection".into())
-        })?;
-        
+        let conn = self.connection_manager.get_connection().await?;
         let channel = conn.create_channel().await?;
         
         // 宣告交換機
@@ -76,7 +92,7 @@ impl RabbitMQBroker {
     }
     
     /// 註冊消息處理器
-    pub async fn register_handler(&self, queue_name: &str, routing_key: &str, handler: Arc<dyn MessageHandler>) -> Result<(), LapinError> {
+    pub async fn register_handler(&self, queue_name: &str, routing_key: &str, handler: Arc<dyn MessageHandler>) -> Result<(), BrokerError> {
         debug!("Registering handler for queue: {}, routing_key: {}", queue_name, routing_key);
         
         // 存儲處理器
@@ -89,14 +105,10 @@ impl RabbitMQBroker {
     }
     
     /// 啟動消息監聽
-    pub async fn start_consuming(&self, queue_name: &str, exchange_name: &str, routing_key: &str) -> Result<(), LapinError> {
+    pub async fn start_consuming(&self, queue_name: &str, exchange_name: &str, routing_key: &str) -> Result<(), BrokerError> {
         debug!("Starting consumer for queue: {}, routing_key: {}", queue_name, routing_key);
         
-        let conn = self.pool.get().await.map_err(|e| {
-            error!("Failed to get connection: {}", e);
-            LapinError::ChannelError("Failed to get connection".into())
-        })?;
-        
+        let conn = self.connection_manager.get_connection().await?;
         let channel = conn.create_channel().await?;
         
         // 宣告佇列
@@ -212,29 +224,33 @@ impl RabbitMQBroker {
     }
     
     /// 發布消息
-    pub async fn publish<T: Serialize>(&self, exchange: &str, routing_key: &str, payload: &T) -> Result<(), LapinError> {
-        let conn = self.pool.get().await.map_err(|e| {
-            error!("Failed to get connection: {}", e);
-            LapinError::ChannelError("Failed to get connection".into())
-        })?;
-        
-        let channel = conn.create_channel().await?;
-        
-        let payload_data = serde_json::to_vec(payload).map_err(|e| {
-            error!("Failed to serialize payload: {}", e);
-            LapinError::ProtocolError("Serialization error".into())
-        })?;
-        
+    pub async fn publish<T: Serialize>(&self, exchange: &str, routing_key: &str, payload: &T) -> Result<(), BrokerError> {
         debug!("Publishing message to exchange: {}, routing_key: {}", exchange, routing_key);
         
+        let conn = self.connection_manager.get_connection().await?;
+        let channel = conn.create_channel().await?;
+        
+        // 序列化消息
+        let message = Message::new(routing_key, payload);
+        let data = serde_json::to_vec(&message)?;
+        
+        // 發布消息
         channel.basic_publish(
             exchange,
             routing_key,
             BasicPublishOptions::default(),
-            &payload_data,
+            &data,
             BasicProperties::default(),
         ).await?;
         
+        debug!("Message published successfully");
+        
+        Ok(())
+    }
+    
+    /// 檢查代理健康狀態
+    pub async fn check_health(&self) -> Result<(), BrokerError> {
+        self.connection_manager.check_health().await?;
         Ok(())
     }
 }

@@ -1,38 +1,69 @@
 use crate::messaging::protocol::Message;
+use crate::messaging::rabbitmq::connection::{RabbitMQConnectionManager, RabbitMQConnectionError};
 use lapin::{
     options::{
         BasicConsumeOptions, BasicPublishOptions, QueueDeclareOptions
     },
     types::FieldTable,
-    BasicProperties, Channel, Connection, ConnectionProperties, Consumer, Error as LapinError
+    BasicProperties, Channel, Consumer, Error as LapinError
 };
 use std::sync::Arc;
 use tokio::sync::{oneshot, Mutex};
 use std::collections::HashMap;
 use serde::{Serialize, de::DeserializeOwned};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 use std::time::Duration;
+use thiserror::Error;
+
+/// RabbitMQ 客戶端錯誤
+#[derive(Error, Debug)]
+pub enum ClientError {
+    #[error("Connection error: {0}")]
+    Connection(#[from] RabbitMQConnectionError),
+    
+    #[error("Lapin error: {0}")]
+    Lapin(#[from] LapinError),
+    
+    #[error("Serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
+    
+    #[error("Response timeout")]
+    Timeout,
+    
+    #[error("Response channel closed")]
+    ChannelClosed,
+    
+    #[error("Other error: {0}")]
+    Other(#[from] anyhow::Error),
+}
 
 /// RabbitMQ 客戶端
 pub struct RabbitMQClient {
-    connection: Arc<Connection>,
-    channel: Arc<Channel>,
-    reply_queue: String,
+    connection_manager: RabbitMQConnectionManager,
+    channel: Arc<Mutex<Option<Channel>>>,
+    reply_queue: Arc<Mutex<Option<String>>>,
     pending_responses: Arc<Mutex<HashMap<String, oneshot::Sender<Vec<u8>>>>>,
 }
 
 impl RabbitMQClient {
     /// 創建新的客戶端
-    pub async fn new(amqp_url: &str) -> Result<Self, LapinError> {
-        info!("Connecting to RabbitMQ: {}", amqp_url);
+    pub fn new(connection_manager: RabbitMQConnectionManager) -> Self {
+        Self {
+            connection_manager,
+            channel: Arc::new(Mutex::new(None)),
+            reply_queue: Arc::new(Mutex::new(None)),
+            pending_responses: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+    
+    /// 初始化客戶端
+    pub async fn initialize(&self) -> Result<(), ClientError> {
+        info!("Initializing RabbitMQ client");
         
-        let connection = Connection::connect(
-            amqp_url,
-            ConnectionProperties::default(),
-        ).await?;
-        
-        let channel = connection.create_channel().await?;
+        // 獲取連接並創建通道
+        let conn = self.connection_manager.get_connection().await?;
+        let channel = conn.create_channel().await?;
         
         // 創建臨時回應佇列
         let queue = channel.queue_declare(
@@ -48,25 +79,81 @@ impl RabbitMQClient {
         let reply_queue = queue.name().to_string();
         debug!("Created reply queue: {}", reply_queue);
         
-        let client = Self {
-            connection: Arc::new(connection),
-            channel: Arc::new(channel),
-            reply_queue,
-            pending_responses: Arc::new(Mutex::new(HashMap::new())),
-        };
+        // 保存通道和回應佇列
+        {
+            let mut channel_guard = self.channel.lock().await;
+            *channel_guard = Some(channel.clone());
+            
+            let mut reply_queue_guard = self.reply_queue.lock().await;
+            *reply_queue_guard = Some(reply_queue.clone());
+        }
         
         // 開始監聽回應
-        client.start_response_consumer().await?;
+        self.start_response_consumer(channel, reply_queue).await?;
         
         info!("RabbitMQ client initialized");
         
-        Ok(client)
+        Ok(())
+    }
+    
+    /// 確保客戶端已初始化並取得通道
+    async fn ensure_channel(&self) -> Result<Channel, ClientError> {
+        let channel_option = {
+            let channel_guard = self.channel.lock().await;
+            channel_guard.clone()
+        };
+        
+        match channel_option {
+            Some(channel) => Ok(channel),
+            None => {
+                // 通道不存在，嘗試初始化
+                debug!("Channel not initialized, initializing client");
+                self.initialize().await?;
+                
+                let channel_guard = self.channel.lock().await;
+                match channel_guard.clone() {
+                    Some(channel) => Ok(channel),
+                    None => {
+                        error!("Failed to initialize channel");
+                        Err(ClientError::Connection(RabbitMQConnectionError::Pool(
+                            deadpool_lapin::PoolError::Timeout
+                        )))
+                    }
+                }
+            }
+        }
+    }
+    
+    /// 獲取回應佇列名稱
+    async fn get_reply_queue(&self) -> Result<String, ClientError> {
+        let reply_queue_option = {
+            let reply_queue_guard = self.reply_queue.lock().await;
+            reply_queue_guard.clone()
+        };
+        
+        match reply_queue_option {
+            Some(queue) => Ok(queue),
+            None => {
+                // 回應佇列未初始化，嘗試初始化
+                debug!("Reply queue not initialized, initializing client");
+                self.initialize().await?;
+                
+                let reply_queue_guard = self.reply_queue.lock().await;
+                match reply_queue_guard.clone() {
+                    Some(queue) => Ok(queue),
+                    None => {
+                        error!("Failed to initialize reply queue");
+                        Err(ClientError::Connection(RabbitMQConnectionError::Pool(
+                            deadpool_lapin::PoolError::Timeout
+                        )))
+                    }
+                }
+            }
+        }
     }
     
     /// 開始監聽回應佇列
-    async fn start_response_consumer(&self) -> Result<(), LapinError> {
-        let channel = self.channel.clone();
-        let queue_name = self.reply_queue.clone();
+    async fn start_response_consumer(&self, channel: Channel, queue_name: String) -> Result<(), ClientError> {
         let pending_responses = self.pending_responses.clone();
         
         let consumer = channel.basic_consume(
@@ -117,13 +204,17 @@ impl RabbitMQClient {
     }
     
     /// 發送請求並等待回應 (RPC模式)
-    pub async fn request<T, R>(&self, exchange: &str, routing_key: &str, request: &T, timeout: Duration) -> Result<R, anyhow::Error> 
+    pub async fn request<T, R>(&self, exchange: &str, routing_key: &str, request: &T, timeout: Duration) -> Result<R, ClientError> 
     where
         T: Serialize,
         R: DeserializeOwned,
     {
         let correlation_id = Uuid::new_v4().to_string();
         debug!("Sending RPC request with correlation_id: {}", correlation_id);
+        
+        // 獲取通道和回應佇列
+        let channel = self.ensure_channel().await?;
+        let reply_queue = self.get_reply_queue().await?;
         
         // 創建消息封裝
         let message = Message::new(routing_key, request);
@@ -139,13 +230,13 @@ impl RabbitMQClient {
         }
         
         // 發送請求
-        self.channel.basic_publish(
+        channel.basic_publish(
             exchange,
             routing_key,
             BasicPublishOptions::default(),
             &message_data,
             BasicProperties::default()
-                .with_reply_to(self.reply_queue.clone())
+                .with_reply_to(reply_queue)
                 .with_correlation_id(correlation_id.clone().into()),
         ).await?;
         
@@ -155,7 +246,7 @@ impl RabbitMQClient {
         let response_data = tokio::time::timeout(
             timeout,
             receiver
-        ).await??;
+        ).await.map_err(|_| ClientError::Timeout)??;
         
         debug!("Response received, deserializing...");
         
@@ -166,21 +257,21 @@ impl RabbitMQClient {
     }
     
     /// 發布事件（無需回應）
-    pub async fn publish<T>(&self, exchange: &str, routing_key: &str, event: &T) -> Result<(), LapinError> 
+    pub async fn publish<T>(&self, exchange: &str, routing_key: &str, event: &T) -> Result<(), ClientError> 
     where
         T: Serialize,
     {
         debug!("Publishing event to exchange: {}, routing_key: {}", exchange, routing_key);
         
+        // 獲取通道
+        let channel = self.ensure_channel().await?;
+        
         // 創建消息封裝
         let message = Message::new(routing_key, event);
-        let message_data = serde_json::to_vec(&message).map_err(|e| {
-            error!("Failed to serialize event: {}", e);
-            LapinError::ProtocolError("Serialization error".into())
-        })?;
+        let message_data = serde_json::to_vec(&message)?;
         
         // 發布事件
-        self.channel.basic_publish(
+        channel.basic_publish(
             exchange,
             routing_key,
             BasicPublishOptions::default(),
@@ -189,6 +280,24 @@ impl RabbitMQClient {
         ).await?;
         
         debug!("Event published");
+        
+        Ok(())
+    }
+    
+    /// 檢查客戶端健康狀態
+    pub async fn check_health(&self) -> Result<(), ClientError> {
+        self.connection_manager.check_health().await?;
+        
+        // 檢查通道是否存在
+        let channel_exists = {
+            let channel_guard = self.channel.lock().await;
+            channel_guard.is_some()
+        };
+        
+        if !channel_exists {
+            // 如果通道不存在，嘗試重新初始化
+            self.initialize().await?;
+        }
         
         Ok(())
     }

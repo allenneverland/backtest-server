@@ -309,20 +309,21 @@ examples/                           # 示例代碼目錄
 
 ### 3.1 領域類型模組
 
-此模組定義了整個應用程序中共享的核心金融數據結構、枚舉和類型。
+此模組定義了整個應用程序中共享的核心金融數據結構、枚舉和類型，直接使用 Polars 數據格式。
 
 **主要功能**:
 - 提供標準化的金融數據表示。
 - 確保類型安全和數據一致性。
+- 基於 Polars 提供高效的數據結構和分析能力。
 
 **主要組件** (`src/domain_types/`):
 - `asset_types.rs`: 定義資產類型 (`AssetType`)、數據類型 (`DataType`，包括基礎類型如OHLCV、Tick，以及指標類型)、交易類型 (`TradeType`) 等。
-- `data_point.rs`: 定義基本的數據點結構，如 `OHLCVPoint` (開高低收量) 和 `TickPoint` (逐筆成交數據)。
-- `time_series.rs`: 提供通用的時間序列數據結構 `TimeSeries<T>`，用於管理帶時間戳的數據點集合。
-- `data_matrix.rs`: 定義用於高效數值計算的矩陣數據結構。
-- `frequency.rs`: 定義數據頻率的枚舉 `Frequency` (例如，分鐘、小時、日、周等)。
-- `adjustment.rs`: 定義數據調整（如股票復權）相關的結構。
-- `aggregation.rs`: 定義數據聚合操作 (`AggregationOp`) 及聚合配置 (`AggregationConfig`)，用於數據重採樣等場景。
+- `data_point.rs`: 使用 Polars Series 定義基本的數據點結構，如 `OHLCVPoint` (開高低收量) 和 `TickPoint` (逐筆成交數據)。
+- `time_series.rs`: 使用 Polars DataFrame 實現通用的時間序列數據結構 `TimeSeries<T>`，提供高效的時間索引和數據操作。
+- `data_matrix.rs`: 使用 Polars 矩陣實現高效的數值計算。
+- `frequency.rs`: 定義數據頻率的枚舉 `Frequency` (例如，分鐘、小時、日、周等)，與 Polars 時間索引整合。
+- `adjustment.rs`: 使用 Polars 向量化操作實現數據調整（如股票復權）相關的功能。
+- `aggregation.rs`: 利用 Polars 的分組和聚合功能實現數據聚合操作 (`AggregationOp`) 及聚合配置 (`AggregationConfig`)。
 
 ### 3.2 數據導入模組
 
@@ -358,12 +359,13 @@ examples/                           # 示例代碼目錄
 - 執行數據轉換，如時間序列重採樣和技術指標計算。
 - 高效緩存常用數據。
 - 管理數據迭代和流式處理。
+- 支持 Polars 數據格式進行高效分析和轉換。
 
 **主要組件** (`src/data_provider/`):
 - `types.rs`: 定義數據提供模組使用的核心類型。
 - `loader.rs`: 實現統一的數據加載器接口。
 - `cache.rs`: 管理數據緩存，提高頻繁訪問數據的性能。
-- `resampler.rs`: 實現時間序列重採樣（如分鐘資料轉換為小時資料）。
+- `resampler.rs`: 使用 Polars 實現時間序列重採樣（如分鐘資料轉換為小時資料）。
 - `precalculator.rs`: 實現技術指標的計算和緩存。
 - `iterator.rs`: 提供高效的市場數據迭代器，支持策略遍歷歷史數據。
 

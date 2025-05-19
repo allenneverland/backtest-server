@@ -151,6 +151,7 @@ BacktestServer 採用模組化、多層次的系統架構：
 
 5. **數值計算和統計**
    - ndarray 用於多維數組計算
+   - polars 用於高效能數據分析和時間序列處理
    - statrs 用於統計運算
    - rust_decimal 用於高精度金融計算
 
@@ -316,19 +317,20 @@ BacktestServer 採用高度模組化的設計，主要模組包括：
 
 **主要組件**:
 - `asset_types.rs`: 定義資產類型、數據類型和交易類型
-- `data_point.rs`: 定義 OHLCV 和 Tick 數據點結構
-- `time_series.rs`: 定義通用時間序列數據結構
-- `frequency.rs`: 定義數據頻率枚舉
-- `aggregation.rs`: 定義數據聚合操作
+- `data_point.rs`: 使用 Polars Series 定義 OHLCV 和 Tick 數據點結構
+- `time_series.rs`: 使用 Polars DataFrame 定義通用時間序列數據結構
+- `frequency.rs`: 定義與 Polars 時間索引整合的數據頻率枚舉
+- `aggregation.rs`: 基於 Polars 實現數據聚合操作
 
 **優先實施項目**:
-- 基本資產類型結構
-- 時間序列數據結構
-- 數據點基本類型
+- 基於 Polars 的資產類型結構
+- 基於 Polars DataFrame 的時間序列數據結構
+- 基於 Polars Series 的數據點類型
 
 **技術考量**:
+- 使用 Polars 實現高效的數據處理和分析
 - 使用 serde 和 rust_decimal 確保序列化和精確財務計算
-- 使用 chrono 處理時間相關操作
+- 使用 chrono 與 Polars 時間索引整合
 - 使用枚舉和強類型確保類型安全
 
 ### 4.2 數據處理模組
@@ -343,7 +345,7 @@ BacktestServer 採用高度模組化的設計，主要模組包括：
 
 - **數據提供子模組**:
   - `loader.rs`: 統一數據加載器
-  - `resampler.rs`: 時間序列重採樣
+  - `resampler.rs`: 使用 Polars 實現時間序列重採樣
   - `iterator.rs`: 市場數據迭代器
   - `cache.rs`: 數據緩存管理
 
@@ -357,6 +359,7 @@ BacktestServer 採用高度模組化的設計，主要模組包括：
 - 使用非同步 I/O 進行數據處理
 - 實現有效的數據緩存策略
 - 支援批處理以提高效能
+- 充分利用 Polars 提供的高效數據操作和時間序列功能
 
 ### 4.3 策略 DSL 模組
 

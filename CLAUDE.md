@@ -1,124 +1,57 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-### Code Quality Maintenance
-
-- Refactor continuously to improve code quality
-- Fix technical debt early before it compounds
-- Leave code cleaner than you found it
-- Make small, focused commits with clear commit messages
-- Use meaningful branch names that reflect the purpose of changes
-- Follow the repository's version control practices
-
-### Version Control Best Practices
-
-- Write clear commit messages that explain the why, not just the what
-- Make small, focused commits that do one thing
-- Use meaningful branch names that reflect the feature or fix
-
-This project uses asynchronous programming extensively. Follow these guidelines for working with async code:
-
-### Async Runtime and Basics
-
-- Use `tokio` as the primary async runtime for handling asynchronous tasks and I/O
-- Implement async functions using `async fn` syntax
-- Leverage `tokio::spawn` for task spawning and concurrency
-- Use `tokio::select!` for managing multiple async tasks and cancellations
-- Favor structured concurrency: prefer scoped tasks and clean cancellation paths
-- Implement timeouts, retries, and backoff strategies for robust async operations
-
-### Channels and Concurrency
-
-- Use `tokio::sync::mpsc` for asynchronous, multi-producer, single-consumer channels
-- Use `tokio::sync::broadcast` for broadcasting messages to multiple consumers
-- Implement `tokio::sync::oneshot` for one-time communication between tasks
-- Prefer bounded channels for backpressure; handle capacity limits gracefully
-- Use `tokio::sync::Mutex` and `tokio::sync::RwLock` for shared state across tasks, avoiding deadlocks
-
-### Async Error Handling
-
-- Embrace Rust's Result and Option types for error handling
-- Use `?` operator to propagate errors in async functions
-- Implement custom error types using `thiserror` or `anyhow` for more descriptive errors
-- Handle errors and edge cases early, returning errors where appropriate
-- Use `.await` responsibly, ensuring safe points for context switching
-
-### Async Testing
-
-- Write unit tests with `tokio::test` for async tests
-- Use `tokio::time::pause` for testing time-dependent code without real delays
-- Implement integration tests to validate async behavior and concurrency
-- Use mocks and fakes for external dependencies in tests
-
-### Async Performance Optimization
-
-- Minimize async overhead; use sync code where async is not needed
-- Avoid blocking operations inside async functions; offload to dedicated blocking threads if necessary
-- Use `tokio::task::yield_now` to yield control in cooperative multitasking scenarios
-- Optimize data structures and algorithms for async use, reducing contention and lock duration
-- Use `tokio::time::sleep` and `tokio::time::interval` for efficient time-based operations
-
 ## Common Development Commands
 
 ### Building and Running
 
 ```bash
 # Build development version
-cargo make build
+cargo make docker-c cargo build
 
 # Build release version  
-cargo make build-release
+cargo make docker-c cargo build-release
 
 # Run the server (development)
-cargo make run
+cargo make docker-c cargo run
 
 # Run the server (production)
-cargo make run-release
+cargo make docker-c cargo run-release
 
 # Watch for changes and auto-build/test
-cargo make watch
+cargo make docker-c cargo watch
 ```
 
 ### Testing and Quality
 
 ```bash
 # Run all tests
-cargo make test-all
+cargo make docker-c cargo test-all
 
 # Run unit tests
-cargo make test
+cargo make docker-c cargo test
 
 # Run integration tests
 cargo make test-integration
 
 # Format code
-cargo make format
+cargo make docker-c cargo format
 
 # Check code formatting
-cargo make format-check
+cargo make docker-c cargo format-check
 
 # Run linter
-cargo make lint
+cargo make docker-c cargo lint
 
 # Generate coverage report
-cargo make coverage
+cargo make docker-c cargo coverage
 ```
 
 ### Database Management
 
 ```bash
-# Run database migrations
-./scripts/run-migration.sh
-
-# Create a new migration
-./scripts/create-migration.sh <migration_name>
-
-# Alternative: Run migrations using Rust binary
-cargo run --bin migrate run
+# Run migrations using Rust binary
+cargo make docker-c cargo run --bin migrate run
 
 # Check migration status
-cargo run --bin migrate status
+cargo make docker-c cargo run --bin migrate status
 ```
 
 ### Docker Development
@@ -153,12 +86,12 @@ cargo make docker-clean
 
 ```bash
 # Run a specific example
-cargo make run-example <example_name>
+cargo make docker-c cargo make run-example <example_name>
 
 # Common examples:
-cargo make run-example simple_strategy
-cargo make run-example backtest_runner
-cargo make run-example messaging_client
+cargo make docker-c cargo make run-example simple_strategy
+cargo make docker-c cargo make run-example backtest_runner
+cargo make docker-c cargo make run-example messaging_client
 ```
 
 ## High-Level Architecture
@@ -234,47 +167,11 @@ src/
 ### Testing & Reliability
 
 - Always create unit tests for new features using `#[cfg(test)]` module with appropriate test functions.
-- Always run `cargo check` after editing code to catch compilation errors early.
+- Always run `cargo make docker-c cargo check` after editing code to catch compilation errors early.
 - After updating any logic, check whether existing unit tests need to be updated. If so, update them.
-- Make sure tests are integrated into the CI pipeline to automatically validate changes.
 - Write tests before fixing bugs to verify the issue and prevent regressions.
 - Keep tests readable and maintainable.
 - Test edge cases and error conditions thoroughly.
-
-#### Rust Testing Commands
-
-```bash
-# Run all tests in a specific package
-cargo nextest run --package <package-name>
-
-# Run documentation tests
-cargo test --package <package-name> --doc
-
-# Run tests with specific features
-cargo test --package <package-name> --features=<feature1>,<feature2>
-
-# Run tests with all features
-cargo test --package <package-name> --all-features
-
-# Run linter checks
-cargo clippy --all-features --package <package-name>
-```
-
-For comprehensive feature testing, consider using `cargo-hack` with `--feature-powerset` to test all feature combinations.
-
-#### Async Testing
-
-For async code:
-
-```bash
-# Run async tests with tokio
-cargo test --package <package-name> -- --nocapture
-
-# Run a specific async test
-cargo test --package <package-name> test_name -- --nocapture
-```
-
-Remember to use `#[tokio::test]` for async test functions.
 
 ### Task Completion
 
@@ -299,35 +196,15 @@ Remember to use `#[tokio::test]` for async test functions.
    - Use descriptive constant names that explain the value's purpose
    - Keep constants at the top of the file or in a dedicated constants file
 
-2. **Meaningful Names**
-   - Variables, functions, and structures should reveal their purpose
-   - Names should explain why something exists and how it's used
-   - Avoid abbreviations unless they're universally understood
-
-3. **Smart Comments**
-   - Don't comment on what the code does - make the code self-documenting
-   - Use comments to explain why something is done a certain way
-   - Document APIs, complex algorithms, and non-obvious side effects
-
-4. **Single Responsibility**
+2. **Single Responsibility**
    - Each function should do exactly one thing
    - Functions should be small and focused
    - If a function needs a comment to explain what it does, it should be split
 
-5. **DRY (Don't Repeat Yourself)**
+3. **DRY (Don't Repeat Yourself)**
    - Extract repeated code into reusable functions
    - Share common logic through proper abstraction
    - Maintain single sources of truth
-
-6. **Clean Structure**
-   - Keep related code together
-   - Organize code in a logical hierarchy
-   - Use consistent file and folder naming conventions
-
-7. **Encapsulation**
-   - Hide implementation details
-   - Expose clear interfaces
-   - Move nested conditionals into well-named functions
 
 ### Documentation & Explainability
 
@@ -377,7 +254,7 @@ These commands generate HTML documentation from the code and docstrings, providi
 4. Understanding error conditions and handling
 5. Generating test data based on documented structures
 
-### AI Behavior Rules
+### Behavior Rules
 
 - Never assume missing context. Ask questions if uncertain about requirements or existing code.
 - Never hallucinate libraries or functions – only use known, verified Rust crates as specified in DEPENDENCIES.md.

@@ -8,7 +8,6 @@ use std::str::FromStr;
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
-use crate::domain_types::asset_types::AssetType;
 use crate::storage::models::{
     Instrument,
     instrument::{Stock, Future, OptionContract, Forex, Crypto, FutureComplete, StockComplete, OptionComplete, ForexComplete, CryptoComplete},

@@ -148,7 +148,6 @@ src/
 - **Database**: TimescaleDB (PostgreSQL extension) for time-series data
 - **Cache**: Redis for fast data access and distributed operations
 - **Message Broker**: RabbitMQ for async communication
-- **Test Server**: Python Flask app for testing messages
 
 ### Development Patterns
 

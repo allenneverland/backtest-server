@@ -44,8 +44,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("策略目錄: {}", config.strategy.directory);
     info!("啟用熱更新: {}", config.strategy.hot_update_enabled);
     
-    info!("API基礎路徑: {}", config.rest_api.base_path);
-    info!("API請求超時: {}秒", config.rest_api.request_timeout);
     
     // 簡單驗證示例
     info!("=== 驗證示例 ===");

@@ -1,6 +1,5 @@
-use deadpool_lapin::{Manager, Pool, PoolError, Object};
+use deadpool_lapin::{Manager, Pool, Object, PoolError, BuildError};
 use lapin::{ConnectionProperties, Error as LapinError};
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 use thiserror::Error;
@@ -12,6 +11,9 @@ use crate::config::RabbitMQConfig;
 pub enum RabbitMQConnectionError {
     #[error("Pool error: {0}")]
     Pool(#[from] PoolError),
+    
+    #[error("Pool creation error: {0}")]
+    BuildError(#[from] BuildError),
     
     #[error("Lapin error: {0}")]
     Lapin(#[from] LapinError),
@@ -72,7 +74,7 @@ impl RabbitMQConnectionManager {
         let pool = Pool::builder(manager)
             .max_size(config.pool_size)
             .build()
-            .map_err(RabbitMQConnectionError::Pool)?;
+            .map_err(RabbitMQConnectionError::BuildError)?;
         
         // 嘗試初始連接以確保配置正確
         let mgr = Self { pool, config: config.clone() };

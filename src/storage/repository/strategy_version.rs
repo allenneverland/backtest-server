@@ -5,8 +5,6 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use crate::storage::models::strategy_version::*;
 
-
-
 /// 版本相關錯誤
 #[derive(Debug, thiserror::Error)]
 pub enum VersionError {

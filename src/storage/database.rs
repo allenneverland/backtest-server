@@ -39,7 +39,7 @@ pub async fn init_db_pool(config: &DatabaseConfig) -> Result<PgPool> {
 pub async fn get_db_pool(force_init: bool) -> Result<&'static PgPool> {
     if force_init || DB_POOL.get().is_none() {
         // 獲取全局配置
-        let app_config = config::get_config()?;
+        let app_config = config::get_config();
         let pool = init_db_pool(&app_config.database).await?;
         let pool = DB_POOL.get_or_init(|| async { pool }).await;
         return Ok(pool);

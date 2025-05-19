@@ -123,9 +123,7 @@ impl RabbitMQClient {
                     Some(channel) => Ok(channel),
                     None => {
                         error!("Failed to initialize channel");
-                        Err(ClientError::Connection(RabbitMQConnectionError::Pool(
-                            deadpool_lapin::PoolError::Timeout
-                        )))
+                        Err(ClientError::Connection(RabbitMQConnectionError::Timeout))
                     }
                 }
             }
@@ -151,9 +149,7 @@ impl RabbitMQClient {
                     Some(queue) => Ok(queue),
                     None => {
                         error!("Failed to initialize reply queue");
-                        Err(ClientError::Connection(RabbitMQConnectionError::Pool(
-                            deadpool_lapin::PoolError::Timeout
-                        )))
+                        Err(ClientError::Connection(RabbitMQConnectionError::Timeout))
                     }
                 }
             }
@@ -294,18 +290,29 @@ impl RabbitMQClient {
     
     /// 檢查客戶端健康狀態
     pub async fn check_health(&self) -> Result<(), ClientError> {
-        self.connection_manager.check_health().await?;
-        
-        // 檢查通道是否存在
-        let channel_exists = {
-            let channel_guard = self.channel.lock().await;
-            channel_guard.is_some()
+        // 使用固定超時時間
+        let timeout_duration = Duration::from_secs(5);
+        let conn = match tokio::time::timeout(
+            timeout_duration,
+            self.connection_manager.get_connection(),
+        ).await {
+            Ok(Ok(conn)) => conn,
+            Ok(Err(err)) => return Err(ClientError::Connection(err)),
+            Err(_) => {
+                // 改為使用自定義超時錯誤
+                return Err(ClientError::Connection(RabbitMQConnectionError::Timeout));
+            }
         };
         
-        if !channel_exists {
-            // 如果通道不存在，嘗試重新初始化
-            self.initialize().await?;
-        }
+        debug!("Connection health check passed");
+        
+        // 檢查通道
+        let channel = match conn.create_channel().await {
+            Ok(channel) => channel,
+            Err(err) => return Err(ClientError::Lapin(err)),
+        };
+        
+        debug!("Channel health check passed");
         
         Ok(())
     }

@@ -44,7 +44,7 @@
 
 ### 新增：Redis存儲模組
 - ✅ 🔴 實現Redis客戶端（`redis/client.rs`）`[redis, tokio, async-trait]` ⚡(依賴任務7)
-- ✅ 🔴 實現Redis連接池（`redis/pool.rs`）`[bb8-redis, tokio]` ⚡(依賴任務21.1)
+- ✅ 🔴 實現Redis連接池（`redis/pool.rs`）`[deadpool-redis, tokio]` ⚡(依賴任務21.1)
 - ✅ 🟡 實現快取操作（`redis/operations/cache.rs`）`[redis, serde, serde_json]` ⚡(依賴任務21.2)
 - 📋 🟡 實現發布/訂閱操作（`redis/operations/pubsub.rs`）`[redis, tokio, futures]` ⚡(依賴任務21.2)
 - 📋 🟢 實現任務佇列操作（`redis/operations/queue.rs`）`[redis, tokio, serde_json]` ⚡(依賴任務21.2)

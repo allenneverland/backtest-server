@@ -17,6 +17,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
+use futures::StreamExt;
 
 /// 消息處理器特徵
 #[async_trait]

@@ -31,6 +31,7 @@ anyhow = "1.0.98"
 flate2 = "1.1.1"
 num_cpus = "1.16.0"  # CPU 核心數量檢測
 rust_decimal_macros = "1.37.1"  # 用於Decimal字面量
+lazy_static = "1.5.0"  # 懶初始化静态变量
 
 # 數據處理
 ndarray = { version = "0.16.1", features = ["serde"] }
@@ -45,8 +46,9 @@ rand = "0.9.1"
 
 # 資料庫
 sqlx = { version = "0.8.5", features = ["runtime-tokio-native-tls", "postgres", "chrono", "json", "uuid", "rust_decimal"] }
-redis = { version = "0.31.0", features = ["tokio-comp", "connection-manager"] }
-bb8-redis = "0.23.0"
+redis = { version = "0.29.5", features = ["tokio-comp", "connection-manager"] }
+deadpool-redis = "0.20.0"
+deadpool = "0.12.2"
 
 # 效能優化
 dashmap = "6.1.0"
@@ -73,13 +75,15 @@ serde_yaml_bw = "1.0.4"
 
 # RABBITMQ
 lapin = "2.5.3"
+deadpool-lapin = "0.12.1"
+tokio-executor-trait = "2.1.3"
 
 [dev-dependencies]
 # 測試框架
 rstest = "0.25.0"  # 參數化測試
 mockall = "0.13.1"
 tokio-test = "0.4.4"
-criterion = "0.5.1"
+criterion = "0.6.0"
 fake = "4.3.0"
 proptest = "1.6.0"
 assert_matches = "1.5.0"

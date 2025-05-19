@@ -1,11 +1,17 @@
 use std::time::Duration;
 use async_trait::async_trait;
-use bb8_redis::{
-    bb8::Pool,
-    bb8::PooledConnection,
-    bb8::RunError,
-    RedisConnectionManager,
+use deadpool_redis::{
+    Config, 
+    Connection, 
+    Pool, 
+    Runtime,
+    CreatePoolError,
+    PoolError,
+    PoolConfig,
+    Timeouts,
+    redis::{RedisError, cmd},
 };
+use deadpool::managed::QueueMode;
 use thiserror::Error;
 use tracing::{debug, error, info};
 use crate::config::types::RedisConfig;
@@ -26,18 +32,26 @@ pub enum RedisPoolError {
     #[error("Redis操作錯誤: {0}")]
     RedisError(#[from] RedisClientError),
 
+    /// Redis原生錯誤
+    #[error("Redis原生錯誤: {0}")]
+    NativeRedisError(#[from] RedisError),
+
     /// 其他錯誤
     #[error("Redis連接池其他錯誤: {0}")]
     Other(String),
 }
 
-/// 從bb8錯誤轉換為RedisPoolError
-impl<E> From<RunError<E>> for RedisPoolError
-where
-    E: std::error::Error + Send + Sync + 'static,
-{
-    fn from(error: RunError<E>) -> Self {
+/// 從deadpool-redis錯誤轉換為RedisPoolError
+impl From<PoolError> for RedisPoolError {
+    fn from(error: PoolError) -> Self {
         RedisPoolError::GetConnectionError(error.to_string())
+    }
+}
+
+/// 從deadpool-redis創建錯誤轉換為RedisPoolError
+impl From<CreatePoolError> for RedisPoolError {
+    fn from(error: CreatePoolError) -> Self {
+        RedisPoolError::PoolInitError(error.to_string())
     }
 }
 
@@ -45,7 +59,7 @@ where
 #[async_trait]
 pub trait RedisPool: Send + Sync + 'static {
     /// 獲取連接
-    async fn get_conn(&self) -> Result<PooledConnection<'_, RedisConnectionManager>, RedisPoolError>;
+    async fn get_conn(&self) -> Result<Connection, RedisPoolError>;
     
     /// 檢查連接池健康狀態
     async fn check_health(&self) -> bool;
@@ -56,28 +70,29 @@ pub trait RedisPool: Send + Sync + 'static {
 
 /// Redis連接池實現
 pub struct ConnectionPool {
-    pool: Pool<RedisConnectionManager>,
+    pool: Pool,
     config: RedisConfig,
 }
 
 impl ConnectionPool {
     /// 創建新的Redis連接池
     pub async fn new(config: RedisConfig) -> Result<Self, RedisPoolError> {
-        // 創建連接管理器
-        let manager = RedisConnectionManager::new(config.url.clone())
-            .map_err(|e| RedisPoolError::PoolInitError(format!("無法創建連接管理器: {}", e)))?;
+        // 創建連接池配置
+        let mut cfg = Config::from_url(&config.url);
+        
+        // 設置連接池大小和超時
+        cfg.pool = Some(PoolConfig {
+            max_size: config.pool_size as usize,
+            timeouts: Timeouts {
+                wait: Some(Duration::from_secs(config.connection_timeout_secs)),
+                create: Some(Duration::from_secs(config.connection_timeout_secs)),
+                recycle: Some(Duration::from_secs(60)),
+            },
+            queue_mode: QueueMode::Fifo,
+        });
 
-        // 配置連接池
-        let pool = Pool::builder()
-            .max_size(config.pool_size)
-            .min_idle(Some(2)) // 保持的最小空閒連接數
-            .max_lifetime(Some(Duration::from_secs(60 * 15))) // 連接最長存活時間
-            .idle_timeout(Some(Duration::from_secs(60 * 10))) // 空閒連接超時
-            .connection_timeout(Duration::from_secs(config.connection_timeout_secs)) // 獲取連接超時
-            .test_on_check_out(true) // 在取出連接時測試
-            .build(manager)
-            .await
-            .map_err(|e| RedisPoolError::PoolInitError(format!("無法創建連接池: {}", e)))?;
+        // 創建連接池 - 使用 deadpool_redis 的 create_pool 方法
+        let pool = cfg.create_pool(Some(Runtime::Tokio1))?;
 
         info!("Redis連接池初始化完成，大小: {}", config.pool_size);
         
@@ -87,7 +102,7 @@ impl ConnectionPool {
 
 #[async_trait]
 impl RedisPool for ConnectionPool {
-    async fn get_conn(&self) -> Result<PooledConnection<'_, RedisConnectionManager>, RedisPoolError> {
+    async fn get_conn(&self) -> Result<Connection, RedisPoolError> {
         match self.pool.get().await {
             Ok(conn) => {
                 debug!("從Redis連接池獲取連接成功");
@@ -103,12 +118,20 @@ impl RedisPool for ConnectionPool {
     async fn check_health(&self) -> bool {
         match self.pool.get().await {
             Ok(mut conn) => {
-                match redis::cmd("PING").query_async::<String>(&mut *conn).await {
+                // 直接執行 PING 命令
+                let result: Result<String, RedisError> = cmd("PING").query_async(&mut conn).await;
+                match result {
                     Ok(pong) => pong == "PONG",
-                    Err(_) => false,
+                    Err(e) => {
+                        error!("Redis健康檢查錯誤: {}", e);
+                        false
+                    }
                 }
             }
-            Err(_) => false,
+            Err(e) => {
+                error!("Redis健康檢查無法獲取連接: {}", e);
+                false
+            }
         }
     }
     
@@ -145,7 +168,7 @@ pub mod test_helpers {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use redis::AsyncCommands;
+    use deadpool_redis::redis::AsyncCommands;
     
     #[tokio::test]
     async fn test_connection_pool() {

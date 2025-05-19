@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, oneshot};
 use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
+use futures::StreamExt;
 
 /// RPC 客戶端配置
 #[derive(Clone, Debug)]
@@ -165,10 +166,13 @@ impl RpcClient {
                         let correlation_id = correlation_id.to_string();
                         debug!("Received RPC reply with correlation_id: {}", correlation_id);
                         
+                        // 複製數據，避免被部分移動
+                        let data = delivery.data.clone();
+                        
                         // 查找並觸發回調
                         let mut callbacks_guard = callbacks.lock().await;
                         if let Some(sender) = callbacks_guard.remove(&correlation_id) {
-                            if sender.send(delivery.data).is_err() {
+                            if sender.send(data).is_err() {
                                 warn!("Failed to send RPC response to callback: receiver dropped");
                             }
                         } else {
@@ -330,8 +334,8 @@ impl RpcClient {
             }
         };
         
-        // 嘗試獲取通道狀態以檢查健康狀態
-        let _ = channel.status().await?;
+        // 嘗試獲取通道狀態以檢查健康狀態（不需要await）
+        let _ = channel.status();
         
         Ok(())
     }
@@ -543,20 +547,19 @@ where
     
     /// 檢查 RPC 服務健康狀態
     pub async fn check_health(&self) -> Result<(), RabbitMQError> {
+        // 檢查連接是否正常
+        self.connection_manager.check_health().await?;
+        
+        // 檢查任務是否正在運行
         let is_running = {
             let task_guard = self.consumer_task.lock().await;
-            task_guard.is_some() && !task_guard.as_ref().unwrap().is_finished()
+            task_guard.is_some()
         };
         
-        if is_running {
-            // 還需要檢查連接
-            let conn = self.connection_manager.get_connection().await?;
-            let channel = conn.create_channel().await?;
-            let _ = channel.status().await?;
-            
-            Ok(())
-        } else {
-            Err(RabbitMQError::Other("RPC server is not running".into()))
+        if !is_running {
+            return Err(RabbitMQError::Other("RPC server is not running".into()));
         }
+        
+        Ok(())
     }
 } 

@@ -6,6 +6,7 @@
 // 已實現的子模組
 pub mod cache;
 
+pub use cache::*;
 // 將來實現的子模組
 // pub mod pubsub;
 // pub mod queue;

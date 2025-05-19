@@ -17,6 +17,7 @@ use std::pin::Pin;
 use serde::{Serialize, de::DeserializeOwned};
 use async_trait::async_trait;
 use thiserror::Error;
+use futures::StreamExt;
 
 /// 代理錯誤類型
 #[derive(Error, Debug)]
@@ -157,8 +158,6 @@ impl RabbitMQBroker {
                     Ok(delivery) => {
                         let delivery_tag = delivery.delivery_tag;
                         let routing_key = delivery.routing_key.to_string();
-                        let reply_to = delivery.properties.reply_to().cloned();
-                        let correlation_id = delivery.properties.correlation_id().cloned();
                         
                         debug!("Received message with routing_key: {}", routing_key);
                         
@@ -172,17 +171,20 @@ impl RabbitMQBroker {
                             match handler.handle(&delivery.data, &delivery.properties).await {
                                 Ok(Some(response_data)) => {
                                     // 如果有回應且有回應佇列，發送回應
-                                    if let Some(reply_to) = reply_to {
-                                        if let Some(correlation_id) = correlation_id.clone() {
-                                            debug!("Sending response to {}", reply_to);
+                                    let reply_to = delivery.properties.reply_to().as_ref().map(|v| v.to_string());
+                                    let correlation_id = delivery.properties.correlation_id().as_ref().map(|v| v.to_string());
+                                    
+                                    if let Some(reply_to_str) = reply_to {
+                                        if let Some(correlation_id_str) = correlation_id {
+                                            debug!("Sending response to {}", reply_to_str);
                                             
                                             if let Err(err) = channel.basic_publish(
                                                 "",  // 預設交換機
-                                                &reply_to,
+                                                &reply_to_str,
                                                 BasicPublishOptions::default(),
                                                 &response_data,
                                                 BasicProperties::default()
-                                                    .with_correlation_id(correlation_id),
+                                                    .with_correlation_id(correlation_id_str.into()),
                                             ).await {
                                                 error!("Failed to send response: {}", err);
                                             }
@@ -197,15 +199,18 @@ impl RabbitMQBroker {
                                     error!("Error handling message: {}", err);
                                     
                                     // 可以選擇發送錯誤回應
-                                    if let Some(reply_to) = reply_to {
-                                        if let Some(correlation_id) = correlation_id.clone() {
+                                    let reply_to = delivery.properties.reply_to().as_ref().map(|v| v.to_string());
+                                    let correlation_id = delivery.properties.correlation_id().as_ref().map(|v| v.to_string());
+                                    
+                                    if let Some(reply_to_str) = reply_to {
+                                        if let Some(correlation_id_str) = correlation_id {
                                             // 構建錯誤回應...
                                         }
                                     }
                                 }
                             }
                         } else {
-                            error!("No handler found for routing_key: {}", routing_key);
+                            error!("Handler not found for routing key: {}", routing_key);
                         }
                         
                         // 確認消息處理完成

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, BufWriter};
+use std::io::BufReader;
 use std::path::Path;
 use anyhow::{Context, Result};
 use chrono::NaiveDateTime;
@@ -85,35 +85,6 @@ impl CSVReaderConfig {
     pub fn with_timezone(mut self, timezone: &str) -> Self {
         self.timezone = timezone.to_string();
         self
-    }
-}
-
-/// CSV文件寫入器配置
-#[derive(Debug, Clone)]
-pub struct CSVWriterConfig {
-    pub include_header: bool,
-    pub delimiter: u8,
-    pub date_format: String,
-    pub columns: Vec<String>, // Columns to write, order matters
-    pub timezone: String,
-}
-
-impl Default for CSVWriterConfig {
-    fn default() -> Self {
-        Self {
-            include_header: true,
-            delimiter: b',',
-            date_format: "%Y-%m-%d %H:%M:%S".to_string(),
-            columns: vec![ // Default OHLCV columns
-                "timestamp".to_string(),
-                "open".to_string(),
-                "high".to_string(),
-                "low".to_string(),
-                "close".to_string(),
-                "volume".to_string(),
-            ],
-            timezone: "UTC".to_string(),
-        }
     }
 }
 
@@ -398,98 +369,12 @@ impl CSVImporter {
     }
 }
 
-/// CSV數據導出器
-pub struct CSVExporter;
-
-impl CSVExporter {
-    /// 導出OHLCV數據到CSV文件
-    pub fn export_ohlcv(
-        time_series: &TimeSeries<OHLCVPoint>,
-        file_path: impl AsRef<Path>,
-        config: &CSVWriterConfig,
-    ) -> Result<()> {
-        let file = File::create(file_path.as_ref()).with_context(|| format!("無法創建CSV文件: {:?}", file_path.as_ref()))?;
-        let writer = BufWriter::new(file);
-        let mut csv_writer = csv::WriterBuilder::new()
-            .delimiter(config.delimiter)
-            .from_writer(writer);
-
-        if config.include_header {
-            csv_writer.write_record(&config.columns).context("寫入CSV表頭失敗")?;
-        }
-
-        for point in &time_series.data {
-            let mut record = Vec::new();
-            for col_name in &config.columns {
-                match col_name.as_str() {
-                    "timestamp" => record.push(point.timestamp.format(&config.date_format).to_string()),
-                    "open" => record.push(point.open.to_string()),
-                    "high" => record.push(point.high.to_string()),
-                    "low" => record.push(point.low.to_string()),
-                    "close" => record.push(point.close.to_string()),
-                    "volume" => record.push(point.volume.to_string()),
-                    "amount" => record.push(point.metadata.get("amount").cloned().unwrap_or_default()),
-                    _ => record.push("".to_string()), // Handle unknown columns gracefully
-                }
-            }
-            csv_writer.write_record(&record).context("寫入CSV記錄失敗")?;
-        }
-        csv_writer.flush().context("刷新CSV寫入器失敗")?;
-        Ok(())
-    }
-
-    /// 導出Tick數據到CSV文件
-    pub fn export_tick(
-        time_series: &TimeSeries<TickPoint>,
-        file_path: impl AsRef<Path>,
-        config: &CSVWriterConfig,
-    ) -> Result<()> {
-        let file = File::create(file_path.as_ref()).with_context(|| format!("無法創建CSV文件: {:?}", file_path.as_ref()))?;
-        let writer = BufWriter::new(file);
-        let mut csv_writer = csv::WriterBuilder::new()
-            .delimiter(config.delimiter)
-            .from_writer(writer);
-
-        // Default Tick columns if not specified in config
-        let mut columns_to_write = config.columns.clone();
-        if columns_to_write.is_empty() || columns_to_write.iter().all(|c| c == "timestamp") { // Basic check if only timestamp or empty
-            columns_to_write = vec![
-                "timestamp".to_string(),
-                "price".to_string(),
-                "volume".to_string(),
-                "trade_type".to_string(),
-            ];
-        }
-        
-        if config.include_header {
-            csv_writer.write_record(&columns_to_write).context("寫入CSV表頭失敗")?;
-        }
-
-        for point in &time_series.data {
-            let mut record = Vec::new();
-            for col_name in &columns_to_write {
-                 match col_name.as_str() {
-                    "timestamp" => record.push(point.timestamp.format(&config.date_format).to_string()),
-                    "price" => record.push(point.price.to_string()),
-                    "volume" => record.push(point.volume.to_string()),
-                    "trade_type" => record.push(format!("{:?}", point.trade_type)), // Simple Debug format for enum
-                    // Bid/Ask fields are not included by default for simplicity. Can be added to config.columns if needed.
-                    _ => record.push("".to_string()),
-                }
-            }
-            csv_writer.write_record(&record).context("寫入CSV記錄失敗")?;
-        }
-        csv_writer.flush().context("刷新CSV寫入器失敗")?;
-        Ok(())
-    }
-}
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
     // Assuming domain_types is correctly set up in lib.rs or accessible via crate root
-    use crate::domain_types::{AssetType, DataType, OHLCVPoint, TimeSeries, TickPoint, TradeType};
+    use crate::domain_types::{AssetType, TradeType};
     use tempfile::NamedTempFile;
     use std::io::Write;
 
@@ -559,56 +444,6 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_export_ohlcv_simple() -> Result<()> {
-        let mut ts = TimeSeries::<OHLCVPoint>::new("EXPORT".to_string(), AssetType::Stock, DataType::OHLCV, None, "UTC".to_string());
-        ts.add_point(OHLCVPoint { 
-            timestamp: NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")?.and_utc(),
-            open: 1.0, high: 2.0, low: 0.5, close: 1.5, volume: 100.0, metadata: HashMap::new()
-        });
-        ts.add_point(OHLCVPoint { 
-            timestamp: NaiveDateTime::parse_from_str("2023-01-01 00:01:00", "%Y-%m-%d %H:%M:%S")?.and_utc(),
-            open: 1.5, high: 2.5, low: 1.0, close: 2.0, volume: 150.0, metadata: HashMap::new()
-        });
-
-        let temp_file = NamedTempFile::new()?;
-        let config = CSVWriterConfig::default();
-        CSVExporter::export_ohlcv(&ts, temp_file.path(), &config)?;
-
-        let content = std::fs::read_to_string(temp_file.path())?;
-        let expected_header = "timestamp,open,high,low,close,volume";
-        let expected_row1 = "2023-01-01 00:00:00,1,2,0.5,1.5,100";
-        assert!(content.contains(expected_header));
-        assert!(content.contains(expected_row1));
-        Ok(())
-    }
-    
-    #[test]
-    fn test_export_tick_simple() -> Result<()> {
-        let mut ts = TimeSeries::<TickPoint>::new("EXPORTICK".to_string(), AssetType::Forex, DataType::Tick, None, "UTC".to_string());
-        ts.add_point(TickPoint {
-            timestamp: NaiveDateTime::parse_from_str("2023-01-01 00:00:00.500", "%Y-%m-%d %H:%M:%S%.3f")?.and_utc(),
-            price: 1.1234, volume: 10000.0, trade_type: TradeType::Buy,
-            bid_price_1: 0.0, bid_price_2: 0.0, bid_price_3: 0.0, bid_price_4: 0.0, bid_price_5: 0.0,
-            bid_volume_1: 0.0, bid_volume_2: 0.0, bid_volume_3: 0.0, bid_volume_4: 0.0, bid_volume_5: 0.0,
-            ask_price_1: 0.0, ask_price_2: 0.0, ask_price_3: 0.0, ask_price_4: 0.0, ask_price_5: 0.0,
-            ask_volume_1: 0.0, ask_volume_2: 0.0, ask_volume_3: 0.0, ask_volume_4: 0.0, ask_volume_5: 0.0,
-            metadata: HashMap::new()
-        });
-         let temp_file = NamedTempFile::new()?;
-         let config = CSVWriterConfig {
-            date_format: "%Y-%m-%d %H:%M:%S%.3f".to_string(),
-            ..CSVWriterConfig::default() // Uses default tick columns now
-        };
-        CSVExporter::export_tick(&ts, temp_file.path(), &config)?;
-        
-        let content = std::fs::read_to_string(temp_file.path())?;
-        let expected_header = "timestamp,price,volume,trade_type"; // Default tick export columns
-        let expected_row1 = "2023-01-01 00:00:00.500,1.1234,10000,Buy";
-        assert!(content.contains(expected_header));
-        assert!(content.contains(expected_row1));
-        Ok(())
-    }
 
     #[test]
     fn test_column_not_found_error() {

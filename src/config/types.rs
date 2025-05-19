@@ -9,7 +9,6 @@ pub struct ApplicationConfig {
     pub app: AppConfig,
     pub strategy: StrategyConfig,
     pub server: ServerConfig,
-    pub rest_api: RestApiConfig,
     pub redis: RedisConfig,
     pub rabbitmq: RabbitMQConfig,
 }
@@ -22,7 +21,6 @@ impl Validator for ApplicationConfig {
         self.app.validate()?;
         self.strategy.validate()?;
         self.server.validate()?;
-        self.rest_api.validate()?;
         self.redis.validate()?;
         self.rabbitmq.validate()?;
         

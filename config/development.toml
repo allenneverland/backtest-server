@@ -48,11 +48,6 @@ enable_cors = true  # 伺服器本身的CORS設定
 cors_allowed_origins = ["http://localhost:8080"]  # 允許從前端頁面訪問
 static_files_dir = "static"  # 靜態文件目錄
 
-[rest_api]
-request_timeout = 30  # API請求超時時間(秒)
-cors_allow_all = false  # API是否允許所有跨域請求
-cors_origins = ["http://localhost:8080", "http://127.0.0.1:8080"]  # API允許的跨域來源
-
 # 添加Redis配置部分，提供給開發環境使用
 
 [redis]

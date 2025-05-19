@@ -12,6 +12,8 @@ pub use pool::*;
 pub use client::*;
 #[cfg(test)]
 mod tests {
+    use super::pool::RedisPool;
+    
     #[test]
     fn test_module_exports() {
         // 確保重要的導出可用
@@ -19,7 +21,7 @@ mod tests {
             let _ = client.test_connection();
         }
         
-        async fn _ensure_redis_pool_works(pool: &super::pool::ConnectionPool) {
+        async fn _ensure_redis_pool_works<P: RedisPool>(pool: &P) {
             let _ = pool.check_health().await;
             let _ = pool.pool_size();
         }

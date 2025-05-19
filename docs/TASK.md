@@ -66,12 +66,12 @@
 - 📋 實現OHLCV數據驗證與清洗（`ohlcv_validator.rs`, `ohlcv_cleaner.rs`）`[chrono, rust_decimal, thiserror]`
 - 📋 實現Tick數據驗證與清洗（`tick_validator.rs`, `tick_cleaner.rs`）`[chrono, rust_decimal, thiserror]`
 - 📋 實現時間序列整體驗證（`time_series_validator.rs`）`[chrono, statrs]`
-- ✅ 實現驗證器註冊表（`registry.rs`）`[once_cell]`
+- 📋 實現驗證器註冊表（`registry.rs`）`[once_cell]`
 - 📋 🟢 實現驗證報告生成（`report.rs`）`[serde, serde_json]`
 
 ### 6. 數據提供模組
-- ✅ 實現統一數據加載器（`loader.rs`）`[tokio, sqlx, async-trait]` ⚡(依賴任務3, 4)
-- ✅ 🔴 🚀 實現時間序列重採樣（`resampler.rs`）`[chrono, anyhow, HashMap, Polars]` ⚡(依賴任務3)
+- 📋 實現統一數據加載器（`loader.rs`）`[tokio, sqlx, async-trait]` ⚡(依賴任務3, 4)
+- 📋 🔴 🚀 實現時間序列重採樣（`resampler.rs`）`[chrono, anyhow, HashMap, Polars]` ⚡(依賴任務3)
 - 📋 🔴 實現市場數據迭代器（`iterator.rs`）`[tokio, futures, async-trait]`
 - 📋 🟡 實現數據緩存管理（`cache.rs`）`[redis, parking_lot, lru_time_cache]`
 - 📋 🟡 實現技術指標計算（`precalculator.rs`）`[ndarray, statrs, rayon]`

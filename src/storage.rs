@@ -22,7 +22,6 @@ pub use repository::{
     PageQuery,
     TimeRange,
     // 具體倉儲實現
-    InstrumentRepository,
     ExchangeRepository,
     MarketDataRepository,
     StrategyVersionRepository,

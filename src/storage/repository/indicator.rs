@@ -3,8 +3,10 @@ use crate::storage::repository::{DbExecutor, Page, PageQuery, TimeRange};
 use anyhow::Result;
 use sqlx::PgPool;
 use std::sync::Arc;
+use async_trait::async_trait;
 
 /// 技術指標儲存庫特徵
+#[async_trait]
 pub trait IndicatorRepository: Send + Sync {
     /// 創建技術指標定義
     async fn create_technical_indicator(&self, indicator: TechnicalIndicatorInsert) -> Result<TechnicalIndicator>;
@@ -52,6 +54,7 @@ impl DbExecutor for PgIndicatorRepository {
     }
 }
 
+#[async_trait]
 impl IndicatorRepository for PgIndicatorRepository {
     async fn create_technical_indicator(&self, indicator: TechnicalIndicatorInsert) -> Result<TechnicalIndicator> {
         let result = sqlx::query_as!(

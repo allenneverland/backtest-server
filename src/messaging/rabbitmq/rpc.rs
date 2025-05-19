@@ -1,6 +1,5 @@
 use crate::messaging::rabbitmq::connection::RabbitMQConnectionManager;
 use crate::messaging::rabbitmq::error::RabbitMQError;
-use crate::messaging::protocol::Message;
 use lapin::{
     options::{
         BasicAckOptions, BasicConsumeOptions, BasicPublishOptions,

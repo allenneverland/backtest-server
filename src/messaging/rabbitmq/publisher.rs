@@ -10,7 +10,7 @@ use lapin::{
 use serde::Serialize;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 /// 發布者配置
 #[derive(Clone, Debug)]

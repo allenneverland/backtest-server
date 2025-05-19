@@ -1,23 +1,27 @@
-use crate::messaging::protocol::Message;
-use crate::messaging::rabbitmq::connection::{RabbitMQConnectionManager, RabbitMQConnectionError};
+use std::collections::HashMap;
+use std::sync::Arc;
+use anyhow;
+
 use lapin::{
+    Channel, Consumer,
     options::{
-        BasicAckOptions, BasicConsumeOptions, BasicPublishOptions, 
-        ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions
+        BasicAckOptions, BasicConsumeOptions, BasicPublishOptions,
+        ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions,
     },
     types::FieldTable,
-    BasicProperties, Channel, Consumer, Error as LapinError
+    BasicProperties,
 };
-use std::sync::Arc;
-use tracing::{debug, error, info, warn};
 use tokio::sync::RwLock;
-use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
-use serde::{Serialize, de::DeserializeOwned};
-use async_trait::async_trait;
-use thiserror::Error;
+use tracing::{debug, error, info};
+use serde::Serialize;
 use futures::StreamExt;
+use async_trait::async_trait;
+
+use crate::messaging::rabbitmq::connection::{RabbitMQConnectionError, RabbitMQConnectionManager};
+use crate::messaging::protocol::Message;
+use thiserror::Error;
+
+type LapinError = lapin::Error;
 
 /// 代理錯誤類型
 #[derive(Error, Debug)]
@@ -174,17 +178,17 @@ impl RabbitMQBroker {
                                     let reply_to = delivery.properties.reply_to().as_ref().map(|v| v.to_string());
                                     let correlation_id = delivery.properties.correlation_id().as_ref().map(|v| v.to_string());
                                     
-                                    if let Some(reply_to_str) = reply_to {
-                                        if let Some(correlation_id_str) = correlation_id {
-                                            debug!("Sending response to {}", reply_to_str);
+                                    if let Some(_reply_to_str) = reply_to {
+                                        if let Some(_correlation_id_str) = correlation_id {
+                                            debug!("Sending response to {}", _reply_to_str);
                                             
                                             if let Err(err) = channel.basic_publish(
                                                 "",  // 預設交換機
-                                                &reply_to_str,
+                                                &_reply_to_str,
                                                 BasicPublishOptions::default(),
                                                 &response_data,
                                                 BasicProperties::default()
-                                                    .with_correlation_id(correlation_id_str.into()),
+                                                    .with_correlation_id(_correlation_id_str.into()),
                                             ).await {
                                                 error!("Failed to send response: {}", err);
                                             }
@@ -202,8 +206,8 @@ impl RabbitMQBroker {
                                     let reply_to = delivery.properties.reply_to().as_ref().map(|v| v.to_string());
                                     let correlation_id = delivery.properties.correlation_id().as_ref().map(|v| v.to_string());
                                     
-                                    if let Some(reply_to_str) = reply_to {
-                                        if let Some(correlation_id_str) = correlation_id {
+                                    if let Some(_reply_to_str) = reply_to {
+                                        if let Some(_correlation_id_str) = correlation_id {
                                             // 構建錯誤回應...
                                         }
                                     }

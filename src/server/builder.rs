@@ -1,12 +1,12 @@
 use std::sync::Arc;
-use std::collections::HashMap;
-use tokio::sync::{RwLock, mpsc};
+
+use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 
 use crate::config::types::{ServerConfig, RabbitMQConfig};
-use crate::messaging::rabbitmq::connection::{RabbitMQConnectionManager, RabbitMQConnectionConfig};
-use crate::messaging::rabbitmq::broker::{RabbitMQBroker, MessageHandler};
-use crate::server::{ServerState, ServerError, ServerResult};
+use crate::messaging::rabbitmq::broker::{MessageHandler, RabbitMQBroker};
+use crate::messaging::rabbitmq::connection::RabbitMQConnectionManager;
+use crate::server::{ServerError, ServerResult, ServerState};
 
 /// 伺服器實例
 pub struct Server {
@@ -199,13 +199,13 @@ impl ServerBuilder {
         info!("構建伺服器實例");
         
         // 驗證配置
-        let server_config = self.server_config
+        let _server_config = self.server_config
             .ok_or_else(|| ServerError::Config("未提供伺服器配置".to_string()))?;
         
+        // 創建 RabbitMQ 連接管理器
         let rabbitmq_config = self.rabbitmq_config
             .ok_or_else(|| ServerError::Config("未提供RabbitMQ配置".to_string()))?;
         
-        // 創建 RabbitMQ 連接管理器
         let rabbitmq_manager = RabbitMQConnectionManager::from_config(&rabbitmq_config)
             .await
             .map_err(ServerError::RabbitMQConnection)?;

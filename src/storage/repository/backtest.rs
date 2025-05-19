@@ -1,10 +1,12 @@
 use crate::storage::models::*;
 use crate::storage::repository::{DbExecutor, Page, PageQuery, TimeRange};
 use anyhow::Result;
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::PgPool;
 use std::sync::Arc;
+use async_trait::async_trait;
 
 /// 回測系統儲存庫特徵
+#[async_trait]
 pub trait BacktestRepository: Send + Sync {
     /// 創建回測配置
     async fn create_backtest_config(&self, config: BacktestConfigInsert) -> Result<BacktestConfig>;
@@ -76,6 +78,7 @@ impl DbExecutor for PgBacktestRepository {
     }
 }
 
+#[async_trait]
 impl BacktestRepository for PgBacktestRepository {
     async fn create_backtest_config(&self, config: BacktestConfigInsert) -> Result<BacktestConfig> {
         let result = sqlx::query_as!(

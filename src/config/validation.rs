@@ -1,5 +1,4 @@
 use thiserror::Error;
-use serde::de::DeserializeOwned;
 
 /// 配置驗證錯誤
 #[derive(Error, Debug)]

@@ -1,21 +1,28 @@
-use crate::messaging::protocol::Message;
-use crate::messaging::rabbitmq::connection::{RabbitMQConnectionManager, RabbitMQConnectionError};
-use lapin::{
-    options::{
-        BasicAckOptions, BasicConsumeOptions, BasicPublishOptions, QueueDeclareOptions
-    },
-    types::{FieldTable, ShortString},
-    BasicProperties, Channel, Consumer, Error as LapinError
-};
-use std::sync::Arc;
-use tokio::sync::{oneshot, Mutex};
 use std::collections::HashMap;
-use serde::{Serialize, de::DeserializeOwned};
-use tracing::{debug, error, info, warn};
-use uuid::Uuid;
+use std::sync::Arc;
 use std::time::Duration;
-use thiserror::Error;
+
+use lapin::{
+    Channel, Consumer,
+    options::{
+        BasicAckOptions, BasicConsumeOptions, BasicPublishOptions,
+        QueueDeclareOptions,
+    },
+    types::FieldTable,
+    BasicProperties,
+};
+use tokio::sync::Mutex;
+use tokio::sync::oneshot;
+use tracing::{debug, error, info};
+use uuid::Uuid;
+use serde::{Serialize, de::DeserializeOwned};
 use futures::StreamExt;
+
+use crate::messaging::rabbitmq::connection::{RabbitMQConnectionError, RabbitMQConnectionManager};
+use crate::messaging::protocol::Message;
+use thiserror::Error;
+
+type LapinError = lapin::Error;
 
 /// RabbitMQ 客戶端錯誤
 #[derive(Error, Debug)]
@@ -307,7 +314,7 @@ impl RabbitMQClient {
         debug!("Connection health check passed");
         
         // 檢查通道
-        let channel = match conn.create_channel().await {
+        let _channel = match conn.create_channel().await {
             Ok(channel) => channel,
             Err(err) => return Err(ClientError::Lapin(err)),
         };

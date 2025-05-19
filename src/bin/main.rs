@@ -1,46 +1,41 @@
 use std::error::Error;
-use std::sync::Arc;
-use std::path::PathBuf;
 use tokio::signal;
 use tokio::time::sleep;
 use std::time::Duration;
-use clap::{App, Arg};
-use tracing::{info, error, debug, Level};
+use clap::{Arg, Command};
+use tracing::{info, error, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use backtest_server::config::loader::ConfigLoader;
-use backtest_server::config::types::{ApplicationConfig, ServerConfig, RabbitMQConfig};
+use backtest_server::config::types::ApplicationConfig;
 use backtest_server::server::builder::ServerBuilder;
-use backtest_server::server::ServerResult;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // 解析命令列參數
-    let matches = App::new("BacktestServer")
+    let matches = Command::new("BacktestServer")
         .version("0.1.0")
         .author("Your Name <your.email@example.com>")
         .about("回測伺服器")
         .arg(
-            Arg::with_name("config")
-                .short("c")
+            Arg::new("config")
+                .short('c')
                 .long("config")
                 .value_name("FILE")
                 .help("指定配置文件路徑")
-                .takes_value(true)
                 .default_value("config/development.toml"),
         )
         .arg(
-            Arg::with_name("log-level")
+            Arg::new("log-level")
                 .long("log-level")
                 .value_name("LEVEL")
                 .help("設置日誌級別 (trace, debug, info, warn, error)")
-                .takes_value(true)
                 .default_value("info"),
         )
         .get_matches();
 
     // 設置日誌級別
-    let log_level = match matches.value_of("log-level").unwrap_or("info") {
+    let log_level = match matches.get_one::<String>("log-level").map(|s| s.as_str()).unwrap_or("info") {
         "trace" => Level::TRACE,
         "debug" => Level::DEBUG,
         "info" => Level::INFO,
@@ -56,11 +51,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tracing::subscriber::set_global_default(subscriber)?;
 
     // 載入配置
-    let config_path = matches.value_of("config").unwrap();
+    let config_path = matches.get_one::<String>("config").unwrap();
     info!("載入配置文件: {}", config_path);
     
-    let config_loader = ConfigLoader::new();
-    let config = config_loader.load::<ApplicationConfig>(PathBuf::from(config_path))
+    let config = ConfigLoader::load_current()
+        .and_then(|config| config.try_deserialize::<ApplicationConfig>())
         .map_err(|e| {
             error!("載入配置失敗: {}", e);
             e

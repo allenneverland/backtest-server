@@ -3,8 +3,10 @@ use crate::storage::repository::{DbExecutor, TimeRange};
 use anyhow::Result;
 use sqlx::PgPool;
 use std::sync::Arc;
+use async_trait::async_trait;
 
 /// 連續聚合視圖儲存庫特徵
+#[async_trait]
 pub trait AggregateRepository: Send + Sync {
     /// 獲取指定商品的日級成交量聚合數據
     async fn get_daily_volume_by_instrument(&self, instrument_id: i32, time_range: TimeRange) -> Result<Vec<DailyVolumeByInstrument>>;
@@ -37,6 +39,7 @@ impl DbExecutor for PgAggregateRepository {
     }
 }
 
+#[async_trait]
 impl AggregateRepository for PgAggregateRepository {
     async fn get_daily_volume_by_instrument(&self, instrument_id: i32, time_range: TimeRange) -> Result<Vec<DailyVolumeByInstrument>> {
         let results = sqlx::query_as!(

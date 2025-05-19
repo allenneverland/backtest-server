@@ -8,11 +8,9 @@ use lapin::{
         QueueDeclareOptions, ExchangeDeclareOptions
     },
     types::FieldTable,
-    Consumer, Channel, BasicProperties, ExchangeKind
+    Consumer, Channel, ExchangeKind
 };
 use serde::de::DeserializeOwned;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;

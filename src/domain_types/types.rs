@@ -2,7 +2,8 @@
 
 use std::fmt;
 use serde::{Serialize, Deserialize};
-use std::time::Duration;
+use std::time::Duration as StdDuration;
+use polars::prelude::Duration as PolarsDuration;
 use thiserror::Error;
 
 /// 金融資產類型
@@ -42,18 +43,33 @@ pub enum Frequency {
 }
 
 impl Frequency {
-    /// 轉換為表示該頻率的 Duration
-    pub fn to_duration(&self) -> Duration {
+    /// 轉換為表示該頻率的 std::time::Duration
+    pub fn to_std_duration(&self) -> StdDuration {
         match self {
-            Frequency::Tick => Duration::from_secs(0),
-            Frequency::Second => Duration::from_secs(1),
-            Frequency::Minute => Duration::from_secs(60),
-            Frequency::FiveMinutes => Duration::from_secs(300),
-            Frequency::FifteenMinutes => Duration::from_secs(900),
-            Frequency::Hour => Duration::from_secs(3600),
-            Frequency::Day => Duration::from_secs(86400),
-            Frequency::Week => Duration::from_secs(604800),
-            Frequency::Month => Duration::from_secs(2592000), // 簡化，使用30天
+            Frequency::Tick => StdDuration::from_secs(0),
+            Frequency::Second => StdDuration::from_secs(1),
+            Frequency::Minute => StdDuration::from_secs(60),
+            Frequency::FiveMinutes => StdDuration::from_secs(300),
+            Frequency::FifteenMinutes => StdDuration::from_secs(900),
+            Frequency::Hour => StdDuration::from_secs(3600),
+            Frequency::Day => StdDuration::from_secs(86400),
+            Frequency::Week => StdDuration::from_secs(604800),
+            Frequency::Month => StdDuration::from_secs(2592000), // 簡化，使用30天
+        }
+    }
+    
+    /// 轉換為表示該頻率的 Polars Duration
+    pub fn to_duration(&self) -> PolarsDuration {
+        match self {
+            Frequency::Tick => PolarsDuration::new(0),
+            Frequency::Second => PolarsDuration::new(1),  // seconds
+            Frequency::Minute => PolarsDuration::new(60), // 60 seconds
+            Frequency::FiveMinutes => PolarsDuration::new(300), // 300 seconds 
+            Frequency::FifteenMinutes => PolarsDuration::new(900), // 900 seconds
+            Frequency::Hour => PolarsDuration::new(3600), // 3600 seconds
+            Frequency::Day => PolarsDuration::new(86400), // 86400 seconds
+            Frequency::Week => PolarsDuration::new(604800), // 604800 seconds
+            Frequency::Month => PolarsDuration::new(2592000), // 2592000 seconds (30 days)
         }
     }
     

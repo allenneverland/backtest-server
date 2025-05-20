@@ -7,7 +7,7 @@ pub mod series;
 pub mod indicators;
 
 // 重新匯出核心類型
-pub use types::{AssetType, Frequency, Column};
+pub use types::{AssetType, Frequency, Column, Direction, OrderType, DomainError, Result};
 pub use instrument::Instrument;
 pub use frame::{MarketFrame, MarketFrameExt};
 pub use series::MarketSeries;

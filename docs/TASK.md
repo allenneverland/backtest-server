@@ -29,7 +29,7 @@
 ## 領域類型模組 (domain_types)
 
 ### 1. 基本類型實現
-- 📋 🔴 🚀 實現基本資產類型與交易枚舉（`types.rs`）`[serde, thiserror]`
+- ✅ 🔴 🚀 實現基本資產類型與交易枚舉（`types.rs`）`[serde, thiserror]`
   - 實現 `AssetType`, `Frequency`, `Direction`, `OrderType` 等枚舉
   - 實現 `Column` 常量定義
   - 實現 `DomainError` 和 `Result<T>` 類型

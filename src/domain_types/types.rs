@@ -3,6 +3,7 @@
 use std::fmt;
 use serde::{Serialize, Deserialize};
 use std::time::Duration;
+use thiserror::Error;
 
 /// 金融資產類型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -71,6 +72,89 @@ impl Frequency {
         }
     }
 }
+
+/// 交易方向（多/空）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Direction {
+    Long,   // 做多
+    Short,  // 做空
+}
+
+impl fmt::Display for Direction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Direction::Long => write!(f, "Long"),
+            Direction::Short => write!(f, "Short"),
+        }
+    }
+}
+
+/// 訂單類型
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum OrderType {
+    Market,             // 市價單
+    Limit,              // 限價單
+    Stop,               // 止損單
+    StopLimit,          // 止損限價單
+    TrailingStop,       // 追蹤止損單
+    FillOrKill,         // 全部成交或取消
+    ImmediateOrCancel,  // 立即成交或取消
+    GoodTillCancel,     // 有效至取消
+    GoodTillDate,       // 有效至特定日期
+}
+
+impl fmt::Display for OrderType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OrderType::Market => write!(f, "Market"),
+            OrderType::Limit => write!(f, "Limit"),
+            OrderType::Stop => write!(f, "Stop"),
+            OrderType::StopLimit => write!(f, "StopLimit"),
+            OrderType::TrailingStop => write!(f, "TrailingStop"),
+            OrderType::FillOrKill => write!(f, "FillOrKill"),
+            OrderType::ImmediateOrCancel => write!(f, "ImmediateOrCancel"),
+            OrderType::GoodTillCancel => write!(f, "GoodTillCancel"),
+            OrderType::GoodTillDate => write!(f, "GoodTillDate"),
+        }
+    }
+}
+
+/// 領域錯誤類型
+#[derive(Error, Debug, Clone, PartialEq)]
+pub enum DomainError {
+    #[error("無效的資產類型: {0}")]
+    InvalidAssetType(String),
+    
+    #[error("無效的頻率: {0}")]
+    InvalidFrequency(String),
+    
+    #[error("無效的交易方向: {0}")]
+    InvalidDirection(String),
+    
+    #[error("無效的訂單類型: {0}")]
+    InvalidOrderType(String),
+    
+    #[error("無效的數據格式: {0}")]
+    InvalidDataFormat(String),
+    
+    #[error("缺少必要欄位: {0}")]
+    MissingRequiredField(String),
+    
+    #[error("數據範圍錯誤: {0}")]
+    DataRangeError(String),
+    
+    #[error("時間序列操作錯誤: {0}")]
+    TimeSeriesError(String),
+    
+    #[error("資料轉換錯誤: {0}")]
+    ConversionError(String),
+    
+    #[error("未知錯誤: {0}")]
+    Unknown(String),
+}
+
+/// 領域結果類型
+pub type Result<T> = std::result::Result<T, DomainError>;
 
 /// 標準列名定義
 pub struct Column;

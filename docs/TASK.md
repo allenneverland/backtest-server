@@ -48,13 +48,13 @@
   - 只提供時間序列的基本操作（無任何指標計算）
 
 ### 4. 市場數據框架
-- ✅ 🔴 🚀 實現基於 Polars 的市場數據框架（`frame.rs`）`[polars, chrono]` 
+- ✅ 實現基於 Polars 的市場數據框架（`frame.rs`）`[polars, chrono]` 
   - 實現 `MarketFrame` 結構包裝 Polars DataFrame
   - 實現 `MarketFrameExt` trait 擴展 DataFrame 功能
   - 提供時間篩選和數據轉換方法
 
 ### 5. 技術指標功能
-- 📋 🔴 實現基於 Polars 的技術指標（`indicators.rs`）`[polars]`
+- ✅ 實現基於 Polars 的技術指標（`indicators.rs`）`[polars]`
   - 實現 `IndicatorsExt` trait 擴展 DataFrame
   - 實現常用技術指標：SMA, EMA, RSI 等
   - 提供向量化的高效計算

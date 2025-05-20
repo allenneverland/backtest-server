@@ -1,6 +1,8 @@
 {
   "permissions": {
-    "allow": [],
+    "allow": [
+      "WebFetch(domain:docs.rs)"
+    ],
     "deny": []
   }
 }

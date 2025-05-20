@@ -598,7 +598,6 @@ impl From<TickFrame> for DataFrame {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
 
     fn create_test_ohlcv_dataframe() -> DataFrame {
         let time = Series::new(ColumnName::TIME.into(), &[1000, 2000, 3000, 4000, 5000]);

@@ -28,17 +28,6 @@
 
 ## 領域類型模組 (domain_types)
 
-indicators.rs:
-只為 Polars 的 DataFrame 和 LazyFrame 實現指標計算
-不知道 MarketSeries 或 MarketFrame 的存在
-
-series.rs 和 frame.rs:
-完全獨立，不知道對方的存在
-各自包裝 Polars 的數據類型，提供領域特定功能
-
-集成點放在上層模組:
-
-在 domain_types.rs 或使用這些類型的代碼中處理轉換
 ### 1. 基本類型實現
 - ✅ 實現基本資產類型與交易枚舉（`types.rs`）`[serde, thiserror]`
   - 實現 `AssetType`, `Frequency`, `Direction`, `OrderType` 等枚舉

@@ -26,19 +26,49 @@
 - ✅ 建立開發和測試環境分離配置 `[config, toml]`
 - 📋 🔴 創建RabbitMQ Docker配置 `[docker-compose]`
 
-### 3. 領域類型建立
-- 📋 🔴 實現基本資產類型（`asset_types.rs`）`[serde, rust_decimal, thiserror]`
-- 📋 🔴 實現基於 Polars 的時間序列數據結構（`time_series.rs`）`[chrono, serde, polars]`
-- 📋 🔴 實現基於 Polars 的數據點結構（`data_point.rs`）`[serde, chrono, polars]`
-- 📋 🔴 實現與 Polars 時間索引整合的頻率枚舉（`frequency.rs`）`[serde, chrono, polars]`
-- 📋 🔴 實現基於 Polars 的數據聚合操作（`aggregation.rs`）`[polars, serde]`
-- 📋 🔴 實現基於 Polars 的資料調整相關結構（`adjustment.rs`）`[polars, serde]`
+## 領域類型模組 (domain_types)
+
+### 1. 基本類型實現
+- 📋 🔴 🚀 實現基本資產類型與交易枚舉（`types.rs`）`[serde, thiserror]`
+  - 實現 `AssetType`, `Frequency`, `Direction`, `OrderType` 等枚舉
+  - 實現 `Column` 常量定義
+  - 實現 `DomainError` 和 `Result<T>` 類型
+
+### 2. 金融商品結構
+- 📋 🔴 🚀 實現金融商品結構（`instrument.rs`）`[serde, serde_json]`
+  - 實現 `Instrument` 結構及方法
+  - 提供 builder 模式的構建方法
+  - 實現屬性存取和展示功能
+
+### 3. 市場數據框架
+- 📋 🔴 🚀 實現基於 Polars 的市場數據框架（`frame.rs`）`[polars, chrono]` 
+  - 實現 `MarketFrame` 結構包裝 Polars DataFrame
+  - 實現 `MarketFrameExt` trait 擴展 DataFrame 功能
+  - 提供時間篩選和數據轉換方法
+
+### 4. 時間序列功能
+- 📋 🔴 🚀 實現基於 Polars LazyFrame 的時間序列（`series.rs`）`[polars, chrono]`
+  - 實現 `MarketSeries` 結構包裝 LazyFrame
+  - 提供頻率轉換方法
+  - 實現惰性計算和流式處理
+
+### 5. 技術指標功能
+- 📋 🔴 實現基於 Polars 的技術指標（`indicators.rs`）`[polars]`
+  - 實現 `IndicatorsExt` trait 擴展 DataFrame
+  - 實現常用技術指標：SMA, EMA, RSI 等
+  - 提供向量化的高效計算
 
 ### 4. 數據庫結構
 - ✅ 設計並實現資料庫基本表結構 `[sqlx]`
 - ✅ 實現遷移腳本（基本表）`[sqlx]`
 - ✅ 設計並實現資料庫索引優化 `[sqlx]`
 - ✅ 建立數據庫連接管理（`database.rs`）`[sqlx, tokio, async-trait]`
+
+## 存儲模組 (storage)
+
+- 📋 🔴 實現金融商品儲存庫（`repository/instrument.rs`）`[sqlx, tokio]` ⚡(依賴任務6)
+  - 實現 `PgInstrumentRepository`
+  - 提供商品基本信息存取
 
 ## 第二階段：核心數據功能（2-3週）
 
@@ -62,20 +92,17 @@
 
 ### 5. 數據導入模組
 - 📋 實現CSV讀取功能（`csv_io.rs`）`[csv, serde, tokio]` ⚡(依賴任務3)
-- 📋 實現數據驗證流程（`validator.rs`）`[thiserror, serde]` ⚡(依賴任務3)
-- 📋 實現OHLCV數據驗證與清洗（`ohlcv_validator.rs`, `ohlcv_cleaner.rs`）`[chrono, rust_decimal, thiserror]`
-- 📋 實現Tick數據驗證與清洗（`tick_validator.rs`, `tick_cleaner.rs`）`[chrono, rust_decimal, thiserror]`
-- 📋 實現時間序列整體驗證（`time_series_validator.rs`）`[chrono, statrs]`
-- 📋 實現驗證器註冊表（`registry.rs`）`[once_cell]`
-- 📋 🟢 實現驗證報告生成（`report.rs`）`[serde, serde_json]`
+- 📋 實現數據驗證（`validator.rs`, `validator/`）`[thiserror, serde]` ⚡(依賴任務3)
+- 📋 實現數據清洗（`cleaner.rs`, `cleaner/`）`[chrono, rust_decimal, thiserror]`
+- 📋 實現將處理後數據寫入資料庫 `database_writer.rs`）
 
 ### 6. 數據提供模組
-- 📋 實現統一數據加載器（`loader.rs`）`[tokio, sqlx, async-trait]` ⚡(依賴任務3, 4)
-- 📋 🔴 🚀 實現時間序列重採樣（`resampler.rs`）`[chrono, anyhow, HashMap, Polars]` ⚡(依賴任務3)
+- 📋 實現高層資料加載邏輯（`loader.rs`）`[tokio, sqlx, async-trait]` ⚡(依賴任務3, 4)
 - 📋 🔴 實現市場數據迭代器（`iterator.rs`）`[tokio, futures, async-trait]`
-- 📋 🟡 實現數據緩存管理（`cache.rs`）`[redis, parking_lot, lru_time_cache]`
+- 📋 🟡 實現數據緩存策略（`cache.rs`）`[redis, parking_lot, lru_time_cache]`
 - 📋 🟡 實現技術指標計算（`precalculator.rs`）`[ndarray, statrs, rayon]`
-- 📋 🟡 將時間序列數據結構轉換為 Polars 格式 `[polars, chrono, rust_decimal]` ⚡(依賴任務3)
+- 📋 🟡 實現構建優化的查詢語句（`query_builder.rs`）
+- 📋 🟢 實現複雜頻率轉換（`resampler.rs`）
 
 ### 7. 配置管理模組
 - ✅ 實現配置加載功能（`loader.rs`）`[config, serde, toml]`

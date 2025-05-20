@@ -136,13 +136,11 @@ src/                            # 源代碼目錄
 ```
 # 數據相關模組
 src/domain_types/                   # 核心領域類型模組目錄
-├── asset_types.rs                  # 資產、數據、交易類型定義
-├── data_point.rs                   # OHLCVPoint, TickPoint 定義
-├── time_series.rs                  # TimeSeries<T> 結構定義
-├── data_matrix.rs                  # DataMatrix 結構定義
-├── frequency.rs                    # Frequency enum 定義
-├── adjustment.rs                   # Adjustment 結構定義
-└── aggregation.rs                  # AggregationConfig, AggregationOp 定義
+├── types.rs                        # 基本類型定義 (資產類型、頻率等)
+├── instrument.rs                   # 金融商品結構
+├── frame.rs                        # 基於 Polars 的市場數據框架
+├── series.rs                       # 時間序列相關功能
+└── indicators.rs                   # 基本技術指標
 
 src/data_ingestion/                 # 數據導入模組目錄
 ├── processor.rs                    # 導入處理流程控制
@@ -307,67 +305,90 @@ examples/                           # 示例代碼目錄
 
 ## 3. 核心模組
 
-### 3.1 領域類型模組
+## 3.1 領域類型模組 (domain_types)
 
-此模組定義了整個應用程序中共享的核心金融數據結構、枚舉和類型，直接使用 Polars 數據格式。
+此模組定義了整個應用程序中使用的核心金融數據結構和類型，基於 Polars 提供高效的數據處理能力。
 
 **主要功能**:
-- 提供標準化的金融數據表示。
-- 確保類型安全和數據一致性。
-- 基於 Polars 提供高效的數據結構和分析能力。
+- 提供標準化的金融市場數據表示
+- 定義資產類型和交易枚舉
+- 整合 Polars 資料結構，實現高效率的數據操作
+- 為應用程序提供統一的數據類型系統
 
 **主要組件** (`src/domain_types/`):
-- `asset_types.rs`: 定義資產類型 (`AssetType`)、數據類型 (`DataType`，包括基礎類型如OHLCV、Tick，以及指標類型)、交易類型 (`TradeType`) 等。
-- `data_point.rs`: 使用 Polars Series 定義基本的數據點結構，如 `OHLCVPoint` (開高低收量) 和 `TickPoint` (逐筆成交數據)。
-- `time_series.rs`: 使用 Polars DataFrame 實現通用的時間序列數據結構 `TimeSeries<T>`，提供高效的時間索引和數據操作。
-- `data_matrix.rs`: 使用 Polars 矩陣實現高效的數值計算。
-- `frequency.rs`: 定義數據頻率的枚舉 `Frequency` (例如，分鐘、小時、日、周等)，與 Polars 時間索引整合。
-- `adjustment.rs`: 使用 Polars 向量化操作實現數據調整（如股票復權）相關的功能。
-- `aggregation.rs`: 利用 Polars 的分組和聚合功能實現數據聚合操作 (`AggregationOp`) 及聚合配置 (`AggregationConfig`)。
+- `types.rs`: 基本類型定義 (資產類型、頻率等)
+- `instrument.rs`: 金融商品結構
+- `frame.rs`: 基於 Polars 的市場數據框架
+- `series.rs`: 時間序列相關功能
+- `indicators.rs`: 基本技術指標
 
-### 3.2 數據導入模組
+## 3.2 數據導入模組 (data_ingestion)
 
-此模組負責從各種外部來源（如 CSV 文件、數據庫、API）獲取原始市場數據，並對其進行驗證、清洗和初步處理，為後續存儲或實時使用做準備。
+此模組專責從各種外部來源獲取原始市場數據，並負責數據的完整驗證、清洗和資料庫存儲過程。
 
 **主要功能**:
-- 從多種數據源加載數據。
-- 驗證數據的完整性和正確性（例如，價格範圍、時間順序）。
-- 清洗數據，處理異常值或缺失值。
-- 將原始數據轉換為內部標準格式 (`domain_types`)。
+- 從多種外部數據源(CSV, 資料庫, API等)讀取原始數據
+- 執行深度數據驗證和數據質量檢查
+- 清洗數據，處理缺失值、異常值和格式問題
+- 將驗證並清洗後的數據轉換為標準格式並存入資料庫
+- 生成數據質量報告，追蹤數據來源和處理歷史
 
 **主要組件** (`src/data_ingestion/`):
-- `processor.rs`: 協調數據導入的處理流程。
-  - `processor/csv_io.rs`: 處理 CSV 格式數據的讀取和解析。
-    - `processor/csv_io/format.rs`: 定義 CSV 數據的具體格式映射。
-    - `processor/csv_io/options.rs`: 提供 CSV 解析的配置選項。
-  - `processor/data_loader.rs`: 提供更通用的數據加載邏輯，可擴展支持不同數據源。
-- `validator.rs`: 協調數據驗證和清洗的流程。
-  - `validator/traits.rs`: 定義 `DataValidator` 和 `DataCleaner` 等核心特質 (trait)。
-  - `validator/error.rs`: 定義數據驗證過程中可能發生的錯誤類型。
-  - `validator/ohlcv_validator.rs` 和 `ohlcv_cleaner.rs`: 針對 OHLCV 數據的特定驗證和清洗邏輯。
-  - `validator/tick_validator.rs` 和 `tick_cleaner.rs`: 針對 Tick 數據的特定驗證和清洗邏輯。
-  - `validator/time_series_validator.rs`: 針對整個時間序列數據的驗證規則（如時間順序）。
-  - `validator/report.rs`: 用於生成數據驗證報告的結構。
-  - `validator/registry.rs`: 用於註冊和管理不同的驗證器和清洗器實例。
+- `processor.rs`: 管理整體數據處理流程，協調各個子模組的工作
+- `processor/csv_io.rs`: CSV 文件讀取和解析實現
+  - `processor/csv_io/format.rs`: CSV 文件格式定義和映射
+  - `processor/csv_io/options.rs`: CSV 解析選項和配置
+  - `processor/database_writer.rs`: 將處理後數據寫入資料庫 (使用 storage)
+- `validator/`: 全面的數據驗證子系統
+  - `validator/ohlcv.rs`: K線數據特定驗證邏輯
+  - `validator/tick.rs`: 逐筆成交數據特定驗證邏輯
+  - `validator/time_series.rs`: 時間序列整體性驗證
+  - `validator/quality.rs`: 數據質量檢查和報告生成
+- `cleaner/`: 數據清洗與修復子系統
+  - `cleaner/outlier.rs`: 異常值檢測與處理
+  - `cleaner/missing.rs`: 缺失值處理策略
 
-### 3.3 數據提供模組
+## 3.3 數據提供模組 (data_provider)
 
-此模組作為系統中其他部分（如回測引擎、消息系統）獲取處理後數據的統一接口。它負責從存儲系統中高效地檢索數據並提供必要的轉換功能。
+此模組作為回測系統的數據來源，專注於高效率地從資料庫提取經過驗證的數據，並提供優化的查詢和數據轉換功能。
 
 **主要功能**:
-- 提供統一的數據訪問接口。
-- 執行數據轉換，如時間序列重採樣和技術指標計算。
-- 高效緩存常用數據。
-- 管理數據迭代和流式處理。
-- 支持 Polars 數據格式進行高效分析和轉換。
+- 從資料庫高效讀取已驗證的數據(無需再次驗證)
+- 提供統一的數據訪問接口給回測系統
+- 實現數據緩存策略，優化頻繁訪問的數據讀取
+- 執行數據轉換操作，如頻率轉換、技術指標計算等
+- 支持流式數據處理和惰性計算
 
 **主要組件** (`src/data_provider/`):
-- `types.rs`: 定義數據提供模組使用的核心類型。
-- `loader.rs`: 實現統一的數據加載器接口。
-- `cache.rs`: 管理數據緩存，提高頻繁訪問數據的性能。
-- `resampler.rs`: 使用 Polars 實現時間序列重採樣（如分鐘資料轉換為小時資料）。
-- `precalculator.rs`: 實現技術指標的計算和緩存。
-- `iterator.rs`: 提供高效的市場數據迭代器，支持策略遍歷歷史數據。
+- `loader.rs`: 高層資料加載邏輯 (使用 storage 和 query_builder)
+- `cache.rs`: 實現多層緩存策略，平衡記憶體使用和性能
+- `iterator.rs`: 提供高效的市場數據迭代器，用於回測過程中的順序數據存取
+- `precalculator.rs`: 基於 Polars 向量化操作實現技術指標的預計算和緩存。
+- `query_builder.rs`: 專注於構建優化的查詢語句，支持複雜的時間範圍和資產過濾 (透過Storage Repository 不需要直接操作資料庫連接或SQL語句)
+- `resampler.rs`: 使用 Polars 高效實現頻率轉換(分鐘→小時→日等)，提供時區管理和交易時段處理 (暫不實現)
+
+## 設計重點和優化
+
+1. **明確責任分工**:
+   - `data_ingestion` 負責「一次性」的完整驗證和資料庫存儲
+   - `data_provider` 假設資料庫中數據已經過驗證，專注於高效數據提取和轉換
+
+2. **消除重複驗證**:
+   - 回測階段不再重複驗證已經過檢查的數據，提高性能
+   - 通過資料庫存儲保證數據完整性，而非運行時檢查
+
+3. **Polars 深度整合**:
+   - 利用 Polars 的惰性評估和向量化操作提高性能
+   - 數據保持在 Polars 格式中，避免不必要的轉換開銷
+   - 使用 Polars 的查詢優化和內存管理能力
+
+4. **高效數據訪問**:
+   - 實現智能緩存策略，優先緩存熱門數據
+   - 使用 Polars LazyFrame 惰性計算降低記憶體壓力
+   - 支持批處理和流式處理，適應不同數據量和使用場景
+
+這種設計確保了系統在處理大量市場數據時保持高效，同時維持了數據的完整性和可靠性。通過明確分離驗證階段和使用階段的責任，系統可以在回測時獲得最佳性能，同時在數據導入階段保證數據質量。
+
 
 ### 3.4 策略DSL模組
 

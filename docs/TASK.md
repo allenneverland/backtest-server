@@ -52,7 +52,7 @@ series.rs 和 frame.rs:
   - 實現屬性存取和展示功能
 
 ### 3. 時間序列功能
-- 📋 🔴 🚀 實現基於 Polars LazyFrame 的時間序列（`series.rs`）`[polars, chrono]`
+- ✅ 實現基於 Polars LazyFrame 的時間序列（`series.rs`）`[polars, chrono]`
   - 實現 `MarketSeries` 結構包裝 LazyFrame
   - 提供頻率轉換方法
   - 實現惰性計算和流式處理

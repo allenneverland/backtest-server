@@ -1,7 +1,6 @@
 //! 市場時間序列數據
 
 use polars::prelude::*;
-use polars::lazy::prelude::*;
 use super::types::{Column, Frequency};
 use std::fmt;
 
@@ -51,13 +50,14 @@ impl MarketSeries {
         let resampled = self.lazy_frame
             .clone()
             .group_by_dynamic(
+                col(&idx),
                 [col(&idx)],
                 DynamicGroupOptions {
-                    label: idx.clone(), // 添加 label 参数
-                    index_column: idx.clone(),
+                    label: Label::Left,  //（例如：10:00的K線表示10:00-10:59的數據）
+                    index_column: idx.as_str().into(),  // 轉換為 PlSmallStr
                     every: target_frequency.to_duration(),
                     period: target_frequency.to_duration(),
-                    offset: None,
+                    offset: Duration::new(0),  // 使用 Duration::new 方法
                     include_boundaries: false,
                     closed_window: ClosedWindow::Left,
                     start_by: StartBy::WindowBound,

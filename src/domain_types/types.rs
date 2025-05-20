@@ -173,9 +173,9 @@ pub enum DomainError {
 pub type Result<T> = std::result::Result<T, DomainError>;
 
 /// 標準列名定義
-pub struct Column;
+pub struct ColumnName;
 
-impl Column {
+impl ColumnName {
     pub const TIME: &'static str = "time";
     pub const OPEN: &'static str = "open";
     pub const HIGH: &'static str = "high";

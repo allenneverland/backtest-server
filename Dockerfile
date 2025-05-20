@@ -1,4 +1,4 @@
-FROM rust:1.86-slim-bullseye
+FROM rust:1.87-slim-bullseye
 
 # 安裝基本工具和依賴
 RUN apt-get update && apt-get install -y \

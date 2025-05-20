@@ -1,7 +1,7 @@
 //! 市場時間序列數據
 
 use polars::prelude::*;
-use super::types::{Column, Frequency};
+use super::types::{ColumnName, Frequency};
 use super::resampler::Resampler;
 use std::fmt;
 
@@ -30,7 +30,7 @@ impl MarketSeries {
     /// 創建新的時間序列
     pub fn new(df: DataFrame, instrument_id: String, frequency: Frequency) -> PolarsResult<Self> {
         // 驗證數據框是否包含必要的列
-        if !df.schema().contains(Column::TIME) {
+        if !df.schema().contains(ColumnName::TIME) {
             return Err(PolarsError::ComputeError(
                 "DataFrame must contain 'time' column".into()
             ));
@@ -38,6 +38,17 @@ impl MarketSeries {
         
         Ok(Self {
             lazy_frame: df.lazy(),
+            instrument_id,
+            frequency,
+        })
+    }
+
+    /// 從 LazyFrame 創建 MarketSeries
+    pub fn from_lazy(lazy_frame: LazyFrame, instrument_id: String, frequency: Frequency) -> PolarsResult<Self> {
+        // TODO: 驗證 LazyFrame 包含必要的列（如果需要）
+        
+        Ok(Self {
+            lazy_frame,
             instrument_id,
             frequency,
         })
@@ -80,8 +91,8 @@ impl MarketSeries {
         // 使用 Polars 的表達式 API 進行時間過濾
         let filtered = self.lazy_frame.clone()
             .filter(
-                col(Column::TIME).gt_eq(lit(start_time))
-                .and(col(Column::TIME).lt_eq(lit(end_time)))
+                col(ColumnName::TIME).gt_eq(lit(start_time))
+                .and(col(ColumnName::TIME).lt_eq(lit(end_time)))
             );
         
         Ok(Self {
@@ -125,7 +136,7 @@ impl MarketSeries {
         // 使用正確的排序方法参數
         let sorted = self.lazy_frame.clone()
             .sort(
-                [Column::TIME],
+                [ColumnName::TIME],
                 SortMultipleOptions {
                     descending: vec![descending],
                     nulls_last: vec![true], // 使用 vec 而不是單個 bool
@@ -145,7 +156,7 @@ impl MarketSeries {
     /// 獲取數據的時間範圍
     pub fn time_range(&self) -> PolarsResult<(i64, i64)> {
         let df = self.collect()?;
-        let time_col = df.column(Column::TIME)?;
+        let time_col = df.column(ColumnName::TIME)?;
         
         // 使用 Series 的 min_max 方法
         let (min_time, max_time) = time_col.i64()?
@@ -164,4 +175,5 @@ impl MarketSeries {
         
         self.resample(target_frequency)
     }
+
 }

@@ -29,13 +29,13 @@
 ## 領域類型模組 (domain_types)
 
 ### 1. 基本類型實現
-- ✅ 🔴 🚀 實現基本資產類型與交易枚舉（`types.rs`）`[serde, thiserror]`
+- ✅ 實現基本資產類型與交易枚舉（`types.rs`）`[serde, thiserror]`
   - 實現 `AssetType`, `Frequency`, `Direction`, `OrderType` 等枚舉
   - 實現 `Column` 常量定義
   - 實現 `DomainError` 和 `Result<T>` 類型
 
 ### 2. 金融商品結構
-- 📋 🔴 🚀 實現金融商品結構（`instrument.rs`）`[serde, serde_json]`
+- ✅ 實現金融商品結構（`instrument.rs`）`[serde, serde_json]`
   - 實現 `Instrument` 結構及方法
   - 提供 builder 模式的構建方法
   - 實現屬性存取和展示功能

@@ -3,6 +3,7 @@
 use polars::prelude::*;
 use super::types::{Column, Frequency};
 use super::series::MarketSeries;
+use super::resampler::Resampler;
 
 /// 市場數據框架 trait，定義市場數據框架的基本功能
 pub trait MarketFrameExt {
@@ -39,16 +40,7 @@ pub trait MarketFrameExt {
 
 impl MarketFrameExt for DataFrame {
     fn is_ohlcv(&self) -> bool {
-        let required_columns = [
-            Column::TIME, 
-            Column::OPEN,
-            Column::HIGH, 
-            Column::LOW, 
-            Column::CLOSE, 
-            Column::VOLUME
-        ];
-        
-        required_columns.iter().all(|&col| self.schema().contains(col))
+        Resampler::is_ohlcv(self)
     }
     
     fn is_tick(&self) -> bool {
@@ -90,36 +82,8 @@ impl MarketFrameExt for DataFrame {
     }
     
     fn resample(&self, target_frequency: Frequency) -> PolarsResult<DataFrame> {
-        if !self.is_ohlcv() {
-            return Err(PolarsError::ComputeError(
-                "DataFrame is not in OHLCV format".into()
-            ));
-        }
-        
-        let window_size = target_frequency.to_duration();
-        
-        self.lazy()
-            .group_by_dynamic(
-                [col(Column::TIME)],
-                DynamicGroupOptions {
-                    label: Label::Left,
-                    start_by: StartBy::WindowBound,
-                    index_column: Column::TIME.to_string(),
-                    every: window_size,
-                    period: window_size,
-                    offset: None,
-                    include_boundaries: false,
-                    closed_window: ClosedWindow::Left,
-                }
-            )
-            .agg([
-                col(Column::OPEN).first().alias(Column::OPEN),
-                col(Column::HIGH).max().alias(Column::HIGH),
-                col(Column::LOW).min().alias(Column::LOW),
-                col(Column::CLOSE).last().alias(Column::CLOSE),
-                col(Column::VOLUME).sum().alias(Column::VOLUME),
-            ])
-            .collect()
+        // 使用共用的 Resampler 實現
+        Resampler::resample_df(self, target_frequency)
     }
 }
 
@@ -232,7 +196,8 @@ impl MarketFrame {
     
     /// 重採樣到指定頻率
     pub fn resample(&self, target_frequency: Frequency) -> PolarsResult<Self> {
-        let resampled_df = self.df.resample(target_frequency)?;
+        // 使用共用的 Resampler 實現
+        let resampled_df = Resampler::resample_df(&self.df, target_frequency)?;
         
         Ok(Self {
             df: resampled_df,

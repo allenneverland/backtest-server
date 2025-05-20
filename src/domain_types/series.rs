@@ -2,6 +2,7 @@
 
 use polars::prelude::*;
 use super::types::{Column, Frequency};
+use super::resampler::Resampler;
 use std::fmt;
 
 /// 市場時間序列
@@ -44,32 +45,8 @@ impl MarketSeries {
     
     /// 從另一個頻率重採樣
     pub fn resample(&self, target_frequency: Frequency) -> PolarsResult<Self> {
-        // 使用當前 Polars 版本支持的 groupby_dynamic 參數格式
-        let idx = Column::TIME.to_string();
-        
-        let resampled = self.lazy_frame
-            .clone()
-            .group_by_dynamic(
-                col(&idx),
-                [col(&idx)],
-                DynamicGroupOptions {
-                    label: Label::Left,  //（例如：10:00的K線表示10:00-10:59的數據）
-                    index_column: idx.as_str().into(),  // 轉換為 PlSmallStr
-                    every: target_frequency.to_duration(),
-                    period: target_frequency.to_duration(),
-                    offset: Duration::new(0),  // 使用 Duration::new 方法
-                    include_boundaries: false,
-                    closed_window: ClosedWindow::Left,
-                    start_by: StartBy::WindowBound,
-                }
-            )
-            .agg([
-                col(Column::OPEN).first().alias(Column::OPEN),
-                col(Column::HIGH).max().alias(Column::HIGH),
-                col(Column::LOW).min().alias(Column::LOW),
-                col(Column::CLOSE).last().alias(Column::CLOSE),
-                col(Column::VOLUME).sum().alias(Column::VOLUME),
-            ]);
+        // 使用共用的重採樣邏輯
+        let resampled = Resampler::resample_lazy(self.lazy_frame.clone(), target_frequency);
         
         Ok(Self {
             lazy_frame: resampled,
@@ -77,7 +54,7 @@ impl MarketSeries {
             frequency: target_frequency,
         })
     }
-    
+
     /// 執行計算並返回 DataFrame
     pub fn collect(&self) -> PolarsResult<DataFrame> {
         self.lazy_frame.clone().collect()

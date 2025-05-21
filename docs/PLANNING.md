@@ -208,6 +208,26 @@ BacktestServer 採用高度模組化的設計，主要模組包括：
    - 模型層 | DateTime<Utc> | 實體模型、業務邏輯、API 接口
    - 計算核心層 | i64 | 內部時間序列計算、Polars 處理
 
+2. **時間轉換工具函數**
+   - 位於 `src/utils/time_utils.rs`
+   - 提供各層之間的時間轉換功能
+   - 基礎轉換函數：
+     - `datetime_to_timestamp_ms`: DateTime<Utc> → i64
+     - `timestamp_ms_to_datetime`: i64 → DateTime<Utc>
+     - `timestamps_to_datetimes`: [i64] → [DateTime<Utc>]
+     - `datetimes_to_timestamps`: [DateTime<Utc>] → [i64]
+     - `current_timestamp_ms`: 獲取當前系統時間的毫秒時間戳
+
+3. **資料庫層 <-> 領域模型層轉換**
+   - `opt_datetime_to_opt_timestamp_ms`: Option<DateTime<Utc>> → Option<i64>
+   - `opt_timestamp_ms_to_opt_datetime`: Option<i64> → Option<DateTime<Utc>>
+   - 在 Repository 實現中使用這些函數處理資料庫讀寫操作
+
+4. **領域模型層 <-> 計算核心層轉換**
+   - `datetime_range_to_timestamp_range`: (DateTime<Utc>, DateTime<Utc>) → (i64, i64)
+   - `timestamp_range_to_datetime_range`: (i64, i64) → (DateTime<Utc>, DateTime<Utc>)
+   - 在計算框架中使用這些函數處理時間範圍和時間序列操作
+
 ## 3. 開發規劃
 
 ### 3.1 開發階段

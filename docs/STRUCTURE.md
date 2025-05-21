@@ -275,8 +275,7 @@ src/storage/                        # 存儲系統模組目錄
         └── lock.rs                 # 分散式鎖實現
 
 src/utils/                          # 公共工具模組目錄
-├── serde_helpers.rs                # 序列化與反序列化幫助函數
-├── time.rs                         # 時間處理工具
+├── time_utils.rs                   # 時間轉換工具，處理不同層間的時間格式轉換
 └── error.rs                        # 通用錯誤處理
 ```
 

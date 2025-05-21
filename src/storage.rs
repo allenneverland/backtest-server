@@ -7,7 +7,6 @@ pub mod repository;
 pub use database::*;
 
 // 匯出主要的模型
-pub use models::instrument::{Crypto, Forex, Future, OptionContract, Stock};
 pub use models::{Exchange, FinancialReport, Instrument, MarketEvent};
 
 // 匯出主要的倉儲接口和實現

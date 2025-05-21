@@ -3,6 +3,7 @@ use chrono::Utc;
 use rust_decimal::Decimal;
 use serde_json::Value as JsonValue;
 use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::types::Json;
 
 use crate::domain_types::types::AssetType;
 use crate::storage::models::instrument::*;
@@ -22,6 +23,11 @@ impl InstrumentRepository {
     /// 創建金融商品
     pub async fn create(&self, instrument: InstrumentInsert) -> Result<Instrument> {
         let now = Utc::now();
+
+        // 默認空屬性對象
+        let attributes = instrument.attributes.unwrap_or_else(|| 
+            Json(serde_json::Value::Object(serde_json::Map::new()))
+        );
 
         let result = sqlx::query!(
             r#"
@@ -47,7 +53,7 @@ impl InstrumentRepository {
             instrument.is_active,
             instrument.trading_start_date,
             instrument.trading_end_date,
-            serde_json::Value::Object(serde_json::Map::new()) as _,
+            attributes,
             now,
             now
         )
@@ -63,188 +69,53 @@ impl InstrumentRepository {
     }
 
     /// 創建股票及其特定屬性
-    pub async fn create_stock(&self, instrument: InstrumentInsert, stock: StockInsert) -> Result<Instrument> {
-        let created_instrument = self.create(instrument).await?;
-
-        // 創建股票特定屬性
-        let stock_with_id = StockInsert {
-            instrument_id: created_instrument.instrument_id,
-            ..stock
-        };
-
-        sqlx::query!(
-            r#"
-            INSERT INTO stock (
-                instrument_id, sector, industry, market_cap, 
-                shares_outstanding, free_float, listing_date, delisting_date,
-                dividend_yield, pe_ratio
-            ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-            )
-            "#,
-            stock_with_id.instrument_id,
-            stock_with_id.sector,
-            stock_with_id.industry,
-            stock_with_id.market_cap,
-            stock_with_id.shares_outstanding,
-            stock_with_id.free_float,
-            stock_with_id.listing_date,
-            stock_with_id.delisting_date,
-            stock_with_id.dividend_yield,
-            stock_with_id.pe_ratio
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(created_instrument)
+    pub async fn create_stock(&self, mut instrument: InstrumentInsert, stock_attrs: StockAttributes) -> Result<Instrument> {
+        // 將股票特定屬性轉換為JSON
+        let attrs_json = serde_json::to_value(stock_attrs)?;
+        instrument.attributes = Some(Json(attrs_json));
+        
+        // 創建金融商品
+        self.create(instrument).await
     }
 
     /// 創建期貨及其特定屬性
-    pub async fn create_future(&self, instrument: InstrumentInsert, future: FutureInsert) -> Result<Instrument> {
-        let created_instrument = self.create(instrument).await?;
-
-        // 創建期貨特定屬性
-        let future_with_id = FutureInsert {
-            instrument_id: created_instrument.instrument_id,
-            ..future
-        };
-
-        sqlx::query!(
-            r#"
-            INSERT INTO future (
-                instrument_id, underlying_asset, contract_size, contract_unit,
-                delivery_date, first_notice_date, last_trading_date,
-                settlement_type, initial_margin, maintenance_margin, price_quotation
-            ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-            )
-            "#,
-            future_with_id.instrument_id,
-            future_with_id.underlying_asset,
-            future_with_id.contract_size,
-            future_with_id.contract_unit,
-            future_with_id.delivery_date,
-            future_with_id.first_notice_date,
-            future_with_id.last_trading_date,
-            future_with_id.settlement_type,
-            future_with_id.initial_margin,
-            future_with_id.maintenance_margin,
-            future_with_id.price_quotation
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(created_instrument)
+    pub async fn create_future(&self, mut instrument: InstrumentInsert, future_attrs: FutureAttributes) -> Result<Instrument> {
+        // 將期貨特定屬性轉換為JSON
+        let attrs_json = serde_json::to_value(future_attrs)?;
+        instrument.attributes = Some(Json(attrs_json));
+        
+        // 創建金融商品
+        self.create(instrument).await
     }
 
     /// 創建選擇權及其特定屬性
-    pub async fn create_option(&self, instrument: InstrumentInsert, option: OptionInsert) -> Result<Instrument> {
-        let created_instrument = self.create(instrument).await?;
-
-        // 創建選擇權特定屬性
-        let option_with_id = OptionInsert {
-            instrument_id: created_instrument.instrument_id,
-            ..option
-        };
-
-        sqlx::query!(
-            r#"
-            INSERT INTO option_contract (
-                instrument_id, underlying_instrument_id, option_type, strike_price,
-                expiration_date, exercise_style, contract_size, implied_volatility,
-                delta, gamma, theta, vega, rho
-            ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
-            )
-            "#,
-            option_with_id.instrument_id,
-            option_with_id.underlying_instrument_id,
-            option_with_id.option_type,
-            option_with_id.strike_price,
-            option_with_id.expiration_date,
-            option_with_id.exercise_style,
-            option_with_id.contract_size,
-            option_with_id.implied_volatility,
-            option_with_id.delta,
-            option_with_id.gamma,
-            option_with_id.theta,
-            option_with_id.vega,
-            option_with_id.rho
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(created_instrument)
+    pub async fn create_option(&self, mut instrument: InstrumentInsert, option_attrs: OptionAttributes) -> Result<Instrument> {
+        // 將選擇權特定屬性轉換為JSON
+        let attrs_json = serde_json::to_value(option_attrs)?;
+        instrument.attributes = Some(Json(attrs_json));
+        
+        // 創建金融商品
+        self.create(instrument).await
     }
 
     /// 創建外匯及其特定屬性
-    pub async fn create_forex(&self, instrument: InstrumentInsert, forex: ForexInsert) -> Result<Instrument> {
-        let created_instrument = self.create(instrument).await?;
-
-        // 創建外匯特定屬性
-        let forex_with_id = ForexInsert {
-            instrument_id: created_instrument.instrument_id,
-            ..forex
-        };
-
-        sqlx::query!(
-            r#"
-            INSERT INTO forex (
-                instrument_id, base_currency, quote_currency, pip_value,
-                typical_spread, margin_requirement, trading_hours
-            ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7
-            )
-            "#,
-            forex_with_id.instrument_id,
-            forex_with_id.base_currency,
-            forex_with_id.quote_currency,
-            forex_with_id.pip_value,
-            forex_with_id.typical_spread,
-            forex_with_id.margin_requirement,
-            forex_with_id.trading_hours
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(created_instrument)
+    pub async fn create_forex(&self, mut instrument: InstrumentInsert, forex_attrs: ForexAttributes) -> Result<Instrument> {
+        // 將外匯特定屬性轉換為JSON
+        let attrs_json = serde_json::to_value(forex_attrs)?;
+        instrument.attributes = Some(Json(attrs_json));
+        
+        // 創建金融商品
+        self.create(instrument).await
     }
 
     /// 創建加密貨幣及其特定屬性
-    pub async fn create_crypto(&self, instrument: InstrumentInsert, crypto: CryptoInsert) -> Result<Instrument> {
-        let created_instrument = self.create(instrument).await?;
-
-        // 創建加密貨幣特定屬性
-        let crypto_with_id = CryptoInsert {
-            instrument_id: created_instrument.instrument_id,
-            ..crypto
-        };
-
-        sqlx::query!(
-            r#"
-            INSERT INTO crypto (
-                instrument_id, blockchain_network, total_supply, circulating_supply,
-                max_supply, mining_algorithm, consensus_mechanism,
-                website_url, whitepaper_url, github_url
-            ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-            )
-            "#,
-            crypto_with_id.instrument_id,
-            crypto_with_id.blockchain_network,
-            crypto_with_id.total_supply,
-            crypto_with_id.circulating_supply,
-            crypto_with_id.max_supply,
-            crypto_with_id.mining_algorithm,
-            crypto_with_id.consensus_mechanism,
-            crypto_with_id.website_url,
-            crypto_with_id.whitepaper_url,
-            crypto_with_id.github_url
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(created_instrument)
+    pub async fn create_crypto(&self, mut instrument: InstrumentInsert, crypto_attrs: CryptoAttributes) -> Result<Instrument> {
+        // 將加密貨幣特定屬性轉換為JSON
+        let attrs_json = serde_json::to_value(crypto_attrs)?;
+        instrument.attributes = Some(Json(attrs_json));
+        
+        // 創建金融商品
+        self.create(instrument).await
     }
 
     /// 根據ID獲取金融商品
@@ -476,8 +347,9 @@ impl InstrumentRepository {
                 is_active = $9,
                 trading_start_date = $10,
                 trading_end_date = $11,
-                updated_at = $12
-            WHERE instrument_id = $13
+                attributes = $12,
+                updated_at = $13
+            WHERE instrument_id = $14
             "#,
             instrument.symbol,
             instrument.exchange_id,
@@ -490,6 +362,7 @@ impl InstrumentRepository {
             instrument.is_active,
             instrument.trading_start_date,
             instrument.trading_end_date,
+            instrument.attributes,
             now,
             instrument_id
         )
@@ -503,138 +376,107 @@ impl InstrumentRepository {
     }
 
     /// 更新股票特定屬性
-    pub async fn update_stock(&self, stock: StockInsert) -> Result<Stock> {
-        let result = sqlx::query_as!(
-            Stock,
+    pub async fn update_stock_attributes(&self, instrument_id: i32, attrs: StockAttributes) -> Result<Instrument> {
+        // 获取当前金融商品
+        let mut instrument = self.get_by_id(instrument_id)
+            .await?
+            .ok_or_else(|| anyhow!("Instrument not found"))?;
+        
+        // 確保是股票類型
+        if instrument.instrument_type != "STOCK" {
+            return Err(anyhow!("Instrument is not a stock"));
+        }
+        
+        // 設置新的屬性
+        instrument.set_stock_attributes(attrs)?;
+        
+        // 更新屬性
+        let now = Utc::now();
+        sqlx::query!(
             r#"
-            UPDATE stock
-            SET 
-                sector = $1,
-                industry = $2,
-                market_cap = $3,
-                shares_outstanding = $4,
-                free_float = $5,
-                listing_date = $6,
-                delisting_date = $7,
-                dividend_yield = $8,
-                pe_ratio = $9
-            WHERE instrument_id = $10
-            RETURNING 
-                instrument_id, sector, industry, market_cap, 
-                shares_outstanding, free_float, listing_date, delisting_date,
-                dividend_yield, pe_ratio
+            UPDATE instrument
+            SET attributes = $1, updated_at = $2
+            WHERE instrument_id = $3
             "#,
-            stock.sector,
-            stock.industry,
-            stock.market_cap,
-            stock.shares_outstanding,
-            stock.free_float,
-            stock.listing_date,
-            stock.delisting_date,
-            stock.dividend_yield,
-            stock.pe_ratio,
-            stock.instrument_id
+            instrument.attributes,
+            now,
+            instrument_id
         )
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-
-        Ok(result)
+        
+        // 重新獲取
+        self.get_by_id(instrument_id)
+            .await?
+            .ok_or_else(|| anyhow!("Instrument not found after update"))
+    }
+    
+    /// 更新期貨特定屬性
+    pub async fn update_future_attributes(&self, instrument_id: i32, attrs: FutureAttributes) -> Result<Instrument> {
+        // 获取当前金融商品
+        let mut instrument = self.get_by_id(instrument_id)
+            .await?
+            .ok_or_else(|| anyhow!("Instrument not found"))?;
+        
+        // 確保是期貨類型
+        if instrument.instrument_type != "FUTURE" {
+            return Err(anyhow!("Instrument is not a future"));
+        }
+        
+        // 設置新的屬性
+        instrument.set_future_attributes(attrs)?;
+        
+        // 更新屬性
+        let now = Utc::now();
+        sqlx::query!(
+            r#"
+            UPDATE instrument
+            SET attributes = $1, updated_at = $2
+            WHERE instrument_id = $3
+            "#,
+            instrument.attributes,
+            now,
+            instrument_id
+        )
+        .execute(&self.pool)
+        .await?;
+        
+        // 重新獲取
+        self.get_by_id(instrument_id)
+            .await?
+            .ok_or_else(|| anyhow!("Instrument not found after update"))
     }
 
     /// 刪除金融商品
     pub async fn delete(&self, instrument_id: i32) -> Result<bool> {
-        // 取得金融商品類型 (先查詢再删除，以便刪除對應子表中的數據)
-        let instrument = self.get_by_id(instrument_id).await?;
-        
-        if let Some(instrument) = instrument {
-            // 先刪除子表中的記錄
-            match instrument.instrument_type.as_str() {
-                "STOCK" => {
-                    sqlx::query!("DELETE FROM stock WHERE instrument_id = $1", instrument_id)
-                        .execute(&self.pool)
-                        .await?;
-                }
-                "FUTURE" => {
-                    sqlx::query!("DELETE FROM future WHERE instrument_id = $1", instrument_id)
-                        .execute(&self.pool)
-                        .await?;
-                }
-                "OPTIONCONTRACT" => {
-                    sqlx::query!("DELETE FROM option_contract WHERE instrument_id = $1", instrument_id)
-                        .execute(&self.pool)
-                        .await?;
-                }
-                "FOREX" => {
-                    sqlx::query!("DELETE FROM forex WHERE instrument_id = $1", instrument_id)
-                        .execute(&self.pool)
-                        .await?;
-                }
-                "CRYPTO" => {
-                    sqlx::query!("DELETE FROM crypto WHERE instrument_id = $1", instrument_id)
-                        .execute(&self.pool)
-                        .await?;
-                }
-                _ => {}
-            }
-            
-            // 再刪除主表記錄
-            let result = sqlx::query!(
-                r#"
-                DELETE FROM instrument
-                WHERE instrument_id = $1
-                "#,
-                instrument_id
-            )
-            .execute(&self.pool)
-            .await?;
-            
-            Ok(result.rows_affected() > 0)
-        } else {
-            Ok(false)
-        }
-    }
-
-    /// 獲取股票完整視圖（包含交易所資訊）
-    pub async fn get_stock_complete(&self, instrument_id: i32) -> Result<Option<StockComplete>> {
-        let record = sqlx::query_as!(
-            StockComplete,
+        // 直接刪除金融商品記錄（所有屬性都存儲在同一個表中）
+        let result = sqlx::query!(
             r#"
-            SELECT 
-                i.instrument_id, i.symbol, i.exchange_id, i.instrument_type, i.name,
-                i.description, i.currency, i.tick_size, i.lot_size, i.is_active,
-                i.trading_start_date, i.trading_end_date, i.created_at, i.updated_at,
-                e.code as exchange_code, e.name as exchange_name, e.country as exchange_country,
-                s.sector, s.industry, s.market_cap, s.shares_outstanding, s.free_float,
-                s.listing_date, s.delisting_date, s.dividend_yield, s.pe_ratio
-            FROM instrument i
-            JOIN exchange e ON i.exchange_id = e.exchange_id
-            JOIN stock s ON i.instrument_id = s.instrument_id
-            WHERE i.instrument_id = $1
+            DELETE FROM instrument
+            WHERE instrument_id = $1
             "#,
             instrument_id
         )
-        .fetch_optional(&self.pool)
+        .execute(&self.pool)
         .await?;
-
-        Ok(record)
+        
+        Ok(result.rows_affected() > 0)
     }
 
-    /// 獲取期貨完整視圖（包含交易所資訊）
-    pub async fn get_future_complete(&self, instrument_id: i32) -> Result<Option<FutureComplete>> {
+    /// 獲取金融商品和交易所資訊
+    pub async fn get_instrument_with_exchange(&self, instrument_id: i32) -> Result<Option<InstrumentWithExchange>> {
         let record = sqlx::query_as!(
-            FutureComplete,
+            InstrumentWithExchange,
             r#"
             SELECT 
                 i.instrument_id, i.symbol, i.exchange_id, i.instrument_type, i.name,
                 i.description, i.currency, i.tick_size, i.lot_size, i.is_active,
-                i.trading_start_date, i.trading_end_date, i.created_at, i.updated_at,
-                e.code as exchange_code, e.name as exchange_name, e.country as exchange_country,
-                f.underlying_asset, f.contract_size, f.contract_unit,
-                f.delivery_date, f.first_notice_date, f.last_trading_date,
-                f.settlement_type, f.initial_margin, f.maintenance_margin, f.price_quotation
+                i.trading_start_date, i.trading_end_date, 
+                i.attributes as "attributes: Json<serde_json::Value>",
+                i.created_at, i.updated_at,
+                e.code as exchange_code, e.name as exchange_name, e.country as exchange_country
             FROM instrument i
             JOIN exchange e ON i.exchange_id = e.exchange_id
-            JOIN future f ON i.instrument_id = f.instrument_id
             WHERE i.instrument_id = $1
             "#,
             instrument_id

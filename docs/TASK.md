@@ -67,7 +67,7 @@
 
 ## 存儲模組 (storage)
 
-- 📋 🔴 實現金融商品儲存庫（`repository/instrument.rs`）`[sqlx, tokio]` ⚡(依賴任務6)
+- ✅ 實現金融商品儲存庫（`repository/instrument.rs`）`[sqlx, tokio]` ⚡(依賴任務6)
   - 實現 `PgInstrumentRepository`
   - 提供商品基本信息存取
 

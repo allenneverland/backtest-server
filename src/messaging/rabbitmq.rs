@@ -2,19 +2,19 @@
 // 提供與 RabbitMQ 通訊的基礎設施
 
 // 導出子模組
-pub mod connection;
 pub mod broker;
 pub mod client;
+pub mod connection;
 pub mod consumer;
+pub mod error;
 pub mod publisher;
 pub mod rpc;
-pub mod error;
 
 // 重新導出常用結構
-pub use connection::{RabbitMQConnectionManager, RabbitMQConnectionConfig};
-pub use broker::{RabbitMQBroker, MessageHandler};
-pub use client::{RabbitMQClient};
-pub use consumer::{RabbitMQConsumer, MessageConsumerHandler, ConsumerConfig};
-pub use publisher::{RabbitMQPublisher, PublisherConfig};
-pub use rpc::{RpcClient, RpcServer, RpcHandler, RpcClientConfig, RpcServerConfig};
-pub use error::RabbitMQError; 
+pub use broker::{MessageHandler, RabbitMQBroker};
+pub use client::RabbitMQClient;
+pub use connection::{RabbitMQConnectionConfig, RabbitMQConnectionManager};
+pub use consumer::{ConsumerConfig, MessageConsumerHandler, RabbitMQConsumer};
+pub use error::RabbitMQError;
+pub use publisher::{PublisherConfig, RabbitMQPublisher};
+pub use rpc::{RpcClient, RpcClientConfig, RpcHandler, RpcServer, RpcServerConfig};

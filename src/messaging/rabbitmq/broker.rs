@@ -1,24 +1,23 @@
+use anyhow;
 use std::collections::HashMap;
 use std::sync::Arc;
-use anyhow;
 
+use async_trait::async_trait;
+use futures::StreamExt;
 use lapin::{
-    Channel, Consumer,
     options::{
-        BasicAckOptions, BasicConsumeOptions, BasicPublishOptions,
-        ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions,
+        BasicAckOptions, BasicConsumeOptions, BasicPublishOptions, ExchangeDeclareOptions,
+        QueueBindOptions, QueueDeclareOptions,
     },
     types::FieldTable,
-    BasicProperties,
+    BasicProperties, Channel, Consumer,
 };
+use serde::Serialize;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
-use serde::Serialize;
-use futures::StreamExt;
-use async_trait::async_trait;
 
-use crate::messaging::rabbitmq::connection::{RabbitMQConnectionError, RabbitMQConnectionManager};
 use crate::messaging::protocol::Message;
+use crate::messaging::rabbitmq::connection::{RabbitMQConnectionError, RabbitMQConnectionManager};
 use thiserror::Error;
 
 type LapinError = lapin::Error;
@@ -28,16 +27,16 @@ type LapinError = lapin::Error;
 pub enum BrokerError {
     #[error("Connection error: {0}")]
     Connection(#[from] RabbitMQConnectionError),
-    
+
     #[error("Lapin error: {0}")]
     Lapin(#[from] LapinError),
-    
+
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
-    
+
     #[error("Handler not found for routing key: {0}")]
     HandlerNotFound(String),
-    
+
     #[error("Handler error: {0}")]
     Handler(#[from] anyhow::Error),
 }
@@ -45,7 +44,11 @@ pub enum BrokerError {
 /// 消息處理器特徵
 #[async_trait]
 pub trait MessageHandler: Send + Sync {
-    async fn handle(&self, payload: &[u8], properties: &BasicProperties) -> Result<Option<Vec<u8>>, anyhow::Error>;
+    async fn handle(
+        &self,
+        payload: &[u8],
+        properties: &BasicProperties,
+    ) -> Result<Option<Vec<u8>>, anyhow::Error>;
 }
 
 /// RabbitMQ 代理
@@ -62,14 +65,14 @@ impl RabbitMQBroker {
             handlers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
-    
+
     /// 初始化必要的交換機和佇列
     pub async fn initialize(&self) -> Result<(), BrokerError> {
         debug!("Initializing RabbitMQ broker");
-        
+
         let conn = self.connection_manager.get_connection().await?;
         let channel = conn.create_channel().await?;
-        
+
         // 宣告交換機
         for exchange_name in &["backtest.direct", "backtest.topic", "backtest.events"] {
             let exchange_type = if exchange_name.contains("direct") {
@@ -77,119 +80,162 @@ impl RabbitMQBroker {
             } else {
                 lapin::ExchangeKind::Topic
             };
-            
+
             debug!("Declaring exchange: {}", exchange_name);
-            
-            channel.exchange_declare(
-                exchange_name,
-                exchange_type,
-                ExchangeDeclareOptions {
-                    durable: true,
-                    ..ExchangeDeclareOptions::default()
-                },
-                FieldTable::default(),
-            ).await?;
+
+            channel
+                .exchange_declare(
+                    exchange_name,
+                    exchange_type,
+                    ExchangeDeclareOptions {
+                        durable: true,
+                        ..ExchangeDeclareOptions::default()
+                    },
+                    FieldTable::default(),
+                )
+                .await?;
         }
-        
+
         info!("RabbitMQ broker initialized");
-        
+
         Ok(())
     }
-    
+
     /// 註冊消息處理器
-    pub async fn register_handler(&self, queue_name: &str, routing_key: &str, handler: Arc<dyn MessageHandler>) -> Result<(), BrokerError> {
-        debug!("Registering handler for queue: {}, routing_key: {}", queue_name, routing_key);
-        
+    pub async fn register_handler(
+        &self,
+        queue_name: &str,
+        routing_key: &str,
+        handler: Arc<dyn MessageHandler>,
+    ) -> Result<(), BrokerError> {
+        debug!(
+            "Registering handler for queue: {}, routing_key: {}",
+            queue_name, routing_key
+        );
+
         // 存儲處理器
         let mut handlers = self.handlers.write().await;
         handlers.insert(routing_key.to_string(), handler);
-        
-        info!("Handler registered for queue: {}, routing_key: {}", queue_name, routing_key);
-        
+
+        info!(
+            "Handler registered for queue: {}, routing_key: {}",
+            queue_name, routing_key
+        );
+
         Ok(())
     }
-    
+
     /// 啟動消息監聽
-    pub async fn start_consuming(&self, queue_name: &str, exchange_name: &str, routing_key: &str) -> Result<(), BrokerError> {
-        debug!("Starting consumer for queue: {}, routing_key: {}", queue_name, routing_key);
-        
+    pub async fn start_consuming(
+        &self,
+        queue_name: &str,
+        exchange_name: &str,
+        routing_key: &str,
+    ) -> Result<(), BrokerError> {
+        debug!(
+            "Starting consumer for queue: {}, routing_key: {}",
+            queue_name, routing_key
+        );
+
         let conn = self.connection_manager.get_connection().await?;
         let channel = conn.create_channel().await?;
-        
+
         // 宣告佇列
-        channel.queue_declare(
-            queue_name,
-            QueueDeclareOptions {
-                durable: true,
-                ..QueueDeclareOptions::default()
-            },
-            FieldTable::default(),
-        ).await?;
-        
+        channel
+            .queue_declare(
+                queue_name,
+                QueueDeclareOptions {
+                    durable: true,
+                    ..QueueDeclareOptions::default()
+                },
+                FieldTable::default(),
+            )
+            .await?;
+
         // 綁定佇列到交換機
-        channel.queue_bind(
-            queue_name,
-            exchange_name,
-            routing_key,
-            QueueBindOptions::default(),
-            FieldTable::default(),
-        ).await?;
-        
+        channel
+            .queue_bind(
+                queue_name,
+                exchange_name,
+                routing_key,
+                QueueBindOptions::default(),
+                FieldTable::default(),
+            )
+            .await?;
+
         // 創建消費者
-        let consumer = channel.basic_consume(
-            queue_name,
-            &format!("consumer-{}", routing_key),
-            BasicConsumeOptions::default(),
-            FieldTable::default(),
-        ).await?;
-        
-        self.handle_consumer(consumer, channel, routing_key.to_string()).await;
-        
-        info!("Consumer started for queue: {}, routing_key: {}", queue_name, routing_key);
-        
+        let consumer = channel
+            .basic_consume(
+                queue_name,
+                &format!("consumer-{}", routing_key),
+                BasicConsumeOptions::default(),
+                FieldTable::default(),
+            )
+            .await?;
+
+        self.handle_consumer(consumer, channel, routing_key.to_string())
+            .await;
+
+        info!(
+            "Consumer started for queue: {}, routing_key: {}",
+            queue_name, routing_key
+        );
+
         Ok(())
     }
-    
+
     /// 處理消費者
     async fn handle_consumer(&self, mut consumer: Consumer, channel: Channel, routing_key: String) {
         let handlers = self.handlers.clone();
-        
+
         tokio::spawn(async move {
             debug!("Consumer handler started for routing_key: {}", routing_key);
-            
+
             while let Some(delivery) = consumer.next().await {
                 match delivery {
                     Ok(delivery) => {
                         let delivery_tag = delivery.delivery_tag;
                         let routing_key = delivery.routing_key.to_string();
-                        
+
                         debug!("Received message with routing_key: {}", routing_key);
-                        
+
                         // 尋找處理器
                         let handler = {
                             let handlers = handlers.read().await;
                             handlers.get(&routing_key).cloned()
                         };
-                        
+
                         if let Some(handler) = handler {
                             match handler.handle(&delivery.data, &delivery.properties).await {
                                 Ok(Some(response_data)) => {
                                     // 如果有回應且有回應佇列，發送回應
-                                    let reply_to = delivery.properties.reply_to().as_ref().map(|v| v.to_string());
-                                    let correlation_id = delivery.properties.correlation_id().as_ref().map(|v| v.to_string());
-                                    
+                                    let reply_to = delivery
+                                        .properties
+                                        .reply_to()
+                                        .as_ref()
+                                        .map(|v| v.to_string());
+                                    let correlation_id = delivery
+                                        .properties
+                                        .correlation_id()
+                                        .as_ref()
+                                        .map(|v| v.to_string());
+
                                     if let Some(_reply_to_str) = reply_to {
                                         if let Some(_correlation_id_str) = correlation_id {
                                             debug!("Sending response to {}", _reply_to_str);
-                                            
-                                            if let Err(err) = channel.basic_publish(
-                                                "",  // 預設交換機
-                                                &_reply_to_str,
-                                                BasicPublishOptions::default(),
-                                                &response_data,
-                                                BasicProperties::default()
-                                                    .with_correlation_id(_correlation_id_str.into()),
-                                            ).await {
+
+                                            if let Err(err) = channel
+                                                .basic_publish(
+                                                    "", // 預設交換機
+                                                    &_reply_to_str,
+                                                    BasicPublishOptions::default(),
+                                                    &response_data,
+                                                    BasicProperties::default().with_correlation_id(
+                                                        _correlation_id_str.into(),
+                                                    ),
+                                                )
+                                                .await
+                                            {
                                                 error!("Failed to send response: {}", err);
                                             }
                                         }
@@ -201,11 +247,19 @@ impl RabbitMQBroker {
                                 }
                                 Err(err) => {
                                     error!("Error handling message: {}", err);
-                                    
+
                                     // 可以選擇發送錯誤回應
-                                    let reply_to = delivery.properties.reply_to().as_ref().map(|v| v.to_string());
-                                    let correlation_id = delivery.properties.correlation_id().as_ref().map(|v| v.to_string());
-                                    
+                                    let reply_to = delivery
+                                        .properties
+                                        .reply_to()
+                                        .as_ref()
+                                        .map(|v| v.to_string());
+                                    let correlation_id = delivery
+                                        .properties
+                                        .correlation_id()
+                                        .as_ref()
+                                        .map(|v| v.to_string());
+
                                     if let Some(_reply_to_str) = reply_to {
                                         if let Some(_correlation_id_str) = correlation_id {
                                             // 構建錯誤回應...
@@ -216,9 +270,12 @@ impl RabbitMQBroker {
                         } else {
                             error!("Handler not found for routing key: {}", routing_key);
                         }
-                        
+
                         // 確認消息處理完成
-                        if let Err(err) = channel.basic_ack(delivery_tag, BasicAckOptions::default()).await {
+                        if let Err(err) = channel
+                            .basic_ack(delivery_tag, BasicAckOptions::default())
+                            .await
+                        {
                             error!("Failed to acknowledge message: {}", err);
                         }
                     }
@@ -227,36 +284,46 @@ impl RabbitMQBroker {
                     }
                 }
             }
-            
+
             debug!("Consumer handler stopped for routing_key: {}", routing_key);
         });
     }
-    
+
     /// 發布消息
-    pub async fn publish<T: Serialize>(&self, exchange: &str, routing_key: &str, payload: &T) -> Result<(), BrokerError> {
-        debug!("Publishing message to exchange: {}, routing_key: {}", exchange, routing_key);
-        
+    pub async fn publish<T: Serialize>(
+        &self,
+        exchange: &str,
+        routing_key: &str,
+        payload: &T,
+    ) -> Result<(), BrokerError> {
+        debug!(
+            "Publishing message to exchange: {}, routing_key: {}",
+            exchange, routing_key
+        );
+
         let conn = self.connection_manager.get_connection().await?;
         let channel = conn.create_channel().await?;
-        
+
         // 序列化消息
         let message = Message::new(routing_key, payload);
         let data = serde_json::to_vec(&message)?;
-        
+
         // 發布消息
-        channel.basic_publish(
-            exchange,
-            routing_key,
-            BasicPublishOptions::default(),
-            &data,
-            BasicProperties::default(),
-        ).await?;
-        
+        channel
+            .basic_publish(
+                exchange,
+                routing_key,
+                BasicPublishOptions::default(),
+                &data,
+                BasicProperties::default(),
+            )
+            .await?;
+
         debug!("Message published successfully");
-        
+
         Ok(())
     }
-    
+
     /// 檢查代理健康狀態
     pub async fn check_health(&self) -> Result<(), BrokerError> {
         self.connection_manager.check_health().await?;

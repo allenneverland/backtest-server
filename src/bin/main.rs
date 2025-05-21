@@ -1,9 +1,9 @@
+use clap::{Arg, Command};
 use std::error::Error;
+use std::time::Duration;
 use tokio::signal;
 use tokio::time::sleep;
-use std::time::Duration;
-use clap::{Arg, Command};
-use tracing::{info, error, Level};
+use tracing::{error, info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use backtest_server::config::loader::ConfigLoader;
@@ -35,7 +35,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .get_matches();
 
     // 設置日誌級別
-    let log_level = match matches.get_one::<String>("log-level").map(|s| s.as_str()).unwrap_or("info") {
+    let log_level = match matches
+        .get_one::<String>("log-level")
+        .map(|s| s.as_str())
+        .unwrap_or("info")
+    {
         "trace" => Level::TRACE,
         "debug" => Level::DEBUG,
         "info" => Level::INFO,
@@ -45,22 +49,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // 初始化日誌
-    let subscriber = FmtSubscriber::builder()
-        .with_max_level(log_level)
-        .finish();
+    let subscriber = FmtSubscriber::builder().with_max_level(log_level).finish();
     tracing::subscriber::set_global_default(subscriber)?;
 
     // 載入配置
     let config_path = matches.get_one::<String>("config").unwrap();
     info!("載入配置文件: {}", config_path);
-    
+
     let config = ConfigLoader::load_current()
         .and_then(|config| config.try_deserialize::<ApplicationConfig>())
         .map_err(|e| {
             error!("載入配置失敗: {}", e);
             e
         })?;
-    
+
     info!("配置載入成功");
 
     // 建立伺服器
@@ -76,11 +78,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         })?;
 
     // 啟動伺服器
-    server.start().await
-        .map_err(|e| {
-            error!("伺服器啟動失敗: {}", e);
-            e
-        })?;
+    server.start().await.map_err(|e| {
+        error!("伺服器啟動失敗: {}", e);
+        e
+    })?;
 
     info!("伺服器已啟動，按 Ctrl+C 停止");
 

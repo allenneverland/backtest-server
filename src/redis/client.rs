@@ -1,10 +1,10 @@
-use std::time::Duration;
+use crate::config::types::RedisConfig;
 use async_trait::async_trait;
-use redis::{AsyncCommands, RedisError, Client as RedisClient};
+use redis::{AsyncCommands, Client as RedisClient, RedisError};
+use std::time::Duration;
 use thiserror::Error;
 use tokio::time::timeout;
 use tracing::{debug, error, warn};
-use crate::config::types::RedisConfig;
 
 /// Redis客戶端錯誤
 #[derive(Error, Debug)]
@@ -35,23 +35,36 @@ pub enum RedisClientError {
 pub trait RedisOperations: Send + Sync + 'static {
     /// 設置鍵值對
     async fn set<K: AsRef<str> + Send + Sync + Clone>(
-        &self, 
-        key: K, 
-        value: String, 
-        expiry_secs: Option<u64>
+        &self,
+        key: K,
+        value: String,
+        expiry_secs: Option<u64>,
     ) -> Result<(), RedisClientError>;
 
     /// 獲取鍵對應的值
-    async fn get<K: AsRef<str> + Send + Sync + Clone>(&self, key: K) -> Result<Option<String>, RedisClientError>;
+    async fn get<K: AsRef<str> + Send + Sync + Clone>(
+        &self,
+        key: K,
+    ) -> Result<Option<String>, RedisClientError>;
 
     /// 刪除鍵
-    async fn delete<K: AsRef<str> + Send + Sync + Clone>(&self, key: K) -> Result<bool, RedisClientError>;
+    async fn delete<K: AsRef<str> + Send + Sync + Clone>(
+        &self,
+        key: K,
+    ) -> Result<bool, RedisClientError>;
 
     /// 檢查鍵是否存在
-    async fn exists<K: AsRef<str> + Send + Sync + Clone>(&self, key: K) -> Result<bool, RedisClientError>;
+    async fn exists<K: AsRef<str> + Send + Sync + Clone>(
+        &self,
+        key: K,
+    ) -> Result<bool, RedisClientError>;
 
     /// 設置鍵的過期時間
-    async fn expire<K: AsRef<str> + Send + Sync + Clone>(&self, key: K, seconds: u64) -> Result<bool, RedisClientError>;
+    async fn expire<K: AsRef<str> + Send + Sync + Clone>(
+        &self,
+        key: K,
+        seconds: u64,
+    ) -> Result<bool, RedisClientError>;
 
     /// 執行PING命令
     async fn ping(&self) -> Result<String, RedisClientError>;
@@ -66,33 +79,30 @@ pub struct Client {
 impl Client {
     /// 創建新的Redis客戶端
     pub fn new(config: RedisConfig) -> Result<Self, RedisClientError> {
-        let client = RedisClient::open(config.url.clone())
-            .map_err(RedisClientError::ConnectionError)?;
+        let client =
+            RedisClient::open(config.url.clone()).map_err(RedisClientError::ConnectionError)?;
 
-        Ok(Self {
-            client,
-            config,
-        })
+        Ok(Self { client, config })
     }
 
     /// 建立異步連接
-    pub async fn get_async_connection(&self) -> Result<redis::aio::MultiplexedConnection, RedisClientError> {
+    pub async fn get_async_connection(
+        &self,
+    ) -> Result<redis::aio::MultiplexedConnection, RedisClientError> {
         let connect_timeout = Duration::from_secs(self.config.connection_timeout_secs);
 
         let connection_future = self.client.get_multiplexed_async_connection();
         match timeout(connect_timeout, connection_future).await {
-            Ok(result) => {
-                match result {
-                    Ok(conn) => {
-                        debug!("成功建立Redis連接");
-                        Ok(conn)
-                    }
-                    Err(err) => {
-                        error!("無法建立Redis連接: {}", err);
-                        Err(RedisClientError::ConnectionError(err))
-                    }
+            Ok(result) => match result {
+                Ok(conn) => {
+                    debug!("成功建立Redis連接");
+                    Ok(conn)
                 }
-            }
+                Err(err) => {
+                    error!("無法建立Redis連接: {}", err);
+                    Err(RedisClientError::ConnectionError(err))
+                }
+            },
             Err(_) => {
                 error!("Redis連接超時 ({}秒)", self.config.connection_timeout_secs);
                 Err(RedisClientError::TimeoutError(format!(
@@ -118,7 +128,9 @@ impl Client {
     async fn with_retry_connection<F, Fut, T>(&self, operation: F) -> Result<T, RedisClientError>
     where
         F: FnOnce(redis::aio::MultiplexedConnection) -> Fut + Send + Sync + Clone,
-        Fut: std::future::Future<Output = Result<(redis::aio::MultiplexedConnection, T), RedisClientError>> + Send,
+        Fut: std::future::Future<
+                Output = Result<(redis::aio::MultiplexedConnection, T), RedisClientError>,
+            > + Send,
         T: Send,
     {
         let mut attempts = 0;
@@ -161,34 +173,31 @@ impl RedisOperations for Client {
     ) -> Result<(), RedisClientError> {
         let key_clone = key.clone();
         let value_clone = value.clone();
-        
+
         self.with_retry_connection(move |mut conn| {
             let key = key_clone.clone();
             let value = value_clone.clone();
             let expiry = expiry_secs;
-            
+
             async move {
                 debug!("Setting Redis key: {}", key.as_ref());
-                
+
                 // 處理可能的過期時間
                 let result = if let Some(seconds) = expiry {
                     // 設置帶過期時間的鍵
                     let mut cmd = redis::cmd("SET");
-                    cmd.arg(key.as_ref())
-                       .arg(value)
-                       .arg("EX")
-                       .arg(seconds);
-                    
+                    cmd.arg(key.as_ref()).arg(value).arg("EX").arg(seconds);
+
                     let result: Result<(), RedisError> = cmd.query_async(&mut conn).await;
                     result
                 } else {
                     // 設置不帶過期時間的鍵
                     match conn.set::<_, _, ()>(key.as_ref(), value).await {
                         Ok(_) => Ok(()),
-                        Err(err) => Err(err)
+                        Err(err) => Err(err),
                     }
                 };
-                
+
                 match result {
                     Ok(_) => Ok((conn, ())),
                     Err(err) => {
@@ -201,15 +210,18 @@ impl RedisOperations for Client {
         .await
     }
 
-    async fn get<K: AsRef<str> + Send + Sync + Clone>(&self, key: K) -> Result<Option<String>, RedisClientError> {
+    async fn get<K: AsRef<str> + Send + Sync + Clone>(
+        &self,
+        key: K,
+    ) -> Result<Option<String>, RedisClientError> {
         let key_clone = key.clone();
-        
+
         self.with_retry_connection(move |mut conn| {
             let key = key_clone.clone();
-            
+
             async move {
                 debug!("Getting Redis key: {}", key.as_ref());
-                
+
                 let fut = conn.get::<_, Option<String>>(key.as_ref());
                 match fut.await {
                     Ok(value) => Ok((conn, value)),
@@ -223,15 +235,18 @@ impl RedisOperations for Client {
         .await
     }
 
-    async fn delete<K: AsRef<str> + Send + Sync + Clone>(&self, key: K) -> Result<bool, RedisClientError> {
+    async fn delete<K: AsRef<str> + Send + Sync + Clone>(
+        &self,
+        key: K,
+    ) -> Result<bool, RedisClientError> {
         let key_clone = key.clone();
-        
+
         self.with_retry_connection(move |mut conn| {
             let key = key_clone.clone();
-            
+
             async move {
                 debug!("Deleting Redis key: {}", key.as_ref());
-                
+
                 let fut = conn.del::<_, bool>(key.as_ref());
                 match fut.await {
                     Ok(value) => Ok((conn, value)),
@@ -245,15 +260,18 @@ impl RedisOperations for Client {
         .await
     }
 
-    async fn exists<K: AsRef<str> + Send + Sync + Clone>(&self, key: K) -> Result<bool, RedisClientError> {
+    async fn exists<K: AsRef<str> + Send + Sync + Clone>(
+        &self,
+        key: K,
+    ) -> Result<bool, RedisClientError> {
         let key_clone = key.clone();
-        
+
         self.with_retry_connection(move |mut conn| {
             let key = key_clone.clone();
-            
+
             async move {
                 debug!("Checking if Redis key exists: {}", key.as_ref());
-                
+
                 let fut = conn.exists::<_, bool>(key.as_ref());
                 match fut.await {
                     Ok(exists) => Ok((conn, exists)),
@@ -267,15 +285,23 @@ impl RedisOperations for Client {
         .await
     }
 
-    async fn expire<K: AsRef<str> + Send + Sync + Clone>(&self, key: K, seconds: u64) -> Result<bool, RedisClientError> {
+    async fn expire<K: AsRef<str> + Send + Sync + Clone>(
+        &self,
+        key: K,
+        seconds: u64,
+    ) -> Result<bool, RedisClientError> {
         let key_clone = key.clone();
-        
+
         self.with_retry_connection(move |mut conn| {
             let key = key_clone.clone();
-            
+
             async move {
-                debug!("Setting expiry for Redis key: {}, seconds: {}", key.as_ref(), seconds);
-                
+                debug!(
+                    "Setting expiry for Redis key: {}, seconds: {}",
+                    key.as_ref(),
+                    seconds
+                );
+
                 let fut = conn.expire::<_, bool>(key.as_ref(), seconds as i64);
                 match fut.await {
                     Ok(success) => Ok((conn, success)),
@@ -292,9 +318,10 @@ impl RedisOperations for Client {
     async fn ping(&self) -> Result<String, RedisClientError> {
         self.with_retry_connection(|mut conn| async move {
             debug!("Pinging Redis server");
-            
+
             // 使用 cmd 直接執行 PING 指令
-            let result: Result<String, RedisError> = redis::cmd("PING").query_async(&mut conn).await;
+            let result: Result<String, RedisError> =
+                redis::cmd("PING").query_async(&mut conn).await;
             match result {
                 Ok(pong) => Ok((conn, pong)),
                 Err(err) => {
@@ -327,7 +354,8 @@ mod tests {
     #[tokio::test]
     async fn test_redis_operations() {
         // 跳過測試，除非環境中有Redis可用
-        let redis_available = std::env::var("REDIS_TEST_AVAILABLE").unwrap_or_else(|_| "false".to_string());
+        let redis_available =
+            std::env::var("REDIS_TEST_AVAILABLE").unwrap_or_else(|_| "false".to_string());
         if redis_available != "true" {
             println!("跳過Redis測試 - 無Redis環境可用");
             return;
@@ -337,12 +365,18 @@ mod tests {
         let client = Client::new(config).expect("無法創建Redis客戶端");
 
         // 測試SET和GET
-        client.set("test_key", "test_value".to_string(), None).await.expect("SET失敗");
+        client
+            .set("test_key", "test_value".to_string(), None)
+            .await
+            .expect("SET失敗");
         let value = client.get("test_key").await.expect("GET失敗");
         assert_eq!(value, Some("test_value".to_string()));
 
         // 測試帶過期時間的SET
-        client.set("test_expire_key", "test_expire_value".to_string(), Some(1)).await.expect("SET EX失敗");
+        client
+            .set("test_expire_key", "test_expire_value".to_string(), Some(1))
+            .await
+            .expect("SET EX失敗");
         let value = client.get("test_expire_key").await.expect("GET失敗");
         assert_eq!(value, Some("test_expire_value".to_string()));
 
@@ -363,4 +397,4 @@ mod tests {
         let pong = client.ping().await.expect("PING失敗");
         assert_eq!(pong, "PONG");
     }
-} 
+}

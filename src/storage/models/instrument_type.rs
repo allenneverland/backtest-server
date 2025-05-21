@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::error::Error;
 use sqlx::encode::IsNull;
+use std::error::Error;
+use std::fmt;
 
 /// 金融商品類型枚舉
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -51,8 +51,11 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for InstrumentType {
 }
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for InstrumentType {
-    fn encode_by_ref(&self, buf: &mut sqlx::postgres::PgArgumentBuffer) -> Result<IsNull, Box<dyn Error + Send + Sync>> {
+    fn encode_by_ref(
+        &self,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
+    ) -> Result<IsNull, Box<dyn Error + Send + Sync>> {
         let s = self.to_string();
         <String as sqlx::Encode<sqlx::Postgres>>::encode(s, buf)
     }
-} 
+}

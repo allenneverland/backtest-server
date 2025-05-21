@@ -1,6 +1,6 @@
 use anyhow::Result;
-use tracing::info;
 use sqlx::{migrate::Migrator, PgPool};
+use tracing::info;
 
 // 靜態嵌入遷移目錄（此目錄應放在專案根目錄）
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");

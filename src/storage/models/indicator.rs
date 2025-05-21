@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
-use sqlx::types::Json;
 use serde::{Deserialize, Serialize};
+use sqlx::types::Json;
 
 /// 技術指標定義模型
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -42,4 +42,4 @@ pub struct InstrumentDailyIndicatorInsert {
     pub indicator_id: i32,
     pub parameters: Json<serde_json::Value>,
     pub values: Json<serde_json::Value>,
-} 
+}

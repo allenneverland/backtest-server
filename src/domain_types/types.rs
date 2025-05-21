@@ -1,9 +1,9 @@
 //! 基本市場數據類型定義
 
-use std::fmt;
-use serde::{Serialize, Deserialize};
-use std::time::Duration as StdDuration;
 use polars::prelude::Duration as PolarsDuration;
+use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::time::Duration as StdDuration;
 use thiserror::Error;
 
 /// 金融資產類型
@@ -57,14 +57,14 @@ impl Frequency {
             Frequency::Month => StdDuration::from_secs(2592000), // 簡化，使用30天
         }
     }
-    
+
     /// 轉換為表示該頻率的 Polars Duration
     pub fn to_duration(&self) -> PolarsDuration {
         match self {
             Frequency::Tick => PolarsDuration::new(0),
-            Frequency::Second => PolarsDuration::new(1),  // seconds
+            Frequency::Second => PolarsDuration::new(1), // seconds
             Frequency::Minute => PolarsDuration::new(60), // 60 seconds
-            Frequency::FiveMinutes => PolarsDuration::new(300), // 300 seconds 
+            Frequency::FiveMinutes => PolarsDuration::new(300), // 300 seconds
             Frequency::FifteenMinutes => PolarsDuration::new(900), // 900 seconds
             Frequency::Hour => PolarsDuration::new(3600), // 3600 seconds
             Frequency::Day => PolarsDuration::new(86400), // 86400 seconds
@@ -72,7 +72,7 @@ impl Frequency {
             Frequency::Month => PolarsDuration::new(2592000), // 2592000 seconds (30 days)
         }
     }
-    
+
     /// 轉換為 Polars 可識別的時間字串
     pub fn to_polars_duration_string(&self) -> String {
         match self {
@@ -92,8 +92,8 @@ impl Frequency {
 /// 交易方向（多/空）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Direction {
-    Long,   // 做多
-    Short,  // 做空
+    Long,  // 做多
+    Short, // 做空
 }
 
 impl fmt::Display for Direction {
@@ -108,15 +108,15 @@ impl fmt::Display for Direction {
 /// 訂單類型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum OrderType {
-    Market,             // 市價單
-    Limit,              // 限價單
-    Stop,               // 止損單
-    StopLimit,          // 止損限價單
-    TrailingStop,       // 追蹤止損單
-    FillOrKill,         // 全部成交或取消
-    ImmediateOrCancel,  // 立即成交或取消
-    GoodTillCancel,     // 有效至取消
-    GoodTillDate,       // 有效至特定日期
+    Market,            // 市價單
+    Limit,             // 限價單
+    Stop,              // 止損單
+    StopLimit,         // 止損限價單
+    TrailingStop,      // 追蹤止損單
+    FillOrKill,        // 全部成交或取消
+    ImmediateOrCancel, // 立即成交或取消
+    GoodTillCancel,    // 有效至取消
+    GoodTillDate,      // 有效至特定日期
 }
 
 impl fmt::Display for OrderType {
@@ -140,31 +140,31 @@ impl fmt::Display for OrderType {
 pub enum DomainError {
     #[error("無效的資產類型: {0}")]
     InvalidAssetType(String),
-    
+
     #[error("無效的頻率: {0}")]
     InvalidFrequency(String),
-    
+
     #[error("無效的交易方向: {0}")]
     InvalidDirection(String),
-    
+
     #[error("無效的訂單類型: {0}")]
     InvalidOrderType(String),
-    
+
     #[error("無效的數據格式: {0}")]
     InvalidDataFormat(String),
-    
+
     #[error("缺少必要欄位: {0}")]
     MissingRequiredField(String),
-    
+
     #[error("數據範圍錯誤: {0}")]
     DataRangeError(String),
-    
+
     #[error("時間序列操作錯誤: {0}")]
     TimeSeriesError(String),
-    
+
     #[error("資料轉換錯誤: {0}")]
     ConversionError(String),
-    
+
     #[error("未知錯誤: {0}")]
     Unknown(String),
 }
@@ -183,7 +183,7 @@ impl ColumnName {
     pub const CLOSE: &'static str = "close";
     pub const VOLUME: &'static str = "volume";
     pub const INSTRUMENT_ID: &'static str = "instrument_id";
-    
+
     // Tick 數據相關
     pub const PRICE: &'static str = "price";
     pub const BID: &'static str = "bid";

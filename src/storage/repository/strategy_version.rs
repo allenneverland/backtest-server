@@ -1,9 +1,9 @@
+use crate::storage::models::strategy_version::*;
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
 use sqlx::PgPool;
 use std::sync::Arc;
-use crate::storage::models::strategy_version::*;
 
 /// 版本相關錯誤
 #[derive(Debug, thiserror::Error)]
@@ -29,26 +29,44 @@ pub enum VersionError {
 #[async_trait]
 pub trait StrategyVersionRepository: Send + Sync {
     /// 創建新的策略版本
-    async fn create_version(&self, version: &StrategyVersion) -> Result<StrategyVersion, VersionError>;
-    
+    async fn create_version(
+        &self,
+        version: &StrategyVersion,
+    ) -> Result<StrategyVersion, VersionError>;
+
     /// 獲取指定策略版本
-    async fn get_version_by_id(&self, version_id: i32) -> Result<Option<StrategyVersion>, VersionError>;
-    
+    async fn get_version_by_id(
+        &self,
+        version_id: i32,
+    ) -> Result<Option<StrategyVersion>, VersionError>;
+
     /// 獲取指定策略的所有版本
-    async fn get_versions_by_strategy_id(&self, strategy_id: &str) -> Result<Vec<StrategyVersion>, VersionError>;
-    
+    async fn get_versions_by_strategy_id(
+        &self,
+        strategy_id: &str,
+    ) -> Result<Vec<StrategyVersion>, VersionError>;
+
     /// 獲取指定策略的最新版本
-    async fn get_latest_version(&self, strategy_id: &str) -> Result<Option<StrategyVersion>, VersionError>;
-    
+    async fn get_latest_version(
+        &self,
+        strategy_id: &str,
+    ) -> Result<Option<StrategyVersion>, VersionError>;
+
     /// 獲取指定策略的最新穩定版本
-    async fn get_latest_stable_version(&self, strategy_id: &str) -> Result<Option<StrategyVersion>, VersionError>;
-    
+    async fn get_latest_stable_version(
+        &self,
+        strategy_id: &str,
+    ) -> Result<Option<StrategyVersion>, VersionError>;
+
     /// 更新策略版本
-    async fn update_version(&self, version_id: i32, is_stable: bool) -> Result<StrategyVersion, VersionError>;
-    
+    async fn update_version(
+        &self,
+        version_id: i32,
+        is_stable: bool,
+    ) -> Result<StrategyVersion, VersionError>;
+
     /// 刪除策略版本
     async fn delete_version(&self, version_id: i32) -> Result<bool, VersionError>;
-    
 }
 
 /// PostgreSQL 實現的策略版本儲存庫
@@ -64,33 +82,41 @@ impl PgStrategyVersionRepository {
     }
 
     // 將版本字符串轉換為可比較的數字陣列
+    #[allow(dead_code)]
     fn parse_version(&self, version: &str) -> Result<Vec<i32>, VersionError> {
         let version = version.trim_start_matches('v');
         let parts: Vec<&str> = version.split('.').collect();
-        
+
         if parts.len() != 3 {
-            return Err(VersionError::InvalidVersionFormat(
-                format!("版本號必須是三段式格式 (v1.2.3): {}", version)
-            ));
+            return Err(VersionError::InvalidVersionFormat(format!(
+                "版本號必須是三段式格式 (v1.2.3): {}",
+                version
+            )));
         }
-        
+
         let mut result = Vec::with_capacity(3);
         for part in parts {
             match part.parse::<i32>() {
                 Ok(num) => result.push(num),
-                Err(_) => return Err(VersionError::InvalidVersionFormat(
-                    format!("版本號各段必須為數字: {}", version)
-                )),
+                Err(_) => {
+                    return Err(VersionError::InvalidVersionFormat(format!(
+                        "版本號各段必須為數字: {}",
+                        version
+                    )))
+                }
             }
         }
-        
+
         Ok(result)
     }
 }
 
 #[async_trait]
 impl StrategyVersionRepository for PgStrategyVersionRepository {
-    async fn create_version(&self, version: &StrategyVersion) -> Result<StrategyVersion, VersionError> {
+    async fn create_version(
+        &self,
+        version: &StrategyVersion,
+    ) -> Result<StrategyVersion, VersionError> {
         let result = sqlx::query_as!(
             StrategyVersion,
             r#"
@@ -119,8 +145,11 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
 
         Ok(result)
     }
-    
-    async fn get_version_by_id(&self, version_id: i32) -> Result<Option<StrategyVersion>, VersionError> {
+
+    async fn get_version_by_id(
+        &self,
+        version_id: i32,
+    ) -> Result<Option<StrategyVersion>, VersionError> {
         let result = sqlx::query_as!(
             StrategyVersion,
             r#"
@@ -138,8 +167,11 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
 
         Ok(result)
     }
-    
-    async fn get_versions_by_strategy_id(&self, strategy_id: &str) -> Result<Vec<StrategyVersion>, VersionError> {
+
+    async fn get_versions_by_strategy_id(
+        &self,
+        strategy_id: &str,
+    ) -> Result<Vec<StrategyVersion>, VersionError> {
         let result = sqlx::query_as!(
             StrategyVersion,
             r#"
@@ -150,7 +182,12 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
             WHERE strategy_id = $1
             ORDER BY created_at DESC
             "#,
-            strategy_id.parse::<i32>().map_err(|_| VersionError::InvalidVersionFormat(format!("無效的策略ID格式: {}", strategy_id)))?
+            strategy_id
+                .parse::<i32>()
+                .map_err(|_| VersionError::InvalidVersionFormat(format!(
+                    "無效的策略ID格式: {}",
+                    strategy_id
+                )))?
         )
         .fetch_all(&*self.pool)
         .await
@@ -158,8 +195,11 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
 
         Ok(result)
     }
-    
-    async fn get_latest_version(&self, strategy_id: &str) -> Result<Option<StrategyVersion>, VersionError> {
+
+    async fn get_latest_version(
+        &self,
+        strategy_id: &str,
+    ) -> Result<Option<StrategyVersion>, VersionError> {
         let result = sqlx::query_as!(
             StrategyVersion,
             r#"
@@ -171,7 +211,12 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
             ORDER BY created_at DESC
             LIMIT 1
             "#,
-            strategy_id.parse::<i32>().map_err(|_| VersionError::InvalidVersionFormat(format!("無效的策略ID格式: {}", strategy_id)))?
+            strategy_id
+                .parse::<i32>()
+                .map_err(|_| VersionError::InvalidVersionFormat(format!(
+                    "無效的策略ID格式: {}",
+                    strategy_id
+                )))?
         )
         .fetch_optional(&*self.pool)
         .await
@@ -179,8 +224,11 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
 
         Ok(result)
     }
-    
-    async fn get_latest_stable_version(&self, strategy_id: &str) -> Result<Option<StrategyVersion>, VersionError> {
+
+    async fn get_latest_stable_version(
+        &self,
+        strategy_id: &str,
+    ) -> Result<Option<StrategyVersion>, VersionError> {
         let result = sqlx::query_as!(
             StrategyVersion,
             r#"
@@ -192,7 +240,12 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
             ORDER BY created_at DESC
             LIMIT 1
             "#,
-            strategy_id.parse::<i32>().map_err(|_| VersionError::InvalidVersionFormat(format!("無效的策略ID格式: {}", strategy_id)))?
+            strategy_id
+                .parse::<i32>()
+                .map_err(|_| VersionError::InvalidVersionFormat(format!(
+                    "無效的策略ID格式: {}",
+                    strategy_id
+                )))?
         )
         .fetch_optional(&*self.pool)
         .await
@@ -200,10 +253,14 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
 
         Ok(result)
     }
-    
-    async fn update_version(&self, version_id: i32, is_stable: bool) -> Result<StrategyVersion, VersionError> {
+
+    async fn update_version(
+        &self,
+        version_id: i32,
+        is_stable: bool,
+    ) -> Result<StrategyVersion, VersionError> {
         let updated_at = Utc::now();
-        
+
         let result = sqlx::query_as!(
             StrategyVersion,
             r#"
@@ -226,7 +283,7 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
 
         Ok(result)
     }
-    
+
     async fn delete_version(&self, version_id: i32) -> Result<bool, VersionError> {
         let result = sqlx::query!(
             r#"
@@ -241,5 +298,4 @@ impl StrategyVersionRepository for PgStrategyVersionRepository {
 
         Ok(result.rows_affected() > 0)
     }
-    
 }

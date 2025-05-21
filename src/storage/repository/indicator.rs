@@ -1,38 +1,53 @@
 use crate::storage::models::*;
 use crate::storage::repository::{DbExecutor, Page, PageQuery, TimeRange};
 use anyhow::Result;
+use async_trait::async_trait;
 use sqlx::PgPool;
 use std::sync::Arc;
-use async_trait::async_trait;
 
 /// 技術指標儲存庫特徵
 #[async_trait]
 pub trait IndicatorRepository: Send + Sync {
     /// 創建技術指標定義
-    async fn create_technical_indicator(&self, indicator: TechnicalIndicatorInsert) -> Result<TechnicalIndicator>;
+    async fn create_technical_indicator(
+        &self,
+        indicator: TechnicalIndicatorInsert,
+    ) -> Result<TechnicalIndicator>;
 
     /// 根據ID獲取技術指標定義
-    async fn get_technical_indicator(&self, indicator_id: i32) -> Result<Option<TechnicalIndicator>>;
+    async fn get_technical_indicator(
+        &self,
+        indicator_id: i32,
+    ) -> Result<Option<TechnicalIndicator>>;
 
     /// 根據代碼獲取技術指標定義
-    async fn get_technical_indicator_by_code(&self, code: &str) -> Result<Option<TechnicalIndicator>>;
+    async fn get_technical_indicator_by_code(
+        &self,
+        code: &str,
+    ) -> Result<Option<TechnicalIndicator>>;
 
     /// 獲取所有技術指標定義
     async fn list_technical_indicators(&self) -> Result<Vec<TechnicalIndicator>>;
 
     /// 添加商品日級指標數據
-    async fn add_instrument_daily_indicator(&self, indicator: InstrumentDailyIndicatorInsert) -> Result<()>;
-    
+    async fn add_instrument_daily_indicator(
+        &self,
+        indicator: InstrumentDailyIndicatorInsert,
+    ) -> Result<()>;
+
     /// 批量添加商品日級指標數據
-    async fn add_instrument_daily_indicators(&self, indicators: Vec<InstrumentDailyIndicatorInsert>) -> Result<()>;
+    async fn add_instrument_daily_indicators(
+        &self,
+        indicators: Vec<InstrumentDailyIndicatorInsert>,
+    ) -> Result<()>;
 
     /// 獲取商品日級指標數據
     async fn get_instrument_daily_indicators(
-        &self, 
-        instrument_id: i32, 
-        indicator_id: i32, 
+        &self,
+        instrument_id: i32,
+        indicator_id: i32,
         time_range: TimeRange,
-        page: PageQuery
+        page: PageQuery,
     ) -> Result<Page<InstrumentDailyIndicator>>;
 }
 
@@ -56,7 +71,10 @@ impl DbExecutor for PgIndicatorRepository {
 
 #[async_trait]
 impl IndicatorRepository for PgIndicatorRepository {
-    async fn create_technical_indicator(&self, indicator: TechnicalIndicatorInsert) -> Result<TechnicalIndicator> {
+    async fn create_technical_indicator(
+        &self,
+        indicator: TechnicalIndicatorInsert,
+    ) -> Result<TechnicalIndicator> {
         let result = sqlx::query_as!(
             TechnicalIndicator,
             r#"
@@ -80,7 +98,10 @@ impl IndicatorRepository for PgIndicatorRepository {
         Ok(result)
     }
 
-    async fn get_technical_indicator(&self, indicator_id: i32) -> Result<Option<TechnicalIndicator>> {
+    async fn get_technical_indicator(
+        &self,
+        indicator_id: i32,
+    ) -> Result<Option<TechnicalIndicator>> {
         let result = sqlx::query_as!(
             TechnicalIndicator,
             r#"
@@ -98,7 +119,10 @@ impl IndicatorRepository for PgIndicatorRepository {
         Ok(result)
     }
 
-    async fn get_technical_indicator_by_code(&self, code: &str) -> Result<Option<TechnicalIndicator>> {
+    async fn get_technical_indicator_by_code(
+        &self,
+        code: &str,
+    ) -> Result<Option<TechnicalIndicator>> {
         let result = sqlx::query_as!(
             TechnicalIndicator,
             r#"
@@ -133,7 +157,10 @@ impl IndicatorRepository for PgIndicatorRepository {
         Ok(results)
     }
 
-    async fn add_instrument_daily_indicator(&self, indicator: InstrumentDailyIndicatorInsert) -> Result<()> {
+    async fn add_instrument_daily_indicator(
+        &self,
+        indicator: InstrumentDailyIndicatorInsert,
+    ) -> Result<()> {
         sqlx::query!(
             r#"
             INSERT INTO instrument_daily_indicator (
@@ -154,9 +181,12 @@ impl IndicatorRepository for PgIndicatorRepository {
         Ok(())
     }
 
-    async fn add_instrument_daily_indicators(&self, indicators: Vec<InstrumentDailyIndicatorInsert>) -> Result<()> {
+    async fn add_instrument_daily_indicators(
+        &self,
+        indicators: Vec<InstrumentDailyIndicatorInsert>,
+    ) -> Result<()> {
         let mut tx = DbExecutor::get_pool(self).begin().await?;
-        
+
         for indicator in indicators {
             sqlx::query!(
                 r#"
@@ -175,20 +205,20 @@ impl IndicatorRepository for PgIndicatorRepository {
             .execute(&mut *tx)
             .await?;
         }
-        
+
         tx.commit().await?;
         Ok(())
     }
 
     async fn get_instrument_daily_indicators(
-        &self, 
-        instrument_id: i32, 
-        indicator_id: i32, 
+        &self,
+        instrument_id: i32,
+        indicator_id: i32,
         time_range: TimeRange,
-        page: PageQuery
+        page: PageQuery,
     ) -> Result<Page<InstrumentDailyIndicator>> {
         let offset = (page.page - 1) * page.page_size;
-        
+
         let indicators = sqlx::query_as!(
             InstrumentDailyIndicator,
             r#"
@@ -224,4 +254,4 @@ impl IndicatorRepository for PgIndicatorRepository {
 
         Ok(Page::new(indicators, total, page.page, page.page_size))
     }
-} 
+}

@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// 標準錯誤代碼
@@ -70,13 +70,13 @@ impl ErrorResponse {
             request_id: None,
         }
     }
-    
+
     /// 設置詳細錯誤資訊
     pub fn with_details(mut self, details: serde_json::Value) -> Self {
         self.details = Some(details);
         self
     }
-    
+
     /// 設置請求ID
     pub fn with_request_id(mut self, request_id: &str) -> Self {
         self.request_id = Some(request_id.to_string());
@@ -107,7 +107,7 @@ impl<T> SuccessResponse<T> {
             request_id: None,
         }
     }
-    
+
     /// 設置請求ID
     pub fn with_request_id(mut self, request_id: &str) -> Self {
         self.request_id = Some(request_id.to_string());
@@ -322,4 +322,4 @@ pub struct AssetInfo {
     pub price_precision: Option<u8>,
     /// 額外信息
     pub metadata: Option<serde_json::Value>,
-} 
+}

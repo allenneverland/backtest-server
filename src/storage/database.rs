@@ -1,10 +1,12 @@
+use crate::config::{self, DatabaseConfig};
 use anyhow::Result;
+use sqlx::ConnectOptions;
 use sqlx::{
-    postgres::{PgPool, PgPoolOptions, PgConnectOptions}, Postgres, pool::PoolConnection,
+    pool::PoolConnection,
+    postgres::{PgConnectOptions, PgPool, PgPoolOptions},
+    Postgres,
 };
 use tokio::sync::OnceCell;
-use crate::config::{self, DatabaseConfig};
-use sqlx::ConnectOptions;
 
 /// 全局數據庫連接池
 static DB_POOL: OnceCell<PgPool> = OnceCell::const_new();
@@ -44,7 +46,7 @@ pub async fn get_db_pool(force_init: bool) -> Result<&'static PgPool> {
         let pool = DB_POOL.get_or_init(|| async { pool }).await;
         return Ok(pool);
     }
-    
+
     Ok(DB_POOL.get().unwrap())
 }
 
@@ -58,9 +60,7 @@ pub async fn get_connection() -> Result<PoolConnection<Postgres>> {
 /// 健康檢查
 pub async fn health_check() -> Result<bool> {
     let pool = get_db_pool(false).await?;
-    sqlx::query("SELECT 1")
-        .fetch_one(pool)
-        .await?;
-    
+    sqlx::query("SELECT 1").fetch_one(pool).await?;
+
     Ok(true)
 }

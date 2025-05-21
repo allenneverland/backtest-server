@@ -1,6 +1,6 @@
-use chrono::{DateTime, Utc, NaiveDate};
-use sqlx::types::{Decimal, Json};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::types::{Decimal, Json};
 
 /// 分鐘K線數據結構
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -243,4 +243,4 @@ pub struct FinancialReport {
     pub metrics: Option<Json<serde_json::Value>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-} 
+}

@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
-use sqlx::types::Decimal;
 use serde::{Deserialize, Serialize};
+use sqlx::types::Decimal;
 
 /// 日級成交量聚合視圖模型
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -24,4 +24,4 @@ pub struct BacktestDailyReturns {
     pub daily_return: Decimal,
     pub end_of_day_value: Decimal,
     pub end_of_day_equity: Decimal,
-} 
+}

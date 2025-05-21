@@ -1,19 +1,19 @@
+pub mod aggregate;
+pub mod backtest;
 pub mod exchange;
+pub mod indicator;
 pub mod instrument;
 pub mod instrument_type;
 pub mod market_data;
 pub mod strategy;
 pub mod strategy_version;
-pub mod backtest;
-pub mod aggregate;
-pub mod indicator;
 // 重新匯出常用模型類型
+pub use backtest::BacktestDailyReturns;
+pub use backtest::*;
 pub use exchange::*;
+pub use indicator::InstrumentDailyIndicator;
 pub use instrument::*;
 pub use instrument_type::*;
 pub use market_data::*;
 pub use strategy::*;
 pub use strategy_version::*;
-pub use backtest::*;
-pub use backtest::BacktestDailyReturns;
-pub use indicator::InstrumentDailyIndicator;

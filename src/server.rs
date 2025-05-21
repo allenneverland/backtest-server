@@ -12,8 +12,8 @@ pub mod builder;
 pub mod error;
 
 // 重新導出核心組件，簡化外部使用
-pub use builder::ServerBuilder;
 pub use crate::config::types::ServerConfig;
+pub use builder::ServerBuilder;
 pub use error::{ServerError, ServerResult};
 
 /// 伺服器狀態枚舉

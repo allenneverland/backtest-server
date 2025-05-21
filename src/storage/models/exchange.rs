@@ -1,5 +1,5 @@
-use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
 /// 交易所模型
@@ -23,4 +23,4 @@ pub struct ExchangeInsert {
     pub country: String,
     pub timezone: String,
     pub operating_hours: Option<JsonValue>,
-} 
+}

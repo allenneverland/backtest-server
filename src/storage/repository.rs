@@ -2,22 +2,22 @@ use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::PgPool;
 
 // 重新導出子模塊
+pub mod aggregate;
+pub mod backtest;
+pub mod exchange;
+pub mod indicator;
 pub mod market_data;
 pub mod strategy;
-pub mod exchange;
 pub mod strategy_version;
-pub mod backtest;
-pub mod aggregate;
-pub mod indicator;
 
 // 重新導出常用類型
-pub use exchange::ExchangeRepository;
-pub use market_data::MarketDataRepository;
-pub use strategy_version::StrategyVersionRepository;
-pub use backtest::BacktestRepository;
 pub use aggregate::AggregateRepository;
+pub use backtest::BacktestRepository;
+pub use exchange::ExchangeRepository;
 pub use indicator::IndicatorRepository;
+pub use market_data::MarketDataRepository;
 pub use strategy::StrategyRepository;
+pub use strategy_version::StrategyVersionRepository;
 /// 分頁結果
 #[derive(Debug, Clone)]
 pub struct Page<T> {
@@ -80,7 +80,7 @@ impl TimeRange {
             end: Utc.from_utc_datetime(&end.and_hms_opt(23, 59, 59).unwrap()),
         }
     }
-    
+
     /// 返回一個表示無限時間範圍的 TimeRange
     pub fn all_time() -> Self {
         Self {
@@ -102,4 +102,4 @@ impl Default for TimeRange {
 /// 通用的數據庫操作特性
 pub trait DbExecutor {
     fn get_pool(&self) -> &PgPool;
-} 
+}

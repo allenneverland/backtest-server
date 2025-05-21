@@ -1,11 +1,11 @@
 use async_trait::async_trait;
-use deadpool_redis::redis::{AsyncCommands, cmd};
+use deadpool_redis::redis::{cmd, AsyncCommands};
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
 use tracing::{debug, error, warn};
 
-use crate::redis::pool::{RedisPool, RedisPoolError};
 use crate::redis::client::RedisClientError;
+use crate::redis::pool::{RedisPool, RedisPoolError};
 
 /// 快取操作錯誤
 #[derive(Error, Debug)]
@@ -66,7 +66,12 @@ pub trait CacheOperations: Send + Sync + 'static {
         K: AsRef<str> + Send + Sync;
 
     /// 從快取獲取值，如果不存在則使用提供的函數生成
-    async fn get_or_set<K, V, F, Fut>(&self, key: K, ttl_secs: Option<u64>, generator: F) -> Result<V, CacheError>
+    async fn get_or_set<K, V, F, Fut>(
+        &self,
+        key: K,
+        ttl_secs: Option<u64>,
+        generator: F,
+    ) -> Result<V, CacheError>
     where
         K: AsRef<str> + Send + Sync,
         V: DeserializeOwned + Serialize + Send + Sync,
@@ -92,15 +97,20 @@ impl<P: RedisPool> CacheManager<P> {
     }
 
     /// 設置緩存，帶過期時間
-    pub async fn set_with_ttl<K: AsRef<str>, V: Serialize>(&self, key: K, value: &V, ttl_secs: u64) -> Result<(), CacheError> {
+    pub async fn set_with_ttl<K: AsRef<str>, V: Serialize>(
+        &self,
+        key: K,
+        value: &V,
+        ttl_secs: u64,
+    ) -> Result<(), CacheError> {
         let prefixed_key = self.prefix_key(key);
         let serialized = serde_json::to_string(value)
             .map_err(|e| CacheError::SerializationError(e.to_string()))?;
-        
+
         debug!("設置緩存 [{}] 帶過期時間: {}秒", prefixed_key, ttl_secs);
-        
+
         let mut conn = self.pool.get_conn().await?;
-        
+
         // 使用標準的 Redis set 命令帶過期時間
         match cmd("SET")
             .arg(&prefixed_key)
@@ -108,13 +118,14 @@ impl<P: RedisPool> CacheManager<P> {
             .arg("EX")
             .arg(ttl_secs as u64)
             .query_async::<()>(&mut conn)
-            .await {
-                Ok(_) => Ok(()),
-                Err(e) => {
-                    error!("緩存設置失敗: {}", e);
-                    Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
-                }
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                error!("緩存設置失敗: {}", e);
+                Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
             }
+        }
     }
 }
 
@@ -140,23 +151,24 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
                 .arg("EX")
                 .arg(ttl as u64)
                 .query_async::<()>(&mut conn)
-                .await {
-                    Ok(_) => {
-                        debug!("快取設置成功 (帶TTL): {}", prefixed_key);
-                        Ok(())
-                    },
-                    Err(e) => {
-                        error!("快取設置失敗 (帶TTL): {}", e);
-                        Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
-                    }
+                .await
+            {
+                Ok(_) => {
+                    debug!("快取設置成功 (帶TTL): {}", prefixed_key);
+                    Ok(())
                 }
+                Err(e) => {
+                    error!("快取設置失敗 (帶TTL): {}", e);
+                    Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
+                }
+            }
         } else {
             // 設置不帶TTL的值
             match conn.set::<_, _, String>(&prefixed_key, &serialized).await {
                 Ok(_) => {
                     debug!("快取設置成功: {}", prefixed_key);
                     Ok(())
-                },
+                }
                 Err(e) => {
                     error!("快取設置失敗: {}", e);
                     Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
@@ -224,7 +236,11 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
 
         match conn.del::<_, bool>(&prefixed_key).await {
             Ok(deleted) => {
-                debug!("快取刪除 {}: {}", prefixed_key, if deleted { "成功" } else { "鍵不存在" });
+                debug!(
+                    "快取刪除 {}: {}",
+                    prefixed_key,
+                    if deleted { "成功" } else { "鍵不存在" }
+                );
                 Ok(deleted)
             }
             Err(e) => {
@@ -258,7 +274,12 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
         }
     }
 
-    async fn get_or_set<K, V, F, Fut>(&self, key: K, ttl_secs: Option<u64>, generator: F) -> Result<V, CacheError>
+    async fn get_or_set<K, V, F, Fut>(
+        &self,
+        key: K,
+        ttl_secs: Option<u64>,
+        generator: F,
+    ) -> Result<V, CacheError>
     where
         K: AsRef<str> + Send + Sync,
         V: DeserializeOwned + Serialize + Send + Sync,
@@ -266,7 +287,7 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
         Fut: std::future::Future<Output = Result<V, CacheError>> + Send,
     {
         let prefixed_key = self.prefix_key(key);
-        
+
         // 先嘗試從快取獲取
         match self.get::<_, V>(&prefixed_key).await {
             Ok(value) => {
@@ -277,10 +298,10 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
                 // 快取未命中，執行生成函數
                 debug!("快取未命中(get_or_set)，執行生成函數: {}", prefixed_key);
                 let value = generator().await?;
-                
+
                 // 將結果存入快取
                 self.set(&prefixed_key, &value, ttl_secs).await?;
-                
+
                 Ok(value)
             }
             Err(e) => Err(e), // 其他錯誤直接返回
@@ -292,14 +313,14 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
 mod tests {
     use super::*;
     use serde::{Deserialize, Serialize};
-    
+
     #[derive(Debug, Serialize, Deserialize, PartialEq)]
     struct TestObject {
         id: i32,
         name: String,
         data: Vec<f64>,
     }
-    
+
     impl TestObject {
         fn new(id: i32, name: &str) -> Self {
             Self {
@@ -309,64 +330,74 @@ mod tests {
             }
         }
     }
-    
+
     #[tokio::test]
     async fn test_cache_operations() {
         // 跳過測試，除非環境中有Redis可用
-        let redis_available = std::env::var("REDIS_TEST_AVAILABLE").unwrap_or_else(|_| "false".to_string());
+        let redis_available =
+            std::env::var("REDIS_TEST_AVAILABLE").unwrap_or_else(|_| "false".to_string());
         if redis_available != "true" {
             println!("跳過Redis快取測試 - 無Redis環境可用");
             return;
         }
-        
+
         // 創建Redis連接池和快取管理器
         let pool = crate::redis::pool::test_helpers::create_test_pool()
             .await
             .expect("無法創建測試Redis連接池");
-            
+
         let cache = CacheManager::new(pool);
-        
+
         // 測試對象
         let test_key = "test_cache_key";
         let test_obj = TestObject::new(42, "測試對象");
-        
+
         // 測試設置和獲取
-        cache.set(test_key, &test_obj, Some(60)).await.expect("設置快取失敗");
-        
+        cache
+            .set(test_key, &test_obj, Some(60))
+            .await
+            .expect("設置快取失敗");
+
         let retrieved: TestObject = cache.get(test_key).await.expect("獲取快取失敗");
         assert_eq!(retrieved, test_obj);
-        
+
         // 測試存在性檢查
         let exists = cache.exists(test_key).await.expect("檢查快取存在性失敗");
         assert!(exists);
-        
+
         // 測試過期時間設置
         let expired = cache.expire(test_key, 300).await.expect("設置過期時間失敗");
         assert!(expired);
-        
+
         // 測試刪除
         let deleted = cache.delete(test_key).await.expect("刪除快取失敗");
         assert!(deleted);
-        
+
         // 驗證刪除後不存在
         let exists_after = cache.exists(test_key).await.expect("檢查快取存在性失敗");
         assert!(!exists_after);
-        
+
         // 測試 get_or_set 功能
-        let result: TestObject = cache.get_or_set("new_key", Some(30), || async {
-            Ok(TestObject::new(99, "動態生成的對象"))
-        }).await.expect("get_or_set 失敗");
-        
+        let result: TestObject = cache
+            .get_or_set("new_key", Some(30), || async {
+                Ok(TestObject::new(99, "動態生成的對象"))
+            })
+            .await
+            .expect("get_or_set 失敗");
+
         assert_eq!(result.id, 99);
-        
+
         // 再次使用 get_or_set 應該從快取獲取
-        let cached: TestObject = cache.get_or_set("new_key", Some(30), || async {
-            Ok(TestObject::new(100, "這不應該被返回"))
-        }).await.expect("get_or_set 失敗");
-        
+        let cached: TestObject = cache
+            .get_or_set("new_key", Some(30), || async {
+                Ok(TestObject::new(100, "這不應該被返回"))
+            })
+            .await
+            .expect("get_or_set 失敗");
+
         assert_eq!(cached.id, 99); // 應該返回快取的結果，而不是新生成的
-        
+
         // 清理
         let _ = cache.delete("new_key").await;
     }
-} 
+}

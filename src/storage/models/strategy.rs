@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use sqlx::types::Json;
 use sqlx::FromRow;
-use serde::{Deserialize, Serialize};
 
 /// 策略定義模型
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

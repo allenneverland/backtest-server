@@ -1,10 +1,10 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use chrono::Utc;
-use sqlx::{PgPool, Postgres, Transaction};
 use serde_json::Value as JsonValue;
+use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::storage::models::Exchange;
-use crate::storage::repository::{DbExecutor};
+use crate::storage::repository::DbExecutor;
 
 /// 交易所數據庫操作
 pub struct ExchangeRepository {
@@ -20,7 +20,7 @@ impl ExchangeRepository {
     /// 創建交易所
     pub async fn create(&self, exchange: ExchangeInsert) -> Result<Exchange> {
         let now = Utc::now();
-        
+
         let result = sqlx::query!(
             r#"
             INSERT INTO exchange (
@@ -44,9 +44,11 @@ impl ExchangeRepository {
         .await?;
 
         let id = result.exchange_id;
-        
+
         // 重新獲取完整的交易所資訊
-        self.get_by_id(id).await?.ok_or_else(|| anyhow!("Failed to retrieve newly created exchange"))
+        self.get_by_id(id)
+            .await?
+            .ok_or_else(|| anyhow!("Failed to retrieve newly created exchange"))
     }
 
     /// 根據ID獲取交易所
@@ -64,7 +66,7 @@ impl ExchangeRepository {
         )
         .fetch_optional(&self.pool)
         .await?;
-        
+
         Ok(record.map(|r| Exchange {
             exchange_id: r.exchange_id,
             code: r.code,
@@ -92,7 +94,7 @@ impl ExchangeRepository {
         )
         .fetch_optional(&self.pool)
         .await?;
-        
+
         Ok(record.map(|r| Exchange {
             exchange_id: r.exchange_id,
             code: r.code,
@@ -119,23 +121,26 @@ impl ExchangeRepository {
         )
         .fetch_all(&self.pool)
         .await?;
-        
-        Ok(records.into_iter().map(|r| Exchange {
-            exchange_id: r.exchange_id,
-            code: r.code,
-            name: r.name,
-            country: r.country,
-            timezone: r.timezone,
-            operating_hours: r.operating_hours,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
-        }).collect())
+
+        Ok(records
+            .into_iter()
+            .map(|r| Exchange {
+                exchange_id: r.exchange_id,
+                code: r.code,
+                name: r.name,
+                country: r.country,
+                timezone: r.timezone,
+                operating_hours: r.operating_hours,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+            })
+            .collect())
     }
 
     /// 更新交易所
     pub async fn update(&self, exchange_id: i32, exchange: ExchangeInsert) -> Result<Exchange> {
         let now = Utc::now();
-        
+
         let _result = sqlx::query!(
             r#"
             UPDATE exchange
@@ -160,7 +165,9 @@ impl ExchangeRepository {
         .await?;
 
         // 重新獲取更新後的交易所資訊
-        self.get_by_id(exchange_id).await?.ok_or_else(|| anyhow!("Exchange not found after update"))
+        self.get_by_id(exchange_id)
+            .await?
+            .ok_or_else(|| anyhow!("Exchange not found after update"))
     }
 
     /// 刪除交易所
@@ -177,7 +184,7 @@ impl ExchangeRepository {
 
         Ok(result.rows_affected() > 0)
     }
-    
+
     /// 在事務中創建交易所
     pub async fn create_in_tx<'a>(
         &self,
@@ -185,7 +192,7 @@ impl ExchangeRepository {
         exchange: ExchangeInsert,
     ) -> Result<Exchange> {
         let now = Utc::now();
-        
+
         let result = sqlx::query!(
             r#"
             INSERT INTO exchange (
@@ -237,4 +244,4 @@ pub struct ExchangeInsert {
     pub country: String,
     pub timezone: String,
     pub operating_hours: Option<JsonValue>,
-} 
+}

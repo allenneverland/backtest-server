@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
-use sqlx::types::{Decimal, Json};
 use serde::{Deserialize, Serialize};
+use sqlx::types::{Decimal, Json};
 
 /// 回測配置模型
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -171,4 +171,4 @@ pub struct BacktestDailyReturns {
     pub daily_return: Decimal,
     pub end_of_day_value: Decimal,
     pub end_of_day_equity: Decimal,
-} 
+}

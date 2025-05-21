@@ -1,21 +1,14 @@
-use std::time::Duration;
+use super::client::RedisClientError;
+use crate::config::types::RedisConfig;
 use async_trait::async_trait;
-use deadpool_redis::{
-    Config, 
-    Connection, 
-    Pool, 
-    Runtime,
-    CreatePoolError,
-    PoolError,
-    PoolConfig,
-    Timeouts,
-    redis::{RedisError, cmd},
-};
 use deadpool::managed::QueueMode;
+use deadpool_redis::{
+    redis::{cmd, RedisError},
+    Config, Connection, CreatePoolError, Pool, PoolConfig, PoolError, Runtime, Timeouts,
+};
+use std::time::Duration;
 use thiserror::Error;
 use tracing::{debug, error, info};
-use crate::config::types::RedisConfig;
-use super::client::RedisClientError;
 
 /// Redis連接池錯誤
 #[derive(Error, Debug)]
@@ -60,10 +53,10 @@ impl From<CreatePoolError> for RedisPoolError {
 pub trait RedisPool: Send + Sync + 'static {
     /// 獲取連接
     async fn get_conn(&self) -> Result<Connection, RedisPoolError>;
-    
+
     /// 檢查連接池健康狀態
     async fn check_health(&self) -> bool;
-    
+
     /// 獲取連接池大小
     fn pool_size(&self) -> u32;
 }
@@ -79,7 +72,7 @@ impl ConnectionPool {
     pub async fn new(config: RedisConfig) -> Result<Self, RedisPoolError> {
         // 創建連接池配置
         let mut cfg = Config::from_url(&config.url);
-        
+
         // 設置連接池大小和超時
         cfg.pool = Some(PoolConfig {
             max_size: config.pool_size as usize,
@@ -95,7 +88,7 @@ impl ConnectionPool {
         let pool = cfg.create_pool(Some(Runtime::Tokio1))?;
 
         info!("Redis連接池初始化完成，大小: {}", config.pool_size);
-        
+
         Ok(Self { pool, config })
     }
 }
@@ -114,7 +107,7 @@ impl RedisPool for ConnectionPool {
             }
         }
     }
-    
+
     async fn check_health(&self) -> bool {
         match self.pool.get().await {
             Ok(mut conn) => {
@@ -134,7 +127,7 @@ impl RedisPool for ConnectionPool {
             }
         }
     }
-    
+
     fn pool_size(&self) -> u32 {
         self.config.pool_size
     }
@@ -144,13 +137,13 @@ impl RedisPool for ConnectionPool {
 #[cfg(test)]
 pub mod test_helpers {
     use super::*;
-    
+
     /// 創建測試用的連接池
     pub async fn create_test_pool() -> Result<ConnectionPool, RedisPoolError> {
         // 檢查測試環境中是否有Redis可用
         let redis_url = std::env::var("REDIS_TEST_URL")
             .unwrap_or_else(|_| "redis://localhost:6379".to_string());
-            
+
         let config = RedisConfig {
             url: redis_url,
             pool_size: 3,
@@ -160,7 +153,7 @@ pub mod test_helpers {
             reconnect_attempts: 1,
             reconnect_delay_secs: 1,
         };
-        
+
         ConnectionPool::new(config).await
     }
 }
@@ -169,16 +162,17 @@ pub mod test_helpers {
 mod tests {
     use super::*;
     use deadpool_redis::redis::AsyncCommands;
-    
+
     #[tokio::test]
     async fn test_connection_pool() {
         // 跳過測試，除非環境中有Redis可用
-        let redis_available = std::env::var("REDIS_TEST_AVAILABLE").unwrap_or_else(|_| "false".to_string());
+        let redis_available =
+            std::env::var("REDIS_TEST_AVAILABLE").unwrap_or_else(|_| "false".to_string());
         if redis_available != "true" {
             println!("跳過Redis連接池測試 - 無Redis環境可用");
             return;
         }
-        
+
         // 創建連接池
         let config = RedisConfig {
             url: "redis://localhost:6379".to_string(),
@@ -189,25 +183,27 @@ mod tests {
             reconnect_attempts: 3,
             reconnect_delay_secs: 1,
         };
-        
-        let pool = ConnectionPool::new(config).await.expect("無法創建Redis連接池");
-        
+
+        let pool = ConnectionPool::new(config)
+            .await
+            .expect("無法創建Redis連接池");
+
         // 測試連接池健康狀態
         assert!(pool.check_health().await);
-        
+
         // 測試獲取連接和基本操作
         let mut conn = pool.get_conn().await.expect("無法獲取連接");
-        
+
         // 測試SET和GET
         let key = "pool_test_key";
         let value = "pool_test_value";
-        
+
         let _: () = conn.set(key, value).await.expect("SET失敗");
         let result: String = conn.get(key).await.expect("GET失敗");
-        
+
         assert_eq!(result, value);
-        
+
         // 清理
         let _: bool = conn.del(key).await.expect("DEL失敗");
     }
-} 
+}

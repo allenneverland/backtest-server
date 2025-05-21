@@ -1,5 +1,5 @@
-use serde::{Serialize, Deserialize};
 use crate::config::validation::{ValidationError, ValidationUtils, Validator};
+use serde::{Deserialize, Serialize};
 
 /// 應用程序配置結構
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,7 +23,7 @@ impl Validator for ApplicationConfig {
         self.server.validate()?;
         self.redis.validate()?;
         self.rabbitmq.validate()?;
-        
+
         Ok(())
     }
 }
@@ -51,8 +51,13 @@ impl Validator for DatabaseConfig {
         ValidationUtils::not_empty(&self.username, "database.username")?;
         ValidationUtils::not_empty(&self.database, "database.database")?;
         ValidationUtils::in_range(self.port, 1, 65535, "database.port")?;
-        ValidationUtils::in_range(self.max_connections, self.min_connections, 1000, "database.max_connections")?;
-        
+        ValidationUtils::in_range(
+            self.max_connections,
+            self.min_connections,
+            1000,
+            "database.max_connections",
+        )?;
+
         Ok(())
     }
 }
@@ -62,12 +67,12 @@ impl DatabaseConfig {
     pub fn max_lifetime(&self) -> std::time::Duration {
         std::time::Duration::from_secs(self.max_lifetime_secs)
     }
-    
+
     /// 獲取獲取連接超時持續時間
     pub fn acquire_timeout(&self) -> std::time::Duration {
         std::time::Duration::from_secs(self.acquire_timeout_secs)
     }
-    
+
     /// 獲取閒置超時持續時間
     pub fn idle_timeout(&self) -> std::time::Duration {
         std::time::Duration::from_secs(self.idle_timeout_secs)
@@ -85,18 +90,24 @@ impl Validator for LogConfig {
     fn validate(&self) -> Result<(), ValidationError> {
         // 驗證日誌級別
         ValidationUtils::one_of(
-            &self.level.to_lowercase(), 
-            &["trace", "debug", "info", "warn", "error"].iter().map(|s| s.to_string()).collect::<Vec<String>>(), 
-            "log.level"
+            &self.level.to_lowercase(),
+            &["trace", "debug", "info", "warn", "error"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>(),
+            "log.level",
         )?;
-        
+
         // 驗證日誌格式
         ValidationUtils::one_of(
             &self.format.to_lowercase(),
-            &["pretty", "json"].iter().map(|s| s.to_string()).collect::<Vec<String>>(),
-            "log.format"
+            &["pretty", "json"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>(),
+            "log.format",
         )?;
-        
+
         Ok(())
     }
 }
@@ -111,7 +122,7 @@ impl Validator for AppConfig {
     fn validate(&self) -> Result<(), ValidationError> {
         // 驗證線程數
         ValidationUtils::in_range(self.threads, 1, 256, "app.threads")?;
-        
+
         Ok(())
     }
 }
@@ -131,23 +142,23 @@ impl Validator for StrategyConfig {
     fn validate(&self) -> Result<(), ValidationError> {
         // 驗證策略配置
         ValidationUtils::not_empty(&self.directory, "strategy.directory")?;
-        
+
         if self.hot_update_enabled {
             ValidationUtils::in_range(
-                self.hot_update_interval_secs, 
-                1, 
-                3600, 
-                "strategy.hot_update_interval_secs"
+                self.hot_update_interval_secs,
+                1,
+                3600,
+                "strategy.hot_update_interval_secs",
             )?;
         }
-        
+
         ValidationUtils::in_range(
             self.max_parallel_updates,
             1,
             50,
-            "strategy.max_parallel_updates"
+            "strategy.max_parallel_updates",
         )?;
-        
+
         Ok(())
     }
 }
@@ -176,20 +187,20 @@ impl Validator for ServerConfig {
         ValidationUtils::not_empty(&self.host, "server.host")?;
         ValidationUtils::in_range(self.port, 1, 65535, "server.port")?;
         ValidationUtils::in_range(self.worker_threads, 1, 256, "server.worker_threads")?;
-        
+
         // HTTPS設定驗證
         if self.use_https {
             ValidationUtils::not_empty(&self.cert_path, "server.cert_path")?;
             ValidationUtils::not_empty(&self.key_path, "server.key_path")?;
         }
-        
+
         // CORS設定驗證
         if self.enable_cors && self.cors_allowed_origins.is_empty() {
             return Err(ValidationError::InvalidValue(
-                "啟用CORS但未指定允許的來源".to_string()
+                "啟用CORS但未指定允許的來源".to_string(),
             ));
         }
-        
+
         Ok(())
     }
 }
@@ -211,14 +222,14 @@ impl Validator for RestApiConfig {
         ValidationUtils::not_empty(&self.base_path, "rest_api.base_path")?;
         ValidationUtils::not_empty(&self.api_key, "rest_api.api_key")?;
         ValidationUtils::not_empty(&self.secret_key, "rest_api.secret_key")?;
-        
+
         // 如果不允許所有來源，必須指定允許的來源
         if !self.cors_allow_all && self.cors_origins.is_empty() {
             return Err(ValidationError::InvalidValue(
-                "未指定允許的CORS來源，且未啟用允許所有來源".to_string()
+                "未指定允許的CORS來源，且未啟用允許所有來源".to_string(),
             ));
         }
-        
+
         Ok(())
     }
 }
@@ -240,11 +251,16 @@ impl Validator for RedisConfig {
         // 驗證Redis配置
         ValidationUtils::not_empty(&self.url, "redis.url")?;
         ValidationUtils::in_range(self.pool_size, 1, 100, "redis.pool_size")?;
-        ValidationUtils::in_range(self.connection_timeout_secs, 1, 60, "redis.connection_timeout_secs")?;
+        ValidationUtils::in_range(
+            self.connection_timeout_secs,
+            1,
+            60,
+            "redis.connection_timeout_secs",
+        )?;
         ValidationUtils::in_range(self.read_timeout_secs, 1, 60, "redis.read_timeout_secs")?;
         ValidationUtils::in_range(self.write_timeout_secs, 1, 60, "redis.write_timeout_secs")?;
         ValidationUtils::in_range(self.reconnect_attempts, 0, 10, "redis.reconnect_attempts")?;
-        
+
         Ok(())
     }
 }
@@ -299,18 +315,26 @@ impl Validator for RabbitMQConfig {
         // 驗證RabbitMQ配置
         ValidationUtils::not_empty(&self.url, "rabbitmq.url")?;
         ValidationUtils::in_range(self.pool_size, 1, 100, "rabbitmq.pool_size")?;
-        ValidationUtils::in_range(self.connection_timeout_secs, 1, 60, "rabbitmq.connection_timeout_secs")?;
-        
+        ValidationUtils::in_range(
+            self.connection_timeout_secs,
+            1,
+            60,
+            "rabbitmq.connection_timeout_secs",
+        )?;
+
         // 驗證交換機類型
         ValidationUtils::one_of(
             &self.default_exchange_type.to_lowercase(),
-            &["direct", "topic", "fanout", "headers"].iter().map(|s| s.to_string()).collect::<Vec<String>>(),
-            "rabbitmq.default_exchange_type"
+            &["direct", "topic", "fanout", "headers"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>(),
+            "rabbitmq.default_exchange_type",
         )?;
-        
+
         ValidationUtils::not_empty(&self.default_exchange, "rabbitmq.default_exchange")?;
         ValidationUtils::not_empty(&self.consumer_tag_prefix, "rabbitmq.consumer_tag_prefix")?;
-        
+
         Ok(())
     }
-} 
+}

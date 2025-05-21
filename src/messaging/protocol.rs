@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// 消息封裝，用於所有消息通訊
@@ -31,13 +31,13 @@ impl<T> Message<T> {
             payload,
         }
     }
-    
+
     /// 設置認證令牌
     pub fn with_auth(mut self, token: &str) -> Self {
         self.auth_token = Some(token.to_string());
         self
     }
-    
+
     /// 設置相關ID (用於回應)
     pub fn as_response_to(mut self, request_id: &str) -> Self {
         self.correlation_id = Some(request_id.to_string());

@@ -1,9 +1,9 @@
 use crate::storage::models::*;
 use crate::storage::repository::{DbExecutor, Page, PageQuery, TimeRange};
 use anyhow::Result;
+use async_trait::async_trait;
 use sqlx::PgPool;
 use std::sync::Arc;
-use async_trait::async_trait;
 
 /// 回測系統儲存庫特徵
 #[async_trait]
@@ -21,43 +21,79 @@ pub trait BacktestRepository: Send + Sync {
     async fn create_backtest_result(&self, result: BacktestResultInsert) -> Result<BacktestResult>;
 
     /// 更新回測結果
-    async fn update_backtest_result(&self, result_id: i32, result: BacktestResultInsert) -> Result<BacktestResult>;
-    
+    async fn update_backtest_result(
+        &self,
+        result_id: i32,
+        result: BacktestResultInsert,
+    ) -> Result<BacktestResult>;
+
     /// 根據ID獲取回測結果
     async fn get_backtest_result(&self, result_id: i32) -> Result<Option<BacktestResult>>;
 
     /// 根據配置ID獲取回測結果
-    async fn get_backtest_result_by_config(&self, config_id: i32) -> Result<Option<BacktestResult>>;
+    async fn get_backtest_result_by_config(&self, config_id: i32)
+        -> Result<Option<BacktestResult>>;
 
     /// 添加回測交易記錄
     async fn add_backtest_trade(&self, trade: BacktestTradeInsert) -> Result<()>;
-    
+
     /// 批量添加回測交易記錄
     async fn add_backtest_trades(&self, trades: Vec<BacktestTradeInsert>) -> Result<()>;
 
     /// 獲取回測交易記錄
-    async fn get_backtest_trades(&self, result_id: i32, time_range: TimeRange, page: PageQuery) -> Result<Page<BacktestTrade>>;
+    async fn get_backtest_trades(
+        &self,
+        result_id: i32,
+        time_range: TimeRange,
+        page: PageQuery,
+    ) -> Result<Page<BacktestTrade>>;
 
     /// 添加回測倉位快照
-    async fn add_backtest_position_snapshot(&self, snapshot: BacktestPositionSnapshotInsert) -> Result<()>;
-    
+    async fn add_backtest_position_snapshot(
+        &self,
+        snapshot: BacktestPositionSnapshotInsert,
+    ) -> Result<()>;
+
     /// 批量添加回測倉位快照
-    async fn add_backtest_position_snapshots(&self, snapshots: Vec<BacktestPositionSnapshotInsert>) -> Result<()>;
+    async fn add_backtest_position_snapshots(
+        &self,
+        snapshots: Vec<BacktestPositionSnapshotInsert>,
+    ) -> Result<()>;
 
     /// 獲取回測倉位快照
-    async fn get_backtest_position_snapshots(&self, result_id: i32, time_range: TimeRange, page: PageQuery) -> Result<Page<BacktestPositionSnapshot>>;
+    async fn get_backtest_position_snapshots(
+        &self,
+        result_id: i32,
+        time_range: TimeRange,
+        page: PageQuery,
+    ) -> Result<Page<BacktestPositionSnapshot>>;
 
     /// 添加回測投資組合快照
-    async fn add_backtest_portfolio_snapshot(&self, snapshot: BacktestPortfolioSnapshotInsert) -> Result<()>;
-    
+    async fn add_backtest_portfolio_snapshot(
+        &self,
+        snapshot: BacktestPortfolioSnapshotInsert,
+    ) -> Result<()>;
+
     /// 批量添加回測投資組合快照
-    async fn add_backtest_portfolio_snapshots(&self, snapshots: Vec<BacktestPortfolioSnapshotInsert>) -> Result<()>;
+    async fn add_backtest_portfolio_snapshots(
+        &self,
+        snapshots: Vec<BacktestPortfolioSnapshotInsert>,
+    ) -> Result<()>;
 
     /// 獲取回測投資組合快照
-    async fn get_backtest_portfolio_snapshots(&self, result_id: i32, time_range: TimeRange, page: PageQuery) -> Result<Page<BacktestPortfolioSnapshot>>;
+    async fn get_backtest_portfolio_snapshots(
+        &self,
+        result_id: i32,
+        time_range: TimeRange,
+        page: PageQuery,
+    ) -> Result<Page<BacktestPortfolioSnapshot>>;
 
     /// 獲取回測日收益率聚合
-    async fn get_backtest_daily_returns(&self, result_id: i32, time_range: TimeRange) -> Result<Vec<BacktestDailyReturns>>;
+    async fn get_backtest_daily_returns(
+        &self,
+        result_id: i32,
+        time_range: TimeRange,
+    ) -> Result<Vec<BacktestDailyReturns>>;
 }
 
 /// PostgreSQL 回測系統儲存庫實現
@@ -136,7 +172,7 @@ impl BacktestRepository for PgBacktestRepository {
 
     async fn list_backtest_configs(&self, page: PageQuery) -> Result<Page<BacktestConfig>> {
         let offset = (page.page - 1) * page.page_size;
-        
+
         let configs = sqlx::query_as!(
             BacktestConfig,
             r#"
@@ -192,7 +228,11 @@ impl BacktestRepository for PgBacktestRepository {
         Ok(result)
     }
 
-    async fn update_backtest_result(&self, result_id: i32, result: BacktestResultInsert) -> Result<BacktestResult> {
+    async fn update_backtest_result(
+        &self,
+        result_id: i32,
+        result: BacktestResultInsert,
+    ) -> Result<BacktestResult> {
         let result = sqlx::query_as!(
             BacktestResult,
             r#"
@@ -245,7 +285,10 @@ impl BacktestRepository for PgBacktestRepository {
         Ok(result)
     }
 
-    async fn get_backtest_result_by_config(&self, config_id: i32) -> Result<Option<BacktestResult>> {
+    async fn get_backtest_result_by_config(
+        &self,
+        config_id: i32,
+    ) -> Result<Option<BacktestResult>> {
         let result = sqlx::query_as!(
             BacktestResult,
             r#"
@@ -299,7 +342,7 @@ impl BacktestRepository for PgBacktestRepository {
 
     async fn add_backtest_trades(&self, trades: Vec<BacktestTradeInsert>) -> Result<()> {
         let mut tx = DbExecutor::get_pool(self).begin().await?;
-        
+
         for trade in trades {
             sqlx::query!(
                 r#"
@@ -328,14 +371,19 @@ impl BacktestRepository for PgBacktestRepository {
             .execute(&mut *tx)
             .await?;
         }
-        
+
         tx.commit().await?;
         Ok(())
     }
 
-    async fn get_backtest_trades(&self, result_id: i32, time_range: TimeRange, page: PageQuery) -> Result<Page<BacktestTrade>> {
+    async fn get_backtest_trades(
+        &self,
+        result_id: i32,
+        time_range: TimeRange,
+        page: PageQuery,
+    ) -> Result<Page<BacktestTrade>> {
         let offset = (page.page - 1) * page.page_size;
-        
+
         let trades = sqlx::query_as!(
             BacktestTrade,
             r#"
@@ -360,7 +408,7 @@ impl BacktestRepository for PgBacktestRepository {
         .await?;
 
         let total: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM backtest_trade WHERE result_id = $1 AND time BETWEEN $2 AND $3"
+            "SELECT COUNT(*) FROM backtest_trade WHERE result_id = $1 AND time BETWEEN $2 AND $3",
         )
         .bind(result_id)
         .bind(time_range.start)
@@ -371,7 +419,10 @@ impl BacktestRepository for PgBacktestRepository {
         Ok(Page::new(trades, total, page.page, page.page_size))
     }
 
-    async fn add_backtest_position_snapshot(&self, snapshot: BacktestPositionSnapshotInsert) -> Result<()> {
+    async fn add_backtest_position_snapshot(
+        &self,
+        snapshot: BacktestPositionSnapshotInsert,
+    ) -> Result<()> {
         sqlx::query!(
             r#"
             INSERT INTO backtest_position_snapshot (
@@ -397,9 +448,12 @@ impl BacktestRepository for PgBacktestRepository {
         Ok(())
     }
 
-    async fn add_backtest_position_snapshots(&self, snapshots: Vec<BacktestPositionSnapshotInsert>) -> Result<()> {
+    async fn add_backtest_position_snapshots(
+        &self,
+        snapshots: Vec<BacktestPositionSnapshotInsert>,
+    ) -> Result<()> {
         let mut tx = DbExecutor::get_pool(self).begin().await?;
-        
+
         for snapshot in snapshots {
             sqlx::query!(
                 r#"
@@ -423,14 +477,19 @@ impl BacktestRepository for PgBacktestRepository {
             .execute(&mut *tx)
             .await?;
         }
-        
+
         tx.commit().await?;
         Ok(())
     }
 
-    async fn get_backtest_position_snapshots(&self, result_id: i32, time_range: TimeRange, page: PageQuery) -> Result<Page<BacktestPositionSnapshot>> {
+    async fn get_backtest_position_snapshots(
+        &self,
+        result_id: i32,
+        time_range: TimeRange,
+        page: PageQuery,
+    ) -> Result<Page<BacktestPositionSnapshot>> {
         let offset = (page.page - 1) * page.page_size;
-        
+
         let snapshots = sqlx::query_as!(
             BacktestPositionSnapshot,
             r#"
@@ -465,7 +524,10 @@ impl BacktestRepository for PgBacktestRepository {
         Ok(Page::new(snapshots, total, page.page, page.page_size))
     }
 
-    async fn add_backtest_portfolio_snapshot(&self, snapshot: BacktestPortfolioSnapshotInsert) -> Result<()> {
+    async fn add_backtest_portfolio_snapshot(
+        &self,
+        snapshot: BacktestPortfolioSnapshotInsert,
+    ) -> Result<()> {
         sqlx::query!(
             r#"
             INSERT INTO backtest_portfolio_snapshot (
@@ -494,9 +556,12 @@ impl BacktestRepository for PgBacktestRepository {
         Ok(())
     }
 
-    async fn add_backtest_portfolio_snapshots(&self, snapshots: Vec<BacktestPortfolioSnapshotInsert>) -> Result<()> {
+    async fn add_backtest_portfolio_snapshots(
+        &self,
+        snapshots: Vec<BacktestPortfolioSnapshotInsert>,
+    ) -> Result<()> {
         let mut tx = DbExecutor::get_pool(self).begin().await?;
-        
+
         for snapshot in snapshots {
             sqlx::query!(
                 r#"
@@ -523,14 +588,19 @@ impl BacktestRepository for PgBacktestRepository {
             .execute(&mut *tx)
             .await?;
         }
-        
+
         tx.commit().await?;
         Ok(())
     }
 
-    async fn get_backtest_portfolio_snapshots(&self, result_id: i32, time_range: TimeRange, page: PageQuery) -> Result<Page<BacktestPortfolioSnapshot>> {
+    async fn get_backtest_portfolio_snapshots(
+        &self,
+        result_id: i32,
+        time_range: TimeRange,
+        page: PageQuery,
+    ) -> Result<Page<BacktestPortfolioSnapshot>> {
         let offset = (page.page - 1) * page.page_size;
-        
+
         let snapshots = sqlx::query_as!(
             BacktestPortfolioSnapshot,
             r#"
@@ -565,7 +635,11 @@ impl BacktestRepository for PgBacktestRepository {
         Ok(Page::new(snapshots, total, page.page, page.page_size))
     }
 
-    async fn get_backtest_daily_returns(&self, result_id: i32, time_range: TimeRange) -> Result<Vec<BacktestDailyReturns>> {
+    async fn get_backtest_daily_returns(
+        &self,
+        result_id: i32,
+        time_range: TimeRange,
+    ) -> Result<Vec<BacktestDailyReturns>> {
         let returns = sqlx::query_as!(
             BacktestDailyReturns,
             r#"
@@ -589,4 +663,4 @@ impl BacktestRepository for PgBacktestRepository {
 
         Ok(returns)
     }
-} 
+}

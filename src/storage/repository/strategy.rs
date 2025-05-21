@@ -1,8 +1,8 @@
 use anyhow::Result;
+use async_trait::async_trait;
 use chrono::Utc;
 use sqlx::PgPool;
 use std::sync::Arc;
-use async_trait::async_trait;
 
 use crate::storage::models::strategy::{Strategy, StrategyInsert};
 use crate::storage::repository::{DbExecutor, Page, PageQuery};
@@ -13,15 +13,15 @@ pub enum StrategyError {
     /// 資料庫錯誤
     #[error("資料庫錯誤: {0}")]
     DatabaseError(String),
-    
+
     /// 策略不存在
     #[error("策略不存在: ID {0}")]
     StrategyNotFound(i32),
-    
+
     /// 名稱衝突
     #[error("策略名稱已存在: {0}")]
     NameConflict(String),
-    
+
     /// 其他錯誤
     #[error("其他錯誤: {0}")]
     Other(String),
@@ -32,27 +32,48 @@ pub enum StrategyError {
 pub trait StrategyRepository: Send + Sync {
     /// 創建新策略
     async fn create_strategy(&self, strategy: &StrategyInsert) -> Result<Strategy, StrategyError>;
-    
+
     /// 根據ID獲取策略
-    async fn get_strategy_by_id(&self, strategy_id: i32) -> Result<Option<Strategy>, StrategyError>;
-    
+    async fn get_strategy_by_id(&self, strategy_id: i32)
+        -> Result<Option<Strategy>, StrategyError>;
+
     /// 根據名稱和版本獲取策略
-    async fn get_strategy_by_name_version(&self, name: &str, version: &str) -> Result<Option<Strategy>, StrategyError>;
-    
+    async fn get_strategy_by_name_version(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> Result<Option<Strategy>, StrategyError>;
+
     /// 獲取策略列表
-    async fn list_strategies(&self, page: PageQuery, active_only: bool) -> Result<Page<Strategy>, StrategyError>;
-    
+    async fn list_strategies(
+        &self,
+        page: PageQuery,
+        active_only: bool,
+    ) -> Result<Page<Strategy>, StrategyError>;
+
     /// 更新策略
-    async fn update_strategy(&self, strategy_id: i32, strategy: &StrategyInsert) -> Result<Strategy, StrategyError>;
-    
+    async fn update_strategy(
+        &self,
+        strategy_id: i32,
+        strategy: &StrategyInsert,
+    ) -> Result<Strategy, StrategyError>;
+
     /// 更新策略啟用狀態
-    async fn update_strategy_active_status(&self, strategy_id: i32, active: bool) -> Result<Strategy, StrategyError>;
-    
+    async fn update_strategy_active_status(
+        &self,
+        strategy_id: i32,
+        active: bool,
+    ) -> Result<Strategy, StrategyError>;
+
     /// 刪除策略
     async fn delete_strategy(&self, strategy_id: i32) -> Result<bool, StrategyError>;
-    
+
     /// 根據標籤搜尋策略
-    async fn search_strategies_by_tags(&self, tags: &[String], page: PageQuery) -> Result<Page<Strategy>, StrategyError>;
+    async fn search_strategies_by_tags(
+        &self,
+        tags: &[String],
+        page: PageQuery,
+    ) -> Result<Page<Strategy>, StrategyError>;
 }
 
 /// PostgreSQL 策略儲存庫實現
@@ -88,16 +109,16 @@ impl StrategyRepository for PgStrategyRepository {
         .fetch_optional(self.get_pool())
         .await
         .map_err(|e| StrategyError::DatabaseError(e.to_string()))?;
-        
+
         if existing.is_some() {
             return Err(StrategyError::NameConflict(format!(
                 "策略 '{}' 版本 '{}' 已存在",
                 strategy.name, strategy.version
             )));
         }
-        
+
         let now = Utc::now();
-        
+
         let result = sqlx::query_as!(
             Strategy,
             r#"
@@ -131,11 +152,14 @@ impl StrategyRepository for PgStrategyRepository {
         .fetch_one(self.get_pool())
         .await
         .map_err(|e| StrategyError::DatabaseError(e.to_string()))?;
-        
+
         Ok(result)
     }
-    
-    async fn get_strategy_by_id(&self, strategy_id: i32) -> Result<Option<Strategy>, StrategyError> {
+
+    async fn get_strategy_by_id(
+        &self,
+        strategy_id: i32,
+    ) -> Result<Option<Strategy>, StrategyError> {
         let result = sqlx::query_as!(
             Strategy,
             r#"
@@ -152,11 +176,15 @@ impl StrategyRepository for PgStrategyRepository {
         .fetch_optional(self.get_pool())
         .await
         .map_err(|e| StrategyError::DatabaseError(e.to_string()))?;
-        
+
         Ok(result)
     }
-    
-    async fn get_strategy_by_name_version(&self, name: &str, version: &str) -> Result<Option<Strategy>, StrategyError> {
+
+    async fn get_strategy_by_name_version(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> Result<Option<Strategy>, StrategyError> {
         let result = sqlx::query_as!(
             Strategy,
             r#"
@@ -174,39 +202,39 @@ impl StrategyRepository for PgStrategyRepository {
         .fetch_optional(self.get_pool())
         .await
         .map_err(|e| StrategyError::DatabaseError(e.to_string()))?;
-        
+
         Ok(result)
     }
-    
-    async fn list_strategies(&self, page: PageQuery, active_only: bool) -> Result<Page<Strategy>, StrategyError> {
+
+    async fn list_strategies(
+        &self,
+        page: PageQuery,
+        active_only: bool,
+    ) -> Result<Page<Strategy>, StrategyError> {
         let offset = (page.page - 1) * page.page_size;
-        
+
         // 取得總數
         let total = if active_only {
-            sqlx::query!(
-                "SELECT COUNT(*) as count FROM strategy WHERE active = true"
-            )
-            .fetch_one(self.get_pool())
-            .await
-            .map_err(|e| StrategyError::DatabaseError(e.to_string()))?
-            .count
-            .unwrap_or(0) as i64
+            sqlx::query!("SELECT COUNT(*) as count FROM strategy WHERE active = true")
+                .fetch_one(self.get_pool())
+                .await
+                .map_err(|e| StrategyError::DatabaseError(e.to_string()))?
+                .count
+                .unwrap_or(0) as i64
         } else {
-            sqlx::query!(
-                "SELECT COUNT(*) as count FROM strategy"
-            )
-            .fetch_one(self.get_pool())
-            .await
-            .map_err(|e| StrategyError::DatabaseError(e.to_string()))?
-            .count
-            .unwrap_or(0) as i64
+            sqlx::query!("SELECT COUNT(*) as count FROM strategy")
+                .fetch_one(self.get_pool())
+                .await
+                .map_err(|e| StrategyError::DatabaseError(e.to_string()))?
+                .count
+                .unwrap_or(0) as i64
         };
-        
+
         // 如果沒有策略，直接返回空頁
         if total == 0 {
             return Ok(Page::empty(page.page, page.page_size));
         }
-        
+
         // 取得策略列表
         let strategies = if active_only {
             sqlx::query_as!(
@@ -248,18 +276,22 @@ impl StrategyRepository for PgStrategyRepository {
             .await
             .map_err(|e| StrategyError::DatabaseError(e.to_string()))?
         };
-        
+
         Ok(Page::new(strategies, total, page.page, page.page_size))
     }
-    
-    async fn update_strategy(&self, strategy_id: i32, strategy: &StrategyInsert) -> Result<Strategy, StrategyError> {
+
+    async fn update_strategy(
+        &self,
+        strategy_id: i32,
+        strategy: &StrategyInsert,
+    ) -> Result<Strategy, StrategyError> {
         // 檢查策略是否存在
         let existing = self.get_strategy_by_id(strategy_id).await?;
-        
+
         if existing.is_none() {
             return Err(StrategyError::StrategyNotFound(strategy_id));
         }
-        
+
         // 檢查名稱和版本是否與其他策略衝突
         let name_conflict = sqlx::query!(
             r#"
@@ -273,16 +305,16 @@ impl StrategyRepository for PgStrategyRepository {
         .fetch_optional(self.get_pool())
         .await
         .map_err(|e| StrategyError::DatabaseError(e.to_string()))?;
-        
+
         if name_conflict.is_some() {
             return Err(StrategyError::NameConflict(format!(
                 "策略 '{}' 版本 '{}' 已存在",
                 strategy.name, strategy.version
             )));
         }
-        
+
         let now = Utc::now();
-        
+
         let result = sqlx::query_as!(
             Strategy,
             r#"
@@ -323,20 +355,24 @@ impl StrategyRepository for PgStrategyRepository {
         .fetch_one(self.get_pool())
         .await
         .map_err(|e| StrategyError::DatabaseError(e.to_string()))?;
-        
+
         Ok(result)
     }
-    
-    async fn update_strategy_active_status(&self, strategy_id: i32, active: bool) -> Result<Strategy, StrategyError> {
+
+    async fn update_strategy_active_status(
+        &self,
+        strategy_id: i32,
+        active: bool,
+    ) -> Result<Strategy, StrategyError> {
         // 檢查策略是否存在
         let existing = self.get_strategy_by_id(strategy_id).await?;
-        
+
         if existing.is_none() {
             return Err(StrategyError::StrategyNotFound(strategy_id));
         }
-        
+
         let now = Utc::now();
-        
+
         let result = sqlx::query_as!(
             Strategy,
             r#"
@@ -357,36 +393,37 @@ impl StrategyRepository for PgStrategyRepository {
         .fetch_one(self.get_pool())
         .await
         .map_err(|e| StrategyError::DatabaseError(e.to_string()))?;
-        
+
         Ok(result)
     }
-    
+
     async fn delete_strategy(&self, strategy_id: i32) -> Result<bool, StrategyError> {
         // 檢查策略是否存在
         let existing = self.get_strategy_by_id(strategy_id).await?;
-        
+
         if existing.is_none() {
             return Err(StrategyError::StrategyNotFound(strategy_id));
         }
-        
-        let result = sqlx::query!(
-            "DELETE FROM strategy WHERE strategy_id = $1",
-            strategy_id
-        )
-        .execute(self.get_pool())
-        .await
-        .map_err(|e| StrategyError::DatabaseError(e.to_string()))?;
-        
+
+        let result = sqlx::query!("DELETE FROM strategy WHERE strategy_id = $1", strategy_id)
+            .execute(self.get_pool())
+            .await
+            .map_err(|e| StrategyError::DatabaseError(e.to_string()))?;
+
         Ok(result.rows_affected() > 0)
     }
-    
-    async fn search_strategies_by_tags(&self, tags: &[String], page: PageQuery) -> Result<Page<Strategy>, StrategyError> {
+
+    async fn search_strategies_by_tags(
+        &self,
+        tags: &[String],
+        page: PageQuery,
+    ) -> Result<Page<Strategy>, StrategyError> {
         if tags.is_empty() {
             return self.list_strategies(page, false).await;
         }
-        
+
         let offset = (page.page - 1) * page.page_size;
-        
+
         // 取得總數
         let total = sqlx::query!(
             r#"
@@ -401,12 +438,12 @@ impl StrategyRepository for PgStrategyRepository {
         .map_err(|e| StrategyError::DatabaseError(e.to_string()))?
         .count
         .unwrap_or(0) as i64;
-        
+
         // 如果沒有策略，直接返回空頁
         if total == 0 {
             return Ok(Page::empty(page.page, page.page_size));
         }
-        
+
         // 取得策略列表
         let strategies = sqlx::query_as!(
             Strategy,
@@ -428,7 +465,7 @@ impl StrategyRepository for PgStrategyRepository {
         .fetch_all(self.get_pool())
         .await
         .map_err(|e| StrategyError::DatabaseError(e.to_string()))?;
-        
+
         Ok(Page::new(strategies, total, page.page, page.page_size))
     }
 }

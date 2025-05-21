@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// 基礎事件特徵
@@ -288,4 +288,4 @@ impl Event for DataUpdatedEvent {
     fn event_name() -> &'static str {
         "data_updated"
     }
-} 
+}

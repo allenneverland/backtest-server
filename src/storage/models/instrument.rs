@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::types::Json;
 use sqlx::FromRow;
 
-
 /// 股票特定屬性模型
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Stock {

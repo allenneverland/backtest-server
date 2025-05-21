@@ -1,24 +1,40 @@
 use crate::storage::models::*;
 use crate::storage::repository::{DbExecutor, TimeRange};
 use anyhow::Result;
+use async_trait::async_trait;
 use sqlx::PgPool;
 use std::sync::Arc;
-use async_trait::async_trait;
 
 /// 連續聚合視圖儲存庫特徵
 #[async_trait]
 pub trait AggregateRepository: Send + Sync {
     /// 獲取指定商品的日級成交量聚合數據
-    async fn get_daily_volume_by_instrument(&self, instrument_id: i32, time_range: TimeRange) -> Result<Vec<DailyVolumeByInstrument>>;
+    async fn get_daily_volume_by_instrument(
+        &self,
+        instrument_id: i32,
+        time_range: TimeRange,
+    ) -> Result<Vec<DailyVolumeByInstrument>>;
 
     /// 獲取多個商品的日級成交量聚合數據
-    async fn get_daily_volume_by_instruments(&self, instrument_ids: &[i32], time_range: TimeRange) -> Result<Vec<DailyVolumeByInstrument>>;
+    async fn get_daily_volume_by_instruments(
+        &self,
+        instrument_ids: &[i32],
+        time_range: TimeRange,
+    ) -> Result<Vec<DailyVolumeByInstrument>>;
 
     /// 獲取指定回測結果的日收益率聚合數據
-    async fn get_backtest_daily_returns(&self, result_id: i32, time_range: TimeRange) -> Result<Vec<BacktestDailyReturns>>;
+    async fn get_backtest_daily_returns(
+        &self,
+        result_id: i32,
+        time_range: TimeRange,
+    ) -> Result<Vec<BacktestDailyReturns>>;
 
     /// 獲取多個回測結果的日收益率聚合數據（用於比較）
-    async fn get_backtest_daily_returns_multi(&self, result_ids: &[i32], time_range: TimeRange) -> Result<Vec<BacktestDailyReturns>>;
+    async fn get_backtest_daily_returns_multi(
+        &self,
+        result_ids: &[i32],
+        time_range: TimeRange,
+    ) -> Result<Vec<BacktestDailyReturns>>;
 }
 
 /// PostgreSQL 連續聚合視圖儲存庫實現
@@ -41,7 +57,11 @@ impl DbExecutor for PgAggregateRepository {
 
 #[async_trait]
 impl AggregateRepository for PgAggregateRepository {
-    async fn get_daily_volume_by_instrument(&self, instrument_id: i32, time_range: TimeRange) -> Result<Vec<DailyVolumeByInstrument>> {
+    async fn get_daily_volume_by_instrument(
+        &self,
+        instrument_id: i32,
+        time_range: TimeRange,
+    ) -> Result<Vec<DailyVolumeByInstrument>> {
         let results = sqlx::query_as!(
             DailyVolumeByInstrument,
             r#"
@@ -70,7 +90,11 @@ impl AggregateRepository for PgAggregateRepository {
         Ok(results)
     }
 
-    async fn get_daily_volume_by_instruments(&self, instrument_ids: &[i32], time_range: TimeRange) -> Result<Vec<DailyVolumeByInstrument>> {
+    async fn get_daily_volume_by_instruments(
+        &self,
+        instrument_ids: &[i32],
+        time_range: TimeRange,
+    ) -> Result<Vec<DailyVolumeByInstrument>> {
         let results = sqlx::query_as!(
             DailyVolumeByInstrument,
             r#"
@@ -99,7 +123,11 @@ impl AggregateRepository for PgAggregateRepository {
         Ok(results)
     }
 
-    async fn get_backtest_daily_returns(&self, result_id: i32, time_range: TimeRange) -> Result<Vec<BacktestDailyReturns>> {
+    async fn get_backtest_daily_returns(
+        &self,
+        result_id: i32,
+        time_range: TimeRange,
+    ) -> Result<Vec<BacktestDailyReturns>> {
         let results = sqlx::query_as!(
             BacktestDailyReturns,
             r#"
@@ -124,7 +152,11 @@ impl AggregateRepository for PgAggregateRepository {
         Ok(results)
     }
 
-    async fn get_backtest_daily_returns_multi(&self, result_ids: &[i32], time_range: TimeRange) -> Result<Vec<BacktestDailyReturns>> {
+    async fn get_backtest_daily_returns_multi(
+        &self,
+        result_ids: &[i32],
+        time_range: TimeRange,
+    ) -> Result<Vec<BacktestDailyReturns>> {
         let results = sqlx::query_as!(
             BacktestDailyReturns,
             r#"
@@ -148,4 +180,4 @@ impl AggregateRepository for PgAggregateRepository {
 
         Ok(results)
     }
-} 
+}

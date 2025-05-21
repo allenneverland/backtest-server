@@ -1,17 +1,17 @@
 //! 金融商品結構定義
 
-use std::fmt;
+use super::types::{AssetType, DomainError, Result};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::fmt;
 use uuid::Uuid;
-use super::types::{AssetType, Result, DomainError};
-use serde::{Serialize, Deserialize};
 
 /// 金融商品定義
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Instrument {
     pub instrument_id: String,
     pub symbol: String,
-    pub exchange: String, 
+    pub exchange: String,
     pub asset_type: AssetType,
     pub name: String,
     pub description: Option<String>,
@@ -211,23 +211,27 @@ impl InstrumentBuilder {
     /// 構建金融商品實例
     pub fn build(self) -> Result<Instrument> {
         let now = Utc::now();
-        
+
         // 檢查必要字段
-        let instrument_id = self.instrument_id.ok_or_else(|| 
-            DomainError::MissingRequiredField("instrument_id".to_string()))?;
-        
-        let symbol = self.symbol.ok_or_else(|| 
-            DomainError::MissingRequiredField("symbol".to_string()))?;
-            
-        let exchange = self.exchange.ok_or_else(|| 
-            DomainError::MissingRequiredField("exchange".to_string()))?;
-            
-        let asset_type = self.asset_type.ok_or_else(|| 
-            DomainError::MissingRequiredField("asset_type".to_string()))?;
-        
+        let instrument_id = self
+            .instrument_id
+            .ok_or_else(|| DomainError::MissingRequiredField("instrument_id".to_string()))?;
+
+        let symbol = self
+            .symbol
+            .ok_or_else(|| DomainError::MissingRequiredField("symbol".to_string()))?;
+
+        let exchange = self
+            .exchange
+            .ok_or_else(|| DomainError::MissingRequiredField("exchange".to_string()))?;
+
+        let asset_type = self
+            .asset_type
+            .ok_or_else(|| DomainError::MissingRequiredField("asset_type".to_string()))?;
+
         // 如果沒有提供名稱，使用交易代碼作為名稱
         let name = self.name.unwrap_or_else(|| symbol.clone());
-            
+
         Ok(Instrument {
             instrument_id,
             symbol,
@@ -274,7 +278,7 @@ impl Instrument {
             attributes: serde_json::Value::Null,
         }
     }
-    
+
     /// 使用UUID創建一個新的金融商品
     pub fn with_uuid(
         symbol: impl Into<String>,
@@ -284,35 +288,35 @@ impl Instrument {
         let uuid = Uuid::new_v4().to_string();
         Self::new(uuid, symbol, exchange, asset_type)
     }
-    
+
     /// 創建一個新的構建器來構建金融商品
     pub fn builder() -> InstrumentBuilder {
         InstrumentBuilder::new()
     }
-    
+
     /// 設置金融商品名稱
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
         self
     }
-    
+
     /// 設置金融商品幣種
     pub fn with_currency(mut self, currency: impl Into<String>) -> Self {
         self.currency = currency.into();
         self
     }
-    
+
     /// 設置金融商品屬性
     pub fn with_attributes(mut self, attributes: serde_json::Value) -> Self {
         self.attributes = attributes;
         self
     }
-    
+
     /// 檢查金融商品是否處於活躍狀態
     pub fn is_active(&self) -> bool {
         self.is_active
     }
-    
+
     /// 檢查金融商品是否已到期
     pub fn is_expired(&self) -> bool {
         match self.expiry_date {
@@ -320,12 +324,12 @@ impl Instrument {
             None => false,
         }
     }
-    
+
     /// 獲取完整的市場識別符（如 NASDAQ:AAPL）
     pub fn market_id(&self) -> String {
         format!("{}:{}", self.exchange, self.symbol)
     }
-    
+
     /// 從屬性中獲取特定資產類型的屬性
     pub fn get_stock_attributes(&self) -> Option<StockAttributes> {
         if self.asset_type == AssetType::Stock {
@@ -334,7 +338,7 @@ impl Instrument {
             None
         }
     }
-    
+
     /// 從屬性中獲取期貨特定屬性
     pub fn get_future_attributes(&self) -> Option<FutureAttributes> {
         if self.asset_type == AssetType::Future {
@@ -343,7 +347,7 @@ impl Instrument {
             None
         }
     }
-    
+
     /// 從屬性中獲取選擇權特定屬性
     pub fn get_option_attributes(&self) -> Option<OptionAttributes> {
         if self.asset_type == AssetType::Option {
@@ -352,7 +356,7 @@ impl Instrument {
             None
         }
     }
-    
+
     /// 從屬性中獲取外匯特定屬性
     pub fn get_forex_attributes(&self) -> Option<ForexAttributes> {
         if self.asset_type == AssetType::Forex {
@@ -361,7 +365,7 @@ impl Instrument {
             None
         }
     }
-    
+
     /// 從屬性中獲取加密貨幣特定屬性
     pub fn get_crypto_attributes(&self) -> Option<CryptoAttributes> {
         if self.asset_type == AssetType::Crypto {
@@ -370,18 +374,18 @@ impl Instrument {
             None
         }
     }
-    
+
     /// 更新最後修改時間
     pub fn touch(&mut self) {
         self.updated_at = Utc::now();
     }
-    
+
     /// 設置金融商品為活躍狀態
     pub fn activate(&mut self) {
         self.is_active = true;
         self.touch();
     }
-    
+
     /// 設置金融商品為非活躍狀態
     pub fn deactivate(&mut self) {
         self.is_active = false;
@@ -398,13 +402,13 @@ impl fmt::Display for Instrument {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_instrument_creation() {
         let inst = Instrument::new("AAPL123", "AAPL", "NASDAQ", AssetType::Stock)
             .with_name("Apple Inc.")
             .with_currency("USD");
-            
+
         assert_eq!(inst.instrument_id, "AAPL123");
         assert_eq!(inst.symbol, "AAPL");
         assert_eq!(inst.exchange, "NASDAQ");
@@ -413,7 +417,7 @@ mod tests {
         assert_eq!(inst.currency, "USD");
         assert!(inst.is_active);
     }
-    
+
     #[test]
     fn test_instrument_builder() {
         let stock_attrs = StockAttributes {
@@ -423,7 +427,7 @@ mod tests {
             is_etf: false,
             dividend_yield: Some(0.53),
         };
-        
+
         let inst = Instrument::builder()
             .instrument_id("AAPL123")
             .symbol("AAPL")
@@ -437,30 +441,30 @@ mod tests {
             .stock_attributes(stock_attrs)
             .build()
             .unwrap();
-            
+
         assert_eq!(inst.instrument_id, "AAPL123");
         assert_eq!(inst.symbol, "AAPL");
         assert_eq!(inst.asset_type, AssetType::Stock);
         assert_eq!(inst.name, "Apple Inc.");
         assert_eq!(inst.lot_size, 100.0);
-        
+
         let attrs = inst.get_stock_attributes().unwrap();
         assert_eq!(attrs.sector, Some("Technology".to_string()));
         assert_eq!(attrs.industry, Some("Consumer Electronics".to_string()));
         assert!(!attrs.is_etf);
     }
-    
+
     #[test]
     fn test_market_id() {
         let inst = Instrument::new("BTC123", "BTC/USD", "Binance", AssetType::Crypto);
         assert_eq!(inst.market_id(), "Binance:BTC/USD");
     }
-    
+
     #[test]
     fn test_instrument_with_uuid() {
         let inst = Instrument::with_uuid("AAPL", "NASDAQ", AssetType::Stock);
         assert!(!inst.instrument_id.is_empty());
-        assert_ne!(inst.instrument_id, "AAPL");  // Should be a UUID
+        assert_ne!(inst.instrument_id, "AAPL"); // Should be a UUID
         assert_eq!(inst.symbol, "AAPL");
     }
 }

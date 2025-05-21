@@ -176,18 +176,18 @@ pub type Result<T> = std::result::Result<T, DomainError>;
 pub struct ColumnName;
 
 impl ColumnName {
-    pub const TIME: &'static str = "time";
-    pub const OPEN: &'static str = "open";
-    pub const HIGH: &'static str = "high";
-    pub const LOW: &'static str = "low";
-    pub const CLOSE: &'static str = "close";
-    pub const VOLUME: &'static str = "volume";
-    pub const INSTRUMENT_ID: &'static str = "instrument_id";
+    pub const TIME: &'static str = "time"; // 以毫秒為單位的 i64 時間戳
+    pub const OPEN: &'static str = "open"; // 開盤價
+    pub const HIGH: &'static str = "high"; // 最高價
+    pub const LOW: &'static str = "low"; // 最低價
+    pub const CLOSE: &'static str = "close"; // 收盤價
+    pub const VOLUME: &'static str = "volume"; // 成交量
+    pub const INSTRUMENT_ID: &'static str = "instrument_id"; // 商品代碼
 
     // Tick 數據相關
-    pub const PRICE: &'static str = "price";
-    pub const BID: &'static str = "bid";
-    pub const ASK: &'static str = "ask";
-    pub const BID_VOLUME: &'static str = "bid_volume";
-    pub const ASK_VOLUME: &'static str = "ask_volume";
+    pub const PRICE: &'static str = "price"; // 價格
+    pub const BID: &'static str = "bid"; // 買一價
+    pub const ASK: &'static str = "ask"; // 賣一價
+    pub const BID_VOLUME: &'static str = "bid_volume"; // 買一量
+    pub const ASK_VOLUME: &'static str = "ask_volume"; // 賣一量
 }

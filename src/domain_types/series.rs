@@ -2,6 +2,10 @@
 
 use super::resampler::Resampler;
 use super::types::{ColumnName, Frequency};
+use crate::utils::time_utils::{
+    datetime_range_to_timestamp_range, timestamp_range_to_datetime_range,
+};
+use chrono::{DateTime, Utc};
 use polars::prelude::*;
 use std::fmt;
 
@@ -90,7 +94,7 @@ impl MarketSeries {
         &self.instrument_id
     }
 
-    /// 過濾特定時間範圍的數據
+    /// 過濾特定時間範圍的數據（使用 i64 時間戳）
     pub fn filter_date_range(&self, start_time: i64, end_time: i64) -> PolarsResult<Self> {
         // 使用 Polars 的表達式 API 進行時間過濾
         let filtered = self.lazy_frame.clone().filter(
@@ -104,6 +108,19 @@ impl MarketSeries {
             instrument_id: self.instrument_id.clone(),
             frequency: self.frequency,
         })
+    }
+    
+    /// 過濾特定時間範圍的數據（使用 DateTime<Utc>）
+    /// 
+    /// 這個方法提供了一個更友好的接口，接受 DateTime<Utc> 類型的參數，
+    /// 並在內部轉換為計算核心層需要的 i64 時間戳。
+    pub fn filter_date_range_datetime(
+        &self,
+        start_time: &DateTime<Utc>,
+        end_time: &DateTime<Utc>,
+    ) -> PolarsResult<Self> {
+        let (start_ts, end_ts) = datetime_range_to_timestamp_range(start_time, end_time);
+        self.filter_date_range(start_ts, end_ts)
     }
 
     /// 選擇特定列並返回新的 LazyFrame
@@ -157,7 +174,7 @@ impl MarketSeries {
         })
     }
 
-    /// 獲取數據的時間範圍
+    /// 獲取數據的時間範圍（i64 時間戳）
     pub fn time_range(&self) -> PolarsResult<(i64, i64)> {
         let df = self.collect()?;
         let time_col = df.column(ColumnName::TIME)?;
@@ -166,6 +183,14 @@ impl MarketSeries {
         let (min_time, max_time) = time_col.i64()?.min_max().unwrap_or((0, 0));
 
         Ok((min_time, max_time))
+    }
+    
+    /// 獲取數據的時間範圍（DateTime<Utc>）
+    /// 
+    /// 返回時間範圍的開始和結束時間，以 DateTime<Utc> 格式表示
+    pub fn time_range_datetime(&self) -> PolarsResult<(DateTime<Utc>, DateTime<Utc>)> {
+        let (start_ts, end_ts) = self.time_range()?;
+        Ok(timestamp_range_to_datetime_range(start_ts, end_ts))
     }
 
     /// 轉換為另一種頻率（重採樣）

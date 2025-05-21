@@ -3,6 +3,10 @@
 use super::resampler::Resampler;
 use super::series::MarketSeries;
 use super::types::{ColumnName, Frequency};
+use crate::utils::time_utils::{
+    datetime_range_to_timestamp_range, timestamp_range_to_datetime_range,
+};
+use chrono::{DateTime, Utc};
 use polars::prelude::*;
 use std::fmt;
 
@@ -73,18 +77,40 @@ pub trait BaseDataFrame: Clone {
     /// 獲取時間列
     fn time_series(&self) -> PolarsResult<&Series>;
 
-    /// 按時間範圍過濾數據
+    /// 按時間範圍過濾數據 (使用 i64 時間戳)
     fn filter_by_date_range(&self, start_date: i64, end_date: i64) -> PolarsResult<Self>
     where
         Self: Sized;
+        
+    /// 按時間範圍過濾數據 (使用 DateTime<Utc>)
+    fn filter_by_date_range_datetime(
+        &self,
+        start_date: &DateTime<Utc>,
+        end_date: &DateTime<Utc>,
+    ) -> PolarsResult<Self>
+    where
+        Self: Sized,
+    {
+        let (start_ts, end_ts) = datetime_range_to_timestamp_range(start_date, end_date);
+        self.filter_by_date_range(start_ts, end_ts)
+    }
 
     /// 按時間排序
     fn sort_by_time(&self, descending: bool) -> PolarsResult<Self>
     where
         Self: Sized;
 
-    /// 獲取時間範圍
+    /// 獲取時間範圍 (i64 時間戳)
     fn time_range(&self) -> PolarsResult<(i64, i64)>;
+    
+    /// 獲取時間範圍 (DateTime<Utc>)
+    fn time_range_datetime(&self) -> PolarsResult<(DateTime<Utc>, DateTime<Utc>)>
+    where
+        Self: Sized,
+    {
+        let (start_ts, end_ts) = self.time_range()?;
+        Ok(timestamp_range_to_datetime_range(start_ts, end_ts))
+    }
 
     /// 獲取資料行數
     fn row_count(&self) -> usize;

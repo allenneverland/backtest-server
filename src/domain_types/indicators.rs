@@ -43,7 +43,8 @@ pub trait IndicatorsExt {
 
 impl IndicatorsExt for DataFrame {
     fn sma(&self, column: &str, window: usize, alias: Option<&str>) -> PolarsResult<DataFrame> {
-        let alias_str = alias.unwrap_or(&format!("sma_{}_{}", column, window));
+        let format_str = format!("sma_{}_{}", column, window);
+        let alias_str = alias.unwrap_or(&format_str);
         
         // 創建時間索引列的名稱 (假設有一個名為 "time" 的列作為時間索引)
         let time_column = ColumnName::TIME;
@@ -65,13 +66,14 @@ impl IndicatorsExt for DataFrame {
     }
     
     fn ema(&self, column: &str, window: usize, alias: Option<&str>) -> PolarsResult<DataFrame> {
-        let alias_str = alias.unwrap_or(&format!("ema_{}_{}", column, window));
+        let format_str = format!("ema_{}_{}", column, window);
+        let alias_str = alias.unwrap_or(&format_str);
         
         // 使用 Polars 原生的指數加權移動平均函數
         let alpha = 2.0 / (window as f64 + 1.0);
         let ema_expr = col(column)
             .ewm_mean(EWMOptions {
-                alpha: Some(alpha),
+                alpha,
                 min_periods: 1,
                 adjust: false,
                 bias: false,
@@ -83,11 +85,12 @@ impl IndicatorsExt for DataFrame {
     }
     
     fn rsi(&self, column: &str, window: usize, alias: Option<&str>) -> PolarsResult<DataFrame> {
-        let alias_str = alias.unwrap_or(&format!("rsi_{}_{}", column, window));
+        let format_str = format!("rsi_{}_{}", column, window);
+        let alias_str = alias.unwrap_or(&format_str);
         
         // 使用 Polars 高效表達式 API 實現 RSI 計算
         // 1. 計算價格變化
-        let diff_expr = col(column).diff(1).alias("__price_change");
+        let diff_expr = col(column).diff(lit(1), NullBehavior::Drop).alias("__price_change");
         
         // 2. 計算上漲和下跌
         let up_expr = when(col("__price_change").gt(lit(0.0)))
@@ -103,7 +106,7 @@ impl IndicatorsExt for DataFrame {
         // 3. 計算平均上漲和下跌
         let avg_up_expr = col("__up")
             .ewm_mean(EWMOptions {
-                alpha: Some(1.0 / window as f64),
+                alpha: 1.0 / window as f64,
                 min_periods: window,
                 adjust: false,
                 bias: false,
@@ -113,7 +116,7 @@ impl IndicatorsExt for DataFrame {
             
         let avg_down_expr = col("__down")
             .ewm_mean(EWMOptions {
-                alpha: Some(1.0 / window as f64),
+                alpha: 1.0 / window as f64,
                 min_periods: window,
                 adjust: false,
                 bias: false,
@@ -141,7 +144,8 @@ impl IndicatorsExt for DataFrame {
     fn bollinger_bands(&self, column: &str, window: usize, std_dev: f64, alias_prefix: Option<&str>) 
         -> PolarsResult<DataFrame> {
         
-        let prefix = alias_prefix.unwrap_or(&format!("bb_{}_{}_{}", column, window, std_dev));
+        let format_str = format!("bb_{}_{}_{}", column, window, std_dev);
+        let prefix = alias_prefix.unwrap_or(&format_str);
         let middle_alias = format!("{}_middle", prefix);
         let upper_alias = format!("{}_upper", prefix);
         let lower_alias = format!("{}_lower", prefix);
@@ -189,7 +193,8 @@ impl IndicatorsExt for DataFrame {
     fn macd(&self, column: &str, fast_period: usize, slow_period: usize, signal_period: usize, 
             alias_prefix: Option<&str>) -> PolarsResult<DataFrame> {
             
-        let prefix = alias_prefix.unwrap_or(&format!("macd_{}_{}_{}_{}", column, fast_period, slow_period, signal_period));
+        let format_str = format!("macd_{}_{}_{}_{}", column, fast_period, slow_period, signal_period);
+        let prefix = alias_prefix.unwrap_or(&format_str);
         let macd_alias = format!("{}_line", prefix);
         let signal_alias = format!("{}_signal", prefix);
         let hist_alias = format!("{}_histogram", prefix);
@@ -198,7 +203,7 @@ impl IndicatorsExt for DataFrame {
         let fast_ema_expr = col(column)
             .ewm_mean(
                 EWMOptions {
-                    alpha: Some(2.0 / (fast_period as f64 + 1.0)),
+                    alpha: 2.0 / (fast_period as f64 + 1.0),
                     min_periods: 1,
                     adjust: false,
                     bias: false,
@@ -211,7 +216,7 @@ impl IndicatorsExt for DataFrame {
         let slow_ema_expr = col(column)
             .ewm_mean(
                 EWMOptions {
-                    alpha: Some(2.0 / (slow_period as f64 + 1.0)),
+                    alpha: 2.0 / (slow_period as f64 + 1.0),
                     min_periods: 1,
                     adjust: false,
                     bias: false,
@@ -228,7 +233,7 @@ impl IndicatorsExt for DataFrame {
         let signal_expr = col(&macd_alias)
             .ewm_mean(
                 EWMOptions {
-                    alpha: Some(2.0 / (signal_period as f64 + 1.0)),
+                    alpha: 2.0 / (signal_period as f64 + 1.0),
                     min_periods: 1,
                     adjust: false,
                     bias: false,
@@ -256,7 +261,8 @@ impl IndicatorsExt for DataFrame {
                   alias_prefix: Option<&str>) -> PolarsResult<DataFrame> {
                   
         let smooth_k = smooth_k.unwrap_or(1);
-        let prefix = alias_prefix.unwrap_or(&format!("stoch_{}_{}_{}", k_period, d_period, smooth_k));
+        let format_str = format!("stoch_{}_{}_{}", k_period, d_period, smooth_k);
+        let prefix = alias_prefix.unwrap_or(&format_str);
         let k_alias = format!("{}_k", prefix);
         let d_alias = format!("{}_d", prefix);
         
@@ -329,7 +335,8 @@ impl IndicatorsExt for DataFrame {
     }
     
     fn atr(&self, window: usize, alias: Option<&str>) -> PolarsResult<DataFrame> {
-        let alias_str = alias.unwrap_or(&format!("atr_{}", window));
+        let format_str = format!("atr_{}", window);
+        let alias_str = alias.unwrap_or(&format_str);
         
         // 計算真實範圍(TR)組件
         let high_low = (col(ColumnName::HIGH) - col(ColumnName::LOW)).alias("__hl");
@@ -345,7 +352,7 @@ impl IndicatorsExt for DataFrame {
         let atr_expr = col("__tr")
             .ewm_mean(
                 EWMOptions {
-                    alpha: Some(1.0 / window as f64),
+                    alpha: 1.0 / window as f64,
                     min_periods: window,
                     adjust: false,
                     bias: false,
@@ -366,7 +373,8 @@ impl IndicatorsExt for DataFrame {
     }
     
     fn obv(&self, alias: Option<&str>) -> PolarsResult<DataFrame> {
-        let alias_str = alias.unwrap_or("obv");
+        let format_str = "obv".to_string();
+        let alias_str = alias.unwrap_or(&format_str);
         // 1. 計算價格變化方向
         let close_diff_expr = col(ColumnName::CLOSE).diff(lit(1), NullBehavior::Drop).alias("__close_diff");
         
@@ -396,7 +404,8 @@ impl IndicatorsExt for DataFrame {
     }
     
     fn donchian_channel(&self, window: usize, alias_prefix: Option<&str>) -> PolarsResult<DataFrame> {
-        let prefix = alias_prefix.unwrap_or(&format!("dc_{}", window));
+        let format_str = format!("dc_{}", window);
+        let prefix = alias_prefix.unwrap_or(&format_str);
         let upper_alias = format!("{}_upper", prefix);
         let middle_alias = format!("{}_middle", prefix);
         let lower_alias = format!("{}_lower", prefix);
@@ -437,10 +446,11 @@ impl IndicatorsExt for DataFrame {
     }
     
     fn momentum(&self, column: &str, period: usize, alias: Option<&str>) -> PolarsResult<DataFrame> {
-        let alias_str = alias.unwrap_or(&format!("mom_{}_{}", column, period));
+        let format_str = format!("mom_{}_{}", column, period);
+        let alias_str = alias.unwrap_or(&format_str);
         
         // 計算動量指標 (當前價格 - 過去價格)
-        let mom_expr = (col(column) - col(column).shift(lit(period)))
+        let mom_expr = (col(column) - col(column).shift(lit(period as i64)))
             .alias(alias_str);
         
         // 組合結果

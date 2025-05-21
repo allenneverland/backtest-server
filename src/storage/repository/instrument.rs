@@ -565,6 +565,8 @@ impl InstrumentRepository {
         };
 
         // 從UTC DateTime轉換為NaiveDate
+        // 使用域模型的時間轉換方法，避免直接處理DateTime
+        // 但由於資料庫需要NaiveDate類型，還需要進一步轉換
         let trading_start_date = domain_instrument
             .listing_date
             .map(|dt| dt.naive_utc().date());
@@ -606,6 +608,7 @@ impl InstrumentRepository {
         };
 
         // 從NaiveDate轉換為UTC DateTime
+        // 這裡我們不能直接使用time_utils，因為我們需要從NaiveDate轉換，而不是timestamp
         let listing_date = db_instrument.trading_start_date.map(|d| {
             use chrono::TimeZone;
             Utc.from_utc_datetime(&d.and_hms_opt(0, 0, 0).unwrap())

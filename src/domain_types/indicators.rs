@@ -1,7 +1,8 @@
 //! 基本技術指標實現 - 使用 Polars 原生函數優化
 
 use polars::prelude::*;
-use polars::lazy::dsl::{col, lit, when};
+use polars::lazy::dsl::{col, lit, when, max_horizontal};
+use polars::series::ops::NullBehavior;
 use super::types::ColumnName;
 
 /// 為 DataFrame 添加技術指標功能的擴展 trait
@@ -133,7 +134,7 @@ impl IndicatorsExt for DataFrame {
             .with_column(avg_down_expr)
             .with_column(rs_expr)
             .with_column(rsi_expr)
-            .drop_columns(["__price_change", "__up", "__down", "__avg_up", "__avg_down", "__rs"])
+            .drop(["__price_change", "__up", "__down", "__avg_up", "__avg_down", "__rs"])
             .collect()
     }
     
@@ -181,7 +182,7 @@ impl IndicatorsExt for DataFrame {
             .with_column(std_expr)
             .with_column(upper_expr)
             .with_column(lower_expr)
-            .drop_columns(["__std"])
+            .drop(["__std"])
             .collect()
     }
     
@@ -247,7 +248,7 @@ impl IndicatorsExt for DataFrame {
             .with_column(macd_expr)
             .with_column(signal_expr)
             .with_column(hist_expr)
-            .drop_columns(["__fast_ema", "__slow_ema"])
+            .drop(["__fast_ema", "__slow_ema"])
             .collect()
     }
     
@@ -323,7 +324,7 @@ impl IndicatorsExt for DataFrame {
             .with_column(raw_k_expr)
             .with_column(k_expr)
             .with_column(d_expr)
-            .drop_columns(["__high_max", "__low_min", "__raw_k"])
+            .drop(["__high_max", "__low_min", "__raw_k"])
             .collect()
     }
     
@@ -332,12 +333,13 @@ impl IndicatorsExt for DataFrame {
         
         // 計算真實範圍(TR)組件
         let high_low = (col(ColumnName::HIGH) - col(ColumnName::LOW)).alias("__hl");
-        let high_close = (col(ColumnName::HIGH) - col(ColumnName::CLOSE).shift(1)).abs().alias("__hc");
-        let low_close = (col(ColumnName::LOW) - col(ColumnName::CLOSE).shift(1)).abs().alias("__lc");
+        let high_close = col(ColumnName::HIGH) - col(ColumnName::CLOSE).shift(lit(1)).abs().alias("__hc");
+        let low_close = col(ColumnName::LOW) - col(ColumnName::CLOSE).shift(lit(1)).abs().alias("__lc");
         
         // 計算真實範圍 - 三個元素中的最大值
-        let tr_expr = greatest_horizontal([col("__hl"), col("__hc"), col("__lc")])
-            .alias("__tr");
+        let tr_expr = max_horizontal(&[col("__hl"), col("__hc"), col("__lc")])
+        .unwrap()
+        .alias("__tr");
         
         // 計算 ATR (TR的滾動平均)
         let atr_expr = col("__tr")
@@ -359,15 +361,14 @@ impl IndicatorsExt for DataFrame {
             .with_column(low_close)
             .with_column(tr_expr)
             .with_column(atr_expr)
-            .drop_columns(["__hl", "__hc", "__lc", "__tr"])
+            .drop(["__hl", "__hc", "__lc", "__tr"])
             .collect()
     }
     
     fn obv(&self, alias: Option<&str>) -> PolarsResult<DataFrame> {
         let alias_str = alias.unwrap_or("obv");
-        
         // 1. 計算價格變化方向
-        let close_diff_expr = col(ColumnName::CLOSE).diff(1).alias("__close_diff");
+        let close_diff_expr = col(ColumnName::CLOSE).diff(lit(1), NullBehavior::Drop).alias("__close_diff");
         
         // 2. 計算方向值 (1, -1, 0)
         let direction_expr = when(col("__close_diff").gt(lit(0.0)))
@@ -390,7 +391,7 @@ impl IndicatorsExt for DataFrame {
             .with_column(direction_expr)
             .with_column(dir_volume_expr)
             .with_column(obv_expr)
-            .drop_columns(["__close_diff", "__direction", "__dir_volume"])
+            .drop(["__close_diff", "__direction", "__dir_volume"])
             .collect()
     }
     
@@ -439,7 +440,7 @@ impl IndicatorsExt for DataFrame {
         let alias_str = alias.unwrap_or(&format!("mom_{}_{}", column, period));
         
         // 計算動量指標 (當前價格 - 過去價格)
-        let mom_expr = (col(column) - col(column).shift(period))
+        let mom_expr = (col(column) - col(column).shift(lit(period)))
             .alias(alias_str);
         
         // 組合結果
@@ -453,17 +454,17 @@ impl IndicatorsExt for DataFrame {
 mod tests {
     use super::*;
     use crate::domain_types::types::Frequency;
-    use crate::domain_types::frame::OHLCVFrame;
+    use crate::domain_types::frame::{BaseDataFrame, OHLCVFrame};
     
     fn create_test_dataframe() -> DataFrame {
-        let time = Series::new(ColumnName::TIME, &[1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]);
-        let open = Series::new(ColumnName::OPEN, &[100.0, 102.0, 104.0, 103.0, 105.0, 107.0, 109.0, 108.0, 110.0, 112.0]);
-        let high = Series::new(ColumnName::HIGH, &[105.0, 106.0, 107.0, 105.0, 108.0, 110.0, 112.0, 110.0, 115.0, 118.0]);
-        let low = Series::new(ColumnName::LOW, &[98.0, 100.0, 102.0, 101.0, 103.0, 105.0, 107.0, 105.0, 108.0, 110.0]);
-        let close = Series::new(ColumnName::CLOSE, &[102.0, 104.0, 105.0, 103.0, 107.0, 109.0, 110.0, 107.0, 112.0, 115.0]);
-        let volume = Series::new(ColumnName::VOLUME, &[1000, 1200, 1500, 1300, 1400, 1600, 1800, 1700, 2000, 2200]);
+        let time = Series::new(ColumnName::TIME.into(), &[1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]);
+        let open = Series::new(ColumnName::OPEN.into(), &[100.0, 102.0, 104.0, 103.0, 105.0, 107.0, 109.0, 108.0, 110.0, 112.0]);
+        let high = Series::new(ColumnName::HIGH.into(), &[105.0, 106.0, 107.0, 105.0, 108.0, 110.0, 112.0, 110.0, 115.0, 118.0]);
+        let low = Series::new(ColumnName::LOW.into(), &[98.0, 100.0, 102.0, 101.0, 103.0, 105.0, 107.0, 105.0, 108.0, 110.0]);
+        let close = Series::new(ColumnName::CLOSE.into(), &[102.0, 104.0, 105.0, 103.0, 107.0, 109.0, 110.0, 107.0, 112.0, 115.0]);
+        let volume = Series::new(ColumnName::VOLUME.into(), &[1000, 1200, 1500, 1300, 1400, 1600, 1800, 1700, 2000, 2200]);
         
-        DataFrame::new(vec![time, open, high, low, close, volume]).unwrap()
+        DataFrame::new(vec![time.into(), open.into(), high.into(), low.into(), close.into(), volume.into()]).unwrap()
     }
     
     #[test]
@@ -549,7 +550,7 @@ mod tests {
         let ohlcv_frame = OHLCVFrame::new(df, "AAPL", Frequency::Day).unwrap();
         
         // 在OHLCVFrame上應用技術指標
-        let with_sma = ohlcv_frame.inner().sma(ColumnName::CLOSE, 3, None).unwrap();
+        let with_sma = ohlcv_frame.into_inner().sma(ColumnName::CLOSE, 3, None).unwrap();
         let with_indicators = with_sma.bollinger_bands(ColumnName::CLOSE, 5, 2.0, None).unwrap();
         
         // 檢查指標列是否存在

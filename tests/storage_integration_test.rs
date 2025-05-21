@@ -1,42 +1,49 @@
 use anyhow::Result;
 use backtest_server::{
+    config::types::DatabaseConfig,
     domain_types::{
         instrument::{Instrument as DomainInstrument, StockAttributes},
         types::AssetType,
     },
     storage::{
-        database::{get_connection_pool, DatabaseConfig},
+        database,
         models::{
             instrument::{InstrumentInsert, StockAttributes as DbStockAttributes},
-            Exchange, ExchangeInsert,
+            Exchange, 
         },
         repository::{
-            ExchangeRepository, InstrumentRepository, Page, PageQuery,
+            ExchangeRepository, InstrumentRepository, PageQuery,
+            exchange::ExchangeInsert,
         },
     },
 };
 use rust_decimal_macros::dec;
 use sqlx::PgPool;
 use std::str::FromStr;
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 
 // 測試配置
-const TEST_DB_URL: &str = "postgres://postgres:postgres@localhost/testdb";
+const TEST_DB_URL: &str = "postgres://postgres:postgres@timescaledb/postgres";
 
 // 獲取測試用的數據庫連接池
 async fn get_test_db_pool() -> PgPool {
     let db_url = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| TEST_DB_URL.to_string());
     
     let config = DatabaseConfig {
-        url: db_url,
+        host: "localhost".to_string(),
+        port: 5432,
+        username: "postgres".to_string(),
+        password: "postgres".to_string(),
+        database: db_url.split('/').last().unwrap_or("testdb").to_string(),
+        connection_pool_size: 5,
         max_connections: 5,
         min_connections: 1,
-        idle_timeout_seconds: Some(30),
-        connection_timeout_seconds: 3,
-        max_lifetime_seconds: Some(1800),
+        max_lifetime_secs: 1800,
+        acquire_timeout_secs: 3,
+        idle_timeout_secs: 30,
     };
     
-    get_connection_pool(&config).await.expect("Failed to connect to test database")
+    database::init_db_pool(&config).await.expect("Failed to connect to test database")
 }
 
 // 清理測試數據
@@ -56,7 +63,7 @@ async fn create_test_exchange(repo: &ExchangeRepository) -> Result<Exchange> {
         operating_hours: None,
     };
     
-    repo.create(exchange).await
+    repo.create(exchange.clone()).await
 }
 
 #[sqlx::test]
@@ -84,15 +91,16 @@ async fn test_exchange_repository_crud_operations() -> Result<()> {
     assert_eq!(by_code.unwrap().exchange_id, exchange.exchange_id);
     
     // 更新交易所
+    let updated_exchange = ExchangeInsert {
+        code: "NASDAQ".to_string(),
+        name: "NASDAQ Global Select Market".to_string(),
+        country: "USA".to_string(),
+        timezone: "America/New_York".to_string(),
+        operating_hours: None,
+    };
     let updated = repo.update(
         exchange.exchange_id,
-        ExchangeInsert {
-            code: "NASDAQ".to_string(),
-            name: "NASDAQ Global Select Market".to_string(),
-            country: "USA".to_string(),
-            timezone: "America/New_York".to_string(),
-            operating_hours: None,
-        },
+        updated_exchange.clone(),
     ).await?;
     assert_eq!(updated.name, "NASDAQ Global Select Market");
     
@@ -221,7 +229,7 @@ async fn test_instrument_repository_operations() -> Result<()> {
     assert!(search_results.iter().any(|i| i.symbol == "AAPL"));
     
     // 測試更新
-    let mut update_instrument = InstrumentInsert {
+    let update_instrument = InstrumentInsert {
         symbol: "AAPL".to_string(),
         exchange_id: Some(exchange.exchange_id),
         instrument_type: "STOCK".to_string(),

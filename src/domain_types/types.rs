@@ -3,7 +3,6 @@
 use polars::prelude::{Duration as PolarsDuration, DataFrame, PolarsResult};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::marker::PhantomData;
 use std::time::Duration as StdDuration;
 use thiserror::Error;
 

@@ -93,8 +93,8 @@ impl<F: FrequencyMarker, D: DataFormat> FinancialSeries<F, D> {
     pub fn filter_date_range(self, start_time: i64, end_time: i64) -> Self {
         let filtered = self.lazy_frame.filter(
             col(ColumnName::TIME)
-                .gt_eq(lit(start_time))
-                .and(col(ColumnName::TIME).lt_eq(lit(end_time))),
+                .gt_eq(lit(start_time).cast(DataType::Int64))
+                .and(col(ColumnName::TIME).lt_eq(lit(end_time).cast(DataType::Int64))),
         );
 
         Self {

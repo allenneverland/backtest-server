@@ -1,3 +1,5 @@
+Commend use Traditional Chinese with correct UTF-8 format
+
 ## Common Development Commands
 
 ### Building and Running

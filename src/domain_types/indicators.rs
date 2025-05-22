@@ -633,12 +633,14 @@ mod tests {
 
     #[test]
     fn test_with_ohlcv_frame() {
+        use crate::domain_types::DailyOhlcv;
+        
         let df = create_test_dataframe();
-        let ohlcv_frame = OHLCVFrame::new(df, "AAPL", Frequency::Day).unwrap();
+        let ohlcv_frame = DailyOhlcv::new(df, "AAPL".to_string()).unwrap();
 
-        // 在OHLCVFrame上應用技術指標
+        // 在FinancialSeries上應用技術指標
         let with_sma = ohlcv_frame
-            .into_inner()
+            .collect().unwrap()
             .sma(ColumnName::CLOSE, 3, None)
             .unwrap();
         let with_indicators = with_sma

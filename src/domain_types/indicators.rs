@@ -377,9 +377,9 @@ impl IndicatorsExt for DataFrame {
         // 計算真實範圍(TR)組件
         let high_low = (col(ColumnName::HIGH) - col(ColumnName::LOW)).alias("__hl");
         let high_close =
-            col(ColumnName::HIGH) - col(ColumnName::CLOSE).shift(lit(1)).abs().alias("__hc");
+            (col(ColumnName::HIGH) - col(ColumnName::CLOSE).shift(lit(1))).abs().alias("__hc");
         let low_close =
-            col(ColumnName::LOW) - col(ColumnName::CLOSE).shift(lit(1)).abs().alias("__lc");
+            (col(ColumnName::LOW) - col(ColumnName::CLOSE).shift(lit(1))).abs().alias("__lc");
 
         // 計算真實範圍 - 三個元素中的最大值
         let tr_expr = max_horizontal(&[col("__hl"), col("__hc"), col("__lc")])

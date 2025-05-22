@@ -1,8 +1,9 @@
 //! 基本市場數據類型定義
 
-use polars::prelude::Duration as PolarsDuration;
+use polars::prelude::{Duration as PolarsDuration, DataFrame, PolarsResult};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::marker::PhantomData;
 use std::time::Duration as StdDuration;
 use thiserror::Error;
 
@@ -190,4 +191,138 @@ impl ColumnName {
     pub const ASK: &'static str = "ask"; // 賣一價
     pub const BID_VOLUME: &'static str = "bid_volume"; // 買一量
     pub const ASK_VOLUME: &'static str = "ask_volume"; // 賣一量
+}
+
+// ========== 頻率標記類型 ==========
+
+/// 頻率標記 trait
+pub trait FrequencyMarker {
+    fn to_frequency() -> Frequency;
+    fn name() -> &'static str;
+}
+
+/// Tick 頻率標記
+pub struct Tick;
+impl FrequencyMarker for Tick {
+    fn to_frequency() -> Frequency { Frequency::Tick }
+    fn name() -> &'static str { "Tick" }
+}
+
+/// 秒級頻率標記
+pub struct Second;
+impl FrequencyMarker for Second {
+    fn to_frequency() -> Frequency { Frequency::Second }
+    fn name() -> &'static str { "Second" }
+}
+
+/// 分鐘級頻率標記
+pub struct Minute;
+impl FrequencyMarker for Minute {
+    fn to_frequency() -> Frequency { Frequency::Minute }
+    fn name() -> &'static str { "Minute" }
+}
+
+/// 5分鐘級頻率標記
+pub struct FiveMinutes;
+impl FrequencyMarker for FiveMinutes {
+    fn to_frequency() -> Frequency { Frequency::FiveMinutes }
+    fn name() -> &'static str { "FiveMinutes" }
+}
+
+/// 15分鐘級頻率標記
+pub struct FifteenMinutes;
+impl FrequencyMarker for FifteenMinutes {
+    fn to_frequency() -> Frequency { Frequency::FifteenMinutes }
+    fn name() -> &'static str { "FifteenMinutes" }
+}
+
+/// 小時級頻率標記
+pub struct Hour;
+impl FrequencyMarker for Hour {
+    fn to_frequency() -> Frequency { Frequency::Hour }
+    fn name() -> &'static str { "Hour" }
+}
+
+/// 日級頻率標記
+pub struct Day;
+impl FrequencyMarker for Day {
+    fn to_frequency() -> Frequency { Frequency::Day }
+    fn name() -> &'static str { "Day" }
+}
+
+/// 週級頻率標記
+pub struct Week;
+impl FrequencyMarker for Week {
+    fn to_frequency() -> Frequency { Frequency::Week }
+    fn name() -> &'static str { "Week" }
+}
+
+/// 月級頻率標記
+pub struct Month;
+impl FrequencyMarker for Month {
+    fn to_frequency() -> Frequency { Frequency::Month }
+    fn name() -> &'static str { "Month" }
+}
+
+// ========== 數據格式 trait ==========
+
+/// 數據格式 trait - 定義不同金融數據格式的要求
+pub trait DataFormat {
+    /// 獲取此格式所需的必要列名
+    fn required_columns() -> &'static [&'static str];
+    
+    /// 驗證 DataFrame 是否符合此格式的要求
+    fn validate_dataframe(df: &DataFrame) -> PolarsResult<()> {
+        let required = Self::required_columns();
+        let schema = df.schema();
+        
+        for &col in required {
+            if !schema.contains(col) {
+                return Err(polars::prelude::PolarsError::ColumnNotFound(
+                    format!("Required column '{}' not found", col).into()
+                ));
+            }
+        }
+        Ok(())
+    }
+    
+    /// 格式名稱，用於調試和錯誤訊息
+    fn format_name() -> &'static str;
+}
+
+/// OHLCV 數據格式
+pub struct OhlcvFormat;
+
+impl DataFormat for OhlcvFormat {
+    fn required_columns() -> &'static [&'static str] {
+        &[
+            ColumnName::TIME,
+            ColumnName::OPEN,
+            ColumnName::HIGH,
+            ColumnName::LOW,
+            ColumnName::CLOSE,
+            ColumnName::VOLUME,
+        ]
+    }
+    
+    fn format_name() -> &'static str {
+        "OHLCV"
+    }
+}
+
+/// Tick 數據格式
+pub struct TickFormat;
+
+impl DataFormat for TickFormat {
+    fn required_columns() -> &'static [&'static str] {
+        &[
+            ColumnName::TIME,
+            ColumnName::PRICE,
+            ColumnName::VOLUME,
+        ]
+    }
+    
+    fn format_name() -> &'static str {
+        "Tick"
+    }
 }

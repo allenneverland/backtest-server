@@ -1,8 +1,9 @@
 //! 金融市場數據框架
 
 use super::resampler::Resampler;
-use super::series::MarketSeries;
-use super::types::{ColumnName, Frequency};
+use super::series::FinancialSeries;
+use super::types::{OhlcvFormat, TickFormat};
+use super::types::{ColumnName, Frequency, FrequencyMarker};
 use crate::utils::time_utils::{
     datetime_range_to_timestamp_range, timestamp_range_to_datetime_range,
 };
@@ -246,11 +247,11 @@ impl OHLCVFrame {
         })
     }
 
-    pub fn to_series(&self) -> PolarsResult<MarketSeries> {
-        MarketSeries::from_lazy(
-            self.df().clone().lazy(), // 只克隆數據結構，不克隆數據
+    /// 轉換為新的泛型時間序列（需要指定頻率標記類型）
+    pub fn to_series<F: FrequencyMarker>(&self) -> FinancialSeries<F, OhlcvFormat> {
+        FinancialSeries::from_lazy(
+            self.df().clone().lazy(),
             self.instrument_id().to_string(),
-            self.frequency(),
         )
     }
 

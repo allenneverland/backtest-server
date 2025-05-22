@@ -507,7 +507,6 @@ impl IndicatorsExt for DataFrame {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain_types::frame::{BaseDataFrame, OHLCVFrame};
     use crate::domain_types::types::Frequency;
 
     fn create_test_dataframe() -> DataFrame {

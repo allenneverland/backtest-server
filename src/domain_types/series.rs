@@ -224,7 +224,6 @@ pub type MinuteTick = TickSeries<Minute>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use polars::prelude::*;
 
     fn create_test_ohlcv_dataframe() -> DataFrame {
         let time = Series::new(ColumnName::TIME.into(), &[1000i64, 2000, 3000, 4000, 5000]);

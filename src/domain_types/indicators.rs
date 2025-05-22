@@ -69,13 +69,14 @@ impl IndicatorsExt for DataFrame {
 
         // 創建時間索引列的名稱 (假設有一個名為 "time" 的列作為時間索引)
         let time_column = ColumnName::TIME;
-
-        // 使用 Polars 窗口函數計算 SMA
+        
+        // 使用基於索引的滾動窗口計算 SMA
+        // 對於數字時間列，使用'i'格式表示索引值
         let options = RollingGroupOptions {
             index_column: time_column.into(),
-            period: Duration::new(window as i64), // 使用點數而非實際時間
-            offset: Duration::new(0),
-            closed_window: ClosedWindow::Right, // 右閉窗口
+            period: Duration::parse(&format!("{}i", window * 86400000)), // window個交易日的毫秒數
+            offset: Duration::parse("0i"),
+            closed_window: ClosedWindow::Right,
         };
 
         let sma_expr = col(column).rolling(options).mean().alias(alias_str);
@@ -188,8 +189,8 @@ impl IndicatorsExt for DataFrame {
         // 滾動窗口配置
         let options = RollingGroupOptions {
             index_column: time_column.into(),
-            period: Duration::new(window as i64),
-            offset: Duration::new(0),
+            period: Duration::parse(&format!("{}i", window * 86400000)), // window個交易日的毫秒數
+            offset: Duration::parse("0i"),
             closed_window: ClosedWindow::Right,
         };
 
@@ -507,12 +508,15 @@ impl IndicatorsExt for DataFrame {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain_types::types::Frequency;
 
     fn create_test_dataframe() -> DataFrame {
+        // 使用真實的日期時間戳 (每天一個數據點，從2024-01-01開始)
+        let base_timestamp = 1704067200000i64; // 2024-01-01 00:00:00 UTC in milliseconds
+        let time_data: Vec<i64> = (0..10).map(|i| base_timestamp + i * 86400000).collect(); // 每天增加86400000ms (24小時)
+        
         let time = Series::new(
             ColumnName::TIME.into(),
-            &[1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000],
+            &time_data,
         );
         let open = Series::new(
             ColumnName::OPEN.into(),

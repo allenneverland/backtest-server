@@ -36,7 +36,7 @@ lazy_static = "1.5.0"  # 懶初始化静态变量
 # 數據處理
 ndarray = { version = "0.16.1", features = ["serde"] }
 csv = "1.3.1"
-polars = { version = "0.47.1", features = ["ndarray", "temporal", "performant", "dynamic_group_by", "lazy", "concat_str", "dtype-categorical", "dtype-struct", "ewma", "polars-ops", "abs", "diff", "cum_agg"] }
+polars = { version = "0.47.1", features = ["ndarray", "temporal", "performant", "dynamic_group_by", "lazy", "concat_str", "dtype-categorical", "dtype-struct", "ewma", "polars-ops", "abs", "diff", "cum_agg", "rolling_window"] }
 rust_decimal = { version = "1.37.1", features = ["serde"] }
 statrs = "0.18.0"
 toml = "0.8.22"  # TOML 配置文件解析

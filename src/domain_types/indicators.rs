@@ -1,7 +1,7 @@
 //! 基本技術指標實現 - 使用 Polars 原生函數優化
 
 use super::types::ColumnName;
-use polars::lazy::dsl::{col, lit, max_horizontal, when};
+use polars::lazy::dsl::max_horizontal;
 use polars::prelude::*;
 use polars::series::ops::NullBehavior;
 
@@ -64,22 +64,20 @@ pub trait IndicatorsExt {
 
 impl IndicatorsExt for DataFrame {
     fn sma(&self, column: &str, window: usize, alias: Option<&str>) -> PolarsResult<DataFrame> {
+        println!("column: {}", column);
+        println!("window: {}", window);
         let format_str = format!("sma_{}_{}", column, window);
         let alias_str = alias.unwrap_or(&format_str);
 
-        // 創建時間索引列的名稱 (假設有一個名為 "time" 的列作為時間索引)
-        let time_column = ColumnName::TIME;
-        
-        // 使用基於索引的滾動窗口計算 SMA
-        // 對於數字時間列，使用'i'格式表示索引值
-        let options = RollingGroupOptions {
-            index_column: time_column.into(),
-            period: Duration::parse(&format!("{}i", window * 86400000)), // window個交易日的毫秒數
-            offset: Duration::parse("0i"),
-            closed_window: ClosedWindow::Right,
+        // 使用基於固定行數的滾動窗口計算 SMA
+        let options = RollingOptionsFixedWindow {
+            window_size: window,
+            min_periods: window, // 確保窗口滿了才計算
+            center: false,      // SMA 通常向後看
+            ..Default::default()
         };
 
-        let sma_expr = col(column).rolling(options).mean().alias(alias_str);
+        let sma_expr = col(column).rolling_mean(options).alias(alias_str);
 
         self.clone().lazy().with_column(sma_expr).collect()
     }

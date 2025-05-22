@@ -91,9 +91,7 @@ cargo make docker-clean
 cargo make docker-c cargo make run-example <example_name>
 
 # Common examples:
-cargo make docker-c cargo make run-example simple_strategy
-cargo make docker-c cargo make run-example backtest_runner
-cargo make docker-c cargo make run-example messaging_client
+cargo make docker-c cargo make run-example domain_types_demo
 ```
 
 ## High-Level Architecture

@@ -58,3 +58,16 @@ read_timeout_secs = 5
 write_timeout_secs = 5
 reconnect_attempts = 3
 reconnect_delay_secs = 1
+
+[rabbitmq]
+url = "amqp://guest:guest@localhost:5672/"
+pool_size = 10
+connection_timeout_secs = 5
+retry_interval_secs = 1
+max_retries = 5
+default_exchange_type = "direct"
+default_exchange = "backtest.direct"
+durable_messages = true
+publish_confirm = true
+prefetch_count = 10
+consumer_tag_prefix = "backtest_server"

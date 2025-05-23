@@ -12,7 +12,7 @@ impl Resampler {
 
         lf.group_by_dynamic(
             col(ColumnName::TIME),
-            [col(ColumnName::TIME)],
+            [],
             DynamicGroupOptions {
                 label: Label::Left,
                 start_by: StartBy::WindowBound,
@@ -70,7 +70,7 @@ impl Resampler {
             .lazy()
             .group_by_dynamic(
                 col(ColumnName::TIME),
-                [col(ColumnName::TIME)],
+                [],
                 DynamicGroupOptions {
                     label: Label::Left,
                     start_by: StartBy::WindowBound,
@@ -123,7 +123,11 @@ mod tests {
 
     /// 創建測試用的 Tick 數據 DataFrame
     fn create_test_tick_dataframe() -> DataFrame {
-        let time = Series::new(ColumnName::TIME.into(), &[1000, 1001, 1002, 1003, 1004]);
+        // 使用真實的時間戳（從2024-01-01開始，每秒一個tick）
+        let base_timestamp = 1704067200000i64; // 2024-01-01 00:00:00 UTC in milliseconds
+        let time_data: Vec<i64> = (0..5).map(|i| base_timestamp + i * 1000).collect(); // 每秒增加1000ms
+        
+        let time = Series::new(ColumnName::TIME.into(), &time_data);
         let price = Series::new(
             ColumnName::PRICE.into(),
             &[100.0, 101.0, 102.0, 103.0, 104.0],
@@ -137,6 +141,13 @@ mod tests {
     fn test_tick_to_ohlcv() {
         let df = create_test_tick_dataframe();
         let result = Resampler::tick_to_ohlcv(&df, Frequency::Minute);
+
+        match &result {
+            Ok(_) => {},
+            Err(e) => {
+                eprintln!("tick_to_ohlcv error: {:?}", e);
+            }
+        }
 
         assert!(result.is_ok(), "tick_to_ohlcv should return Ok");
 

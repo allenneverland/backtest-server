@@ -49,7 +49,6 @@ fn create_test_tick_data() -> DataFrame {
 // TODO: Fix Polars type coercion issues causing Int128 errors during filtering operations
 // This test needs to be updated to work with the new FinancialSeries LazyFrame approach
 #[test] 
-#[ignore]
 fn test_ohlcv_frame_creation_and_basic_operations() {
     let df = create_test_ohlcv_data();
     let instrument_id = "AAPL";
@@ -94,7 +93,6 @@ fn test_ohlcv_frame_creation_and_basic_operations() {
 // TODO: Fix Polars type coercion issues causing Int128 errors during filtering operations  
 // This test needs to be updated to work with the new FinancialSeries LazyFrame approach
 #[test]
-#[ignore]
 fn test_tick_frame_creation_and_basic_operations() {
     let df = create_test_tick_data();
     let instrument_id = "BTC/USD";

@@ -91,11 +91,17 @@ impl<F: FrequencyMarker, D: DataFormat> FinancialSeries<F, D> {
 
     /// 過濾特定時間範圍的數據（使用 i64 時間戳）- 可鏈接
     pub fn filter_date_range(self, start_time: i64, end_time: i64) -> Self {
-        let filtered = self.lazy_frame.filter(
-            col(ColumnName::TIME)
-                .gt_eq(lit(start_time).cast(DataType::Int64))
-                .and(col(ColumnName::TIME).lt_eq(lit(end_time).cast(DataType::Int64))),
-        );
+        // 為了避免 Polars 的 Int128 類型推斷問題，我們採用以下方案：
+        // 1. 收集 DataFrame
+        // 2. 使用 ChunkedArray API 進行過濾
+        // 3. 轉回 LazyFrame
+        
+        let df = self.lazy_frame.collect().unwrap();
+        let time_ca = df.column(ColumnName::TIME).unwrap().i64().unwrap();
+        let mask = time_ca.gt_eq(start_time) & time_ca.lt_eq(end_time);
+        let filtered_df = df.filter(&mask).unwrap();
+        
+        let filtered = filtered_df.lazy();
 
         Self {
             lazy_frame: filtered,
@@ -226,7 +232,11 @@ mod tests {
     use super::*;
 
     fn create_test_ohlcv_dataframe() -> DataFrame {
-        let time = Series::new(ColumnName::TIME.into(), &[1000i64, 2000, 3000, 4000, 5000]);
+        // 使用真實的日期時間戳 (每天一個數據點，從2024-01-01開始)
+        let base_timestamp = 1704067200000i64; // 2024-01-01 00:00:00 UTC in milliseconds
+        let timestamps: Vec<i64> = (0..5).map(|i| base_timestamp + i * 86400000).collect(); // 每天增加86400000ms (24小時)
+        
+        let time = Series::new(ColumnName::TIME.into(), &timestamps);
         let open = Series::new(ColumnName::OPEN.into(), &[100.0, 101.0, 102.0, 103.0, 104.0]);
         let high = Series::new(ColumnName::HIGH.into(), &[105.0, 106.0, 107.0, 108.0, 109.0]);
         let low = Series::new(ColumnName::LOW.into(), &[95.0, 96.0, 97.0, 98.0, 99.0]);
@@ -245,7 +255,11 @@ mod tests {
     }
 
     fn create_test_tick_dataframe() -> DataFrame {
-        let time = Series::new(ColumnName::TIME.into(), &[1000i64, 1001, 1002, 1003, 1004]);
+        // 使用真實的日期時間戳（毫秒級），間隔1秒
+        let base_timestamp = 1704067200000i64; // 2024-01-01 00:00:00 UTC in milliseconds
+        let timestamps: Vec<i64> = (0..5).map(|i| base_timestamp + i * 1000).collect(); // 每秒增加1000ms
+        
+        let time = Series::new(ColumnName::TIME.into(), &timestamps);
         let price = Series::new(ColumnName::PRICE.into(), &[100.0, 101.0, 102.0, 103.0, 104.0]);
         let volume = Series::new(ColumnName::VOLUME.into(), &[10i32, 20, 30, 40, 50]);
 
@@ -270,17 +284,18 @@ mod tests {
         assert_eq!(tick_data.frequency(), Frequency::Tick);
     }
 
-    // TODO: Fix Polars type inference issue in method chaining
     #[test]
-    #[ignore]
     fn test_method_chaining() {
         let df = create_test_ohlcv_dataframe();
         let daily_ohlcv = DailyOhlcv::new(df, "AAPL".to_string()).unwrap();
         
-        // 測試過濾
-        let filtered = daily_ohlcv.filter_date_range(2000i64, 4000i64);
+        // 測試過濾 - 從第二天到第四天
+        let start_time = 1704067200000i64 + 86400000; // 2024-01-02
+        let end_time = 1704067200000i64 + 3 * 86400000; // 2024-01-04
+        
+        let filtered = daily_ohlcv.filter_date_range(start_time, end_time);
         let filtered_result = filtered.collect().unwrap();
-        assert_eq!(filtered_result.height(), 3); // 2000, 3000, 4000
+        assert_eq!(filtered_result.height(), 3); // 包含 2024-01-02, 2024-01-03, 2024-01-04
         
         // 測試排序和列選擇
         let df2 = create_test_ohlcv_dataframe();
@@ -299,15 +314,18 @@ mod tests {
         let daily_ohlcv = DailyOhlcv::new(df, "AAPL".to_string()).unwrap();
 
         let (start, end) = daily_ohlcv.time_range().unwrap();
-        assert_eq!(start, 1000);
-        assert_eq!(end, 5000);
+        assert_eq!(start, 1704067200000); // 2024-01-01
+        assert_eq!(end, 1704067200000 + 4 * 86400000); // 2024-01-05
     }
 
     #[test]
     fn test_format_validation() {
         // 測試缺少必要列的情況
         let incomplete_df = DataFrame::new(vec![
-            Series::new(ColumnName::TIME.into(), &[1000i64, 2000]).into(),
+            Series::new(ColumnName::TIME.into(), &[
+                1704067200000i64, // 2024-01-01
+                1704067200000i64 + 86400000, // 2024-01-02
+            ]).into(),
             Series::new(ColumnName::OPEN.into(), &[100.0, 101.0]).into(),
         ]).unwrap();
 

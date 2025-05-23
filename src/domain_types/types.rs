@@ -61,15 +61,15 @@ impl Frequency {
     /// 轉換為表示該頻率的 Polars Duration
     pub fn to_duration(&self) -> PolarsDuration {
         match self {
-            Frequency::Tick => PolarsDuration::new(0),
-            Frequency::Second => PolarsDuration::new(1), // seconds
-            Frequency::Minute => PolarsDuration::new(60), // 60 seconds
-            Frequency::FiveMinutes => PolarsDuration::new(300), // 300 seconds
-            Frequency::FifteenMinutes => PolarsDuration::new(900), // 900 seconds
-            Frequency::Hour => PolarsDuration::new(3600), // 3600 seconds
-            Frequency::Day => PolarsDuration::new(86400), // 86400 seconds
-            Frequency::Week => PolarsDuration::new(604800), // 604800 seconds
-            Frequency::Month => PolarsDuration::new(2592000), // 2592000 seconds (30 days)
+            Frequency::Tick => PolarsDuration::parse("0i"),
+            Frequency::Second => PolarsDuration::parse("1000i"),        // 1 second = 1,000 ms
+            Frequency::Minute => PolarsDuration::parse("60000i"),       // 1 minute = 60,000 ms
+            Frequency::FiveMinutes => PolarsDuration::parse("300000i"), // 5 minutes = 300,000 ms
+            Frequency::FifteenMinutes => PolarsDuration::parse("900000i"), // 15 minutes = 900,000 ms
+            Frequency::Hour => PolarsDuration::parse("3600000i"),       // 1 hour = 3,600,000 ms
+            Frequency::Day => PolarsDuration::parse("86400000i"),       // 1 day = 86,400,000 ms
+            Frequency::Week => PolarsDuration::parse("604800000i"),     // 1 week = 604,800,000 ms
+            Frequency::Month => PolarsDuration::parse("2592000000i"),   // 30 days = 2,592,000,000 ms
         }
     }
 

@@ -108,7 +108,7 @@ impl IndicatorsExt for DataFrame {
         // 使用 Polars 高效表達式 API 實現 RSI 計算
         // 1. 計算價格變化
         let diff_expr = col(column)
-            .diff(lit(1), NullBehavior::Drop)
+            .diff(lit(1), NullBehavior::Ignore)
             .alias("__price_change");
 
         // 2. 計算上漲和下跌
@@ -181,27 +181,22 @@ impl IndicatorsExt for DataFrame {
         let upper_alias = format!("{}_upper", prefix);
         let lower_alias = format!("{}_lower", prefix);
 
-        // 創建時間索引列的名稱
-        let time_column = ColumnName::TIME;
-
-        // 滾動窗口配置
-        let options = RollingGroupOptions {
-            index_column: time_column.into(),
-            period: Duration::parse(&format!("{}i", window * 86400000)), // window個交易日的毫秒數
-            offset: Duration::parse("0i"),
-            closed_window: ClosedWindow::Right,
+        // 使用基於固定行數的滾動窗口配置
+        let options = RollingOptionsFixedWindow {
+            window_size: window,
+            min_periods: window,
+            center: false,
+            ..Default::default()
         };
 
         // 計算中線(SMA)並加入數據框
         let middle_expr = col(column)
-            .rolling(options.clone())
-            .mean()
+            .rolling_mean(options.clone())
             .alias(&middle_alias);
 
         // 計算滾動標準差
         let std_expr = col(column)
-            .rolling(options)
-            .std(1) // 使用樣本標準差
+            .rolling_std(options)
             .alias("__std");
 
         // 計算上軌和下軌
@@ -412,7 +407,7 @@ impl IndicatorsExt for DataFrame {
         let alias_str = alias.unwrap_or(&format_str);
         // 1. 計算價格變化方向
         let close_diff_expr = col(ColumnName::CLOSE)
-            .diff(lit(1), NullBehavior::Drop)
+            .diff(lit(1), NullBehavior::Ignore)
             .alias("__close_diff");
 
         // 2. 計算方向值 (1, -1, 0)

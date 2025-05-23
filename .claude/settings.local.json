@@ -3,7 +3,8 @@
     "allow": [
       "WebFetch(domain:docs.rs)",
       "Bash(grep:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "mcp__sequentialthinking__sequentialthinking"
     ],
     "deny": []
   }

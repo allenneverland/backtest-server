@@ -1,311 +1,267 @@
-use serde::{Serialize, Deserialize};
+use super::error::{ValidationError, ValidationErrors};
 use chrono::{DateTime, Utc};
-use super::error::DataValidationError;
-use crate::domain_types::data_point::OHLCVPoint;
-use crate::domain_types::TimeSeries;
-use std::collections::HashSet;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-/// 數據驗證報告
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DataValidationReport {
-    pub symbol: String,
-    pub data_type: String, // e.g., "OHLCV", "Tick"
-    pub validation_time: DateTime<Utc>,
-    pub total_records_processed: usize, // Total records before filtering
-    pub valid_records: usize, // Records remaining after validation and cleaning
-    pub invalid_records_count: usize, // Number of records deemed invalid
-    pub validation_issues: Vec<ValidationIssue>,
-    pub warnings: Vec<ValidationWarning>,
-    pub statistics: Option<DataStatistics>, // Statistics might not be available for all data types or if data is empty
+/// 驗證報告
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationReport {
+    /// 驗證器名稱
+    pub validator_name: String,
+    /// 開始時間
+    pub start_time: DateTime<Utc>,
+    /// 結束時間
+    pub end_time: DateTime<Utc>,
+    /// 總記錄數
+    pub total_records: usize,
+    /// 有效記錄數
+    pub valid_records: usize,
+    /// 無效記錄數
+    pub invalid_records: usize,
+    /// 錯誤摘要
+    pub error_summary: ErrorSummary,
+    /// 詳細錯誤（可選）
+    pub detailed_errors: Option<Vec<DetailedError>>,
+    /// 統計資訊
+    pub statistics: HashMap<String, serde_json::Value>,
 }
 
-/// 驗證問題
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ValidationIssue {
-    pub error_type: String,
-    pub message: String,
-    pub record_index: Option<usize>, // Index in the original raw data, if applicable
-    pub field: Option<String>,
-    pub value: Option<String>, // The problematic value
-    pub timestamp: Option<DateTime<Utc>>,
-}
-
-/// 驗證警告（不會導致數據被過濾，但需要注意）
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ValidationWarning {
-    pub warning_type: String,
-    pub message: String,
-    pub record_index: Option<usize>,
-    pub field: Option<String>,
-    pub value: Option<String>,
-    pub timestamp: Option<DateTime<Utc>>,
-}
-
-/// 數據統計信息
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DataStatistics {
-    pub min_price: Option<f64>,
-    pub max_price: Option<f64>,
-    pub avg_price: Option<f64>,
-    pub min_volume: Option<f64>,
-    pub max_volume: Option<f64>,
-    pub avg_volume: Option<f64>,
-    pub start_date: Option<DateTime<Utc>>,
-    pub end_date: Option<DateTime<Utc>>,
-    pub time_span_days: Option<f64>,
-    pub price_volatility: Option<f64>,
-    pub missing_data_points_estimated: usize, // Estimated based on expected frequency vs. actual
-    pub gaps_count: usize,
-    pub largest_gap_duration_secs: Option<i64>,
-    pub average_gap_duration_secs: Option<f64>,
-}
-
-impl DataValidationReport {
-    pub fn new(symbol: String, data_type: String, total_records_processed: usize) -> Self {
+impl ValidationReport {
+    /// 創建新的驗證報告
+    pub fn new(validator_name: impl Into<String>) -> Self {
+        let now = Utc::now();
         Self {
-            symbol,
-            data_type,
-            validation_time: Utc::now(),
-            total_records_processed,
-            valid_records: 0, // Will be updated after processing
-            invalid_records_count: 0,
-            validation_issues: Vec::new(),
-            warnings: Vec::new(),
-            statistics: None, 
+            validator_name: validator_name.into(),
+            start_time: now,
+            end_time: now,
+            total_records: 0,
+            valid_records: 0,
+            invalid_records: 0,
+            error_summary: ErrorSummary::default(),
+            detailed_errors: None,
+            statistics: HashMap::new(),
         }
     }
 
-    pub fn add_issue(&mut self, error: DataValidationError, record_index: Option<usize>, timestamp: Option<DateTime<Utc>>) {
-        let (error_type, message, field, value) = match error {
-            DataValidationError::RangeError { field, value, message, .. } => 
-                ("RangeError".to_string(), message, Some(field), Some(value)),
-            DataValidationError::FormatError { field, message, .. } => 
-                ("FormatError".to_string(), message, Some(field), None),
-            DataValidationError::LogicError { message, .. } => 
-                ("LogicError".to_string(), message, None, None),
-            DataValidationError::MissingData { field, .. } => 
-                ("MissingData".to_string(), format!("缺失欄位 {}", field), Some(field), None),
-            DataValidationError::ConsistencyError { message, .. } => 
-                ("ConsistencyError".to_string(), message, None, None),
-            DataValidationError::TimeSeriesError { message, .. } => 
-                ("TimeSeriesError".to_string(), message, None, None),
-            DataValidationError::DuplicateDataError { message, timestamp: ts, .. } => 
-                ("DuplicateDataError".to_string(), message, None, ts.map(|t| t.to_rfc3339())),
-            DataValidationError::SystemError { message, .. } => 
-                ("SystemError".to_string(), message, None, None),
-        };
+    /// 完成報告
+    pub fn finish(mut self) -> Self {
+        self.end_time = Utc::now();
+        self
+    }
+
+    /// 添加成功記錄
+    pub fn add_success(&mut self) {
+        self.total_records += 1;
+        self.valid_records += 1;
+    }
+
+    /// 添加錯誤
+    pub fn add_error(&mut self, line: usize, error: ValidationError) {
+        self.total_records += 1;
+        self.invalid_records += 1;
+        self.error_summary.add_error(&error);
         
-        self.validation_issues.push(ValidationIssue {
-            error_type,
-            message,
-            record_index,
-            field,
-            value,
-            timestamp,
-        });
-        self.invalid_records_count += 1;
-    }
-    
-    pub fn add_warning(&mut self, warning_type: &str, message: &str, record_index: Option<usize>, field: Option<String>, value: Option<String>, timestamp: Option<DateTime<Utc>>) {
-        self.warnings.push(ValidationWarning {
-            warning_type: warning_type.to_string(),
-            message: message.to_string(),
-            record_index,
-            field,
-            value,
-            timestamp,
-        });
-    }
-
-    pub fn set_valid_records_count(&mut self, count: usize) {
-        self.valid_records = count;
-    }
-
-    pub fn calculate_and_set_ohlcv_stats(&mut self, time_series: &TimeSeries<OHLCVPoint>) {
-        if time_series.is_empty() {
-            self.statistics = Some(DataStatistics {
-                min_price: None,
-                max_price: None,
-                avg_price: None,
-                min_volume: None,
-                max_volume: None,
-                avg_volume: None,
-                start_date: None,
-                end_date: None,
-                time_span_days: None,
-                price_volatility: None,
-                missing_data_points_estimated: 0,
-                gaps_count: 0,
-                largest_gap_duration_secs: None,
-                average_gap_duration_secs: None,
+        if let Some(ref mut errors) = self.detailed_errors {
+            errors.push(DetailedError {
+                line,
+                error_type: error_type_name(&error),
+                message: error.to_string(),
             });
-            return;
         }
-        
-        let mut min_p = f64::MAX;
-        let mut max_p = f64::MIN;
-        let mut sum_price = 0.0;
-        let mut min_v = f64::MAX;
-        let mut max_v = f64::MIN;
-        let mut sum_volume = 0.0;
-        
-        for point in &time_series.data {
-            min_p = min_p.min(point.low);
-            max_p = max_p.max(point.high);
-            sum_price += point.close;
-            min_v = min_v.min(point.volume);
-            max_v = max_v.max(point.volume);
-            sum_volume += point.volume;
-        }
-        
-        let count = time_series.data.len() as f64;
-        let avg_p = if count > 0.0 { Some(sum_price / count) } else { None };
-        let avg_v = if count > 0.0 { Some(sum_volume / count) } else { None };
-        
-        let time_span_days = match (time_series.start_time, time_series.end_time) {
-            (Some(start), Some(end)) if end > start => {
-                Some(end.signed_duration_since(start).num_milliseconds() as f64 / (24.0 * 60.0 * 60.0 * 1000.0))
-            }
-            _ => None,
-        };
-        
-        let price_volatility = if let Some(avg_price_val) = avg_p {
-            if count > 0.0 {
-                let variance = time_series.data.iter()
-                    .map(|point| {
-                        let diff = point.close - avg_price_val;
-                        diff * diff
-                    })
-                    .sum::<f64>() / count;
-                Some(variance.sqrt())
-            } else { None }
-        } else { None };
-        
-        // Basic gap calculation (can be refined)
-        let mut gaps_count = 0;
-        let mut total_gap_duration_secs: i64 = 0;
-        let mut largest_gap_duration_secs: i64 = 0;
-        
-        if time_series.data.len() > 1 {
-            for i in 0..(time_series.data.len() - 1) {
-                let duration_since_last = time_series.data[i+1].timestamp.signed_duration_since(time_series.data[i].timestamp);
-                // Define what constitutes a significant gap (e.g., more than 2x typical interval for the data's frequency)
-                // This is a placeholder; actual expected interval would depend on time_series.frequency if available
-                let expected_interval_approx_secs = match time_series.frequency {
-                    Some(freq) => {
-                        let duration = freq.to_duration();
-                        duration.as_secs() as i64
-                    },
-                    None => 60, // Default to 1 minute if no frequency
-                };
+    }
 
-                if duration_since_last.num_seconds() > expected_interval_approx_secs * 2 { // Example: gap is > 2x expected interval
-                    gaps_count += 1;
-                    let gap_secs = duration_since_last.num_seconds();
-                    total_gap_duration_secs += gap_secs;
-                    if gap_secs > largest_gap_duration_secs {
-                        largest_gap_duration_secs = gap_secs;
-                    }
+    /// 從錯誤集合創建報告
+    pub fn from_errors(
+        validator_name: impl Into<String>,
+        total_records: usize,
+        errors: &ValidationErrors,
+    ) -> Self {
+        let mut report = Self::new(validator_name);
+        report.total_records = total_records;
+        report.valid_records = total_records.saturating_sub(errors.error_count());
+        report.invalid_records = errors.error_count();
+        
+        for (line, error) in errors.iter() {
+            report.error_summary.add_error(error);
+            
+            if report.detailed_errors.is_none() {
+                report.detailed_errors = Some(Vec::new());
+            }
+            
+            if let Some(ref mut detailed) = report.detailed_errors {
+                detailed.push(DetailedError {
+                    line: *line,
+                    error_type: error_type_name(error),
+                    message: error.to_string(),
+                });
+            }
+        }
+        
+        report.finish()
+    }
+
+    /// 啟用詳細錯誤記錄
+    pub fn with_detailed_errors(mut self) -> Self {
+        self.detailed_errors = Some(Vec::new());
+        self
+    }
+
+    /// 添加統計資訊
+    pub fn add_statistic(&mut self, key: impl Into<String>, value: impl Serialize) {
+        if let Ok(json_value) = serde_json::to_value(value) {
+            self.statistics.insert(key.into(), json_value);
+        }
+    }
+
+    /// 獲取成功率
+    pub fn success_rate(&self) -> f64 {
+        if self.total_records == 0 {
+            0.0
+        } else {
+            self.valid_records as f64 / self.total_records as f64
+        }
+    }
+
+    /// 獲取處理時間（秒）
+    pub fn processing_time(&self) -> f64 {
+        (self.end_time - self.start_time).num_milliseconds() as f64 / 1000.0
+    }
+
+    /// 合併多個報告
+    pub fn merge(reports: Vec<ValidationReport>) -> Option<ValidationReport> {
+        if reports.is_empty() {
+            return None;
+        }
+
+        let mut merged = ValidationReport::new("MergedReport");
+        merged.start_time = reports.iter().map(|r| r.start_time).min().unwrap();
+        merged.end_time = reports.iter().map(|r| r.end_time).max().unwrap();
+
+        for report in reports {
+            merged.total_records += report.total_records;
+            merged.valid_records += report.valid_records;
+            merged.invalid_records += report.invalid_records;
+            merged.error_summary.merge(report.error_summary);
+            
+            if let Some(errors) = report.detailed_errors {
+                if merged.detailed_errors.is_none() {
+                    merged.detailed_errors = Some(Vec::new());
+                }
+                if let Some(ref mut merged_errors) = merged.detailed_errors {
+                    merged_errors.extend(errors);
                 }
             }
         }
 
-        let avg_gap_duration_secs = if gaps_count > 0 {
-            Some(total_gap_duration_secs as f64 / gaps_count as f64)
-        } else { None };
+        Some(merged)
+    }
+}
+
+/// 錯誤摘要
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ErrorSummary {
+    /// 各類型錯誤計數
+    pub error_counts: HashMap<String, usize>,
+    /// 最常見的錯誤
+    pub top_errors: Vec<(String, usize)>,
+}
+
+impl ErrorSummary {
+    /// 添加錯誤
+    pub fn add_error(&mut self, error: &ValidationError) {
+        let error_type = error_type_name(error);
+        *self.error_counts.entry(error_type).or_insert(0) += 1;
+        self.update_top_errors();
+    }
+
+    /// 更新最常見錯誤
+    fn update_top_errors(&mut self) {
+        let mut counts: Vec<(String, usize)> = self.error_counts.iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect();
+        counts.sort_by(|a, b| b.1.cmp(&a.1));
+        self.top_errors = counts.into_iter().take(5).collect();
+    }
+
+    /// 合併另一個錯誤摘要
+    pub fn merge(&mut self, other: ErrorSummary) {
+        for (error_type, count) in other.error_counts {
+            *self.error_counts.entry(error_type).or_insert(0) += count;
+        }
+        self.update_top_errors();
+    }
+}
+
+/// 詳細錯誤資訊
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DetailedError {
+    /// 行號
+    pub line: usize,
+    /// 錯誤類型
+    pub error_type: String,
+    /// 錯誤訊息
+    pub message: String,
+}
+
+/// 獲取錯誤類型名稱
+fn error_type_name(error: &ValidationError) -> String {
+    match error {
+        ValidationError::OutOfRange { .. } => "OutOfRange".to_string(),
+        ValidationError::InconsistentValue { .. } => "InconsistentValue".to_string(),
+        ValidationError::MissingField { .. } => "MissingField".to_string(),
+        ValidationError::InvalidTimestamp { .. } => "InvalidTimestamp".to_string(),
+        ValidationError::DuplicateEntry { .. } => "DuplicateEntry".to_string(),
+        ValidationError::OutOfOrder { .. } => "OutOfOrder".to_string(),
+        ValidationError::LargeGap { .. } => "LargeGap".to_string(),
+        ValidationError::InvalidValue { .. } => "InvalidValue".to_string(),
+        ValidationError::TypeMismatch { .. } => "TypeMismatch".to_string(),
+        ValidationError::BatchValidationFailed { .. } => "BatchValidationFailed".to_string(),
+        ValidationError::CustomRuleFailed { .. } => "CustomRuleFailed".to_string(),
+    }
+}
+
+/// 報告格式化器
+pub struct ReportFormatter;
+
+impl ReportFormatter {
+    /// 格式化為人類可讀的文字
+    pub fn format_text(report: &ValidationReport) -> String {
+        let mut output = String::new();
         
-
-        self.statistics = Some(DataStatistics {
-            min_price: Some(min_p),
-            max_price: Some(max_p),
-            avg_price: avg_p,
-            min_volume: Some(min_v),
-            max_volume: Some(max_v),
-            avg_volume: avg_v,
-            start_date: time_series.start_time,
-            end_date: time_series.end_time,
-            time_span_days,
-            price_volatility,
-            missing_data_points_estimated: 0, // Placeholder, needs better estimation logic
-            gaps_count,
-            largest_gap_duration_secs: if largest_gap_duration_secs > 0 { Some(largest_gap_duration_secs) } else { None },
-            average_gap_duration_secs: avg_gap_duration_secs,
-        });
-    }
-    
-    // TODO: Implement calculate_and_set_tick_stats for TickPoint data
-
-    pub fn find_issues_by_timestamp(&self, timestamp: DateTime<Utc>) -> Vec<&ValidationIssue> {
-        self.validation_issues.iter()
-            .filter(|issue| issue.timestamp.map_or(false, |ts| ts == timestamp))
-            .collect()
-    }
-    
-    pub fn find_issues_by_type(&self, error_type: &str) -> Vec<&ValidationIssue> {
-        self.validation_issues.iter()
-            .filter(|issue| issue.error_type == error_type)
-            .collect()
-    }
-    
-    pub fn get_problem_timestamps(&self) -> Vec<DateTime<Utc>> {
-        self.validation_issues.iter()
-            .filter_map(|issue| issue.timestamp)
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect()
-    }
-
-    pub fn generate_summary(&self) -> String {
-        let mut summary = format!(
-            "Validation Report for Symbol: {}\nData Type: {}\nValidation Time: {}\nTotal Records Processed: {}\nValid Records: {}\nInvalid Records: {}\n",
-            self.symbol,
-            self.data_type,
-            self.validation_time.to_rfc3339(),
-            self.total_records_processed,
-            self.valid_records,
-            self.invalid_records_count
-        );
-
-        if let Some(stats) = &self.statistics {
-            summary.push_str(&format!("\n--- Statistics ---\n"));
-            stats.start_date.map(|sd| summary.push_str(&format!("Start Date: {}\n", sd.to_rfc3339())));
-            stats.end_date.map(|ed| summary.push_str(&format!("End Date: {}\n", ed.to_rfc3339())));
-            stats.time_span_days.map(|tsd| summary.push_str(&format!("Time Span (days): {:.2}\n", tsd)));
-            stats.min_price.map(|mp| summary.push_str(&format!("Min Price: {:.2}\n", mp)));
-            stats.max_price.map(|mp| summary.push_str(&format!("Max Price: {:.2}\n", mp)));
-            stats.avg_price.map(|ap| summary.push_str(&format!("Avg Price: {:.2}\n", ap)));
-            stats.min_volume.map(|mv| summary.push_str(&format!("Min Volume: {:.2}\n", mv)));
-            stats.max_volume.map(|mv| summary.push_str(&format!("Max Volume: {:.2}\n", mv)));
-            stats.avg_volume.map(|av| summary.push_str(&format!("Avg Volume: {:.2}\n", av)));
-            stats.price_volatility.map(|pv| summary.push_str(&format!("Price Volatility (std dev): {:.4}\n", pv)));
-            summary.push_str(&format!("Gaps Count: {}\n", stats.gaps_count));
-            stats.largest_gap_duration_secs.map(|lgd| summary.push_str(&format!("Largest Gap (s): {}\n", lgd)));
-            stats.average_gap_duration_secs.map(|agd| summary.push_str(&format!("Average Gap (s): {:.2}\n", agd)));
-        }
-
-        if !self.validation_issues.is_empty() {
-            summary.push_str(&format!("\n--- Validation Issues ({}) ---\n", self.validation_issues.len()));
-            for issue in self.validation_issues.iter().take(10) { // Show first 10 issues
-                summary.push_str(&format!("- Type: {}, Msg: {}, Idx: {:?}, Field: {:?}, Val: {:?}, TS: {:?}\n", 
-                    issue.error_type, issue.message, issue.record_index, issue.field, issue.value, issue.timestamp.map(|t| t.to_rfc3339())
-                ));
+        output.push_str(&format!("=== 驗證報告: {} ===\n", report.validator_name));
+        output.push_str(&format!("開始時間: {}\n", report.start_time.format("%Y-%m-%d %H:%M:%S")));
+        output.push_str(&format!("結束時間: {}\n", report.end_time.format("%Y-%m-%d %H:%M:%S")));
+        output.push_str(&format!("處理時間: {:.2} 秒\n", report.processing_time()));
+        output.push_str("\n");
+        
+        output.push_str("統計摘要:\n");
+        output.push_str(&format!("  總記錄數: {}\n", report.total_records));
+        output.push_str(&format!("  有效記錄: {} ({:.2}%)\n", 
+            report.valid_records, report.success_rate() * 100.0));
+        output.push_str(&format!("  無效記錄: {} ({:.2}%)\n", 
+            report.invalid_records, (1.0 - report.success_rate()) * 100.0));
+        output.push_str("\n");
+        
+        if !report.error_summary.top_errors.is_empty() {
+            output.push_str("最常見的錯誤:\n");
+            for (error_type, count) in &report.error_summary.top_errors {
+                output.push_str(&format!("  {}: {} 次\n", error_type, count));
             }
-            if self.validation_issues.len() > 10 {
-                summary.push_str(&format!("... and {} more issues.\n", self.validation_issues.len() - 10));
+            output.push_str("\n");
+        }
+        
+        if !report.statistics.is_empty() {
+            output.push_str("其他統計:\n");
+            for (key, value) in &report.statistics {
+                output.push_str(&format!("  {}: {}\n", key, value));
             }
         }
-
-        if !self.warnings.is_empty() {
-            summary.push_str(&format!("\n--- Warnings ({}) ---\n", self.warnings.len()));
-            for warning in self.warnings.iter().take(10) { // Show first 10 warnings
-                summary.push_str(&format!("- Type: {}, Msg: {}, Idx: {:?}, Field: {:?}, Val: {:?}, TS: {:?}\n", 
-                    warning.warning_type, warning.message, warning.record_index, warning.field, warning.value, warning.timestamp.map(|t| t.to_rfc3339())
-                ));
-            }
-             if self.warnings.len() > 10 {
-                summary.push_str(&format!("... and {} more warnings.\n", self.warnings.len() - 10));
-            }
-        }
-        summary
+        
+        output
     }
-} 
+
+    /// 格式化為JSON
+    pub fn format_json(report: &ValidationReport) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(report)
+    }
+}

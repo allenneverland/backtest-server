@@ -1,124 +1,116 @@
 use thiserror::Error;
-use chrono::{DateTime, Utc};
-use std::collections::HashMap;
 
-#[derive(Debug, Error)]
-pub enum DataValidationError {
-    #[error("數據值範圍錯誤: {field} = {value}, {message}")]
-    RangeError {
+/// 驗證錯誤類型
+#[derive(Debug, Clone, Error)]
+pub enum ValidationError {
+    /// 數值範圍錯誤
+    #[error("數值超出有效範圍: {field} = {value}, 預期範圍: {min} 到 {max}")]
+    OutOfRange {
         field: String,
         value: String,
-        message: String,
-        context: Option<HashMap<String, String>>,
+        min: String,
+        max: String,
     },
-    
-    #[error("數據格式錯誤: {field}, {message}")]
-    FormatError {
+
+    /// 數值不一致錯誤
+    #[error("數值不一致: {description}")]
+    InconsistentValue { description: String },
+
+    /// 缺失必要欄位
+    #[error("缺失必要欄位: {field}")]
+    MissingField { field: String },
+
+    /// 無效的時間戳記
+    #[error("無效的時間戳記: {timestamp}, 原因: {reason}")]
+    InvalidTimestamp { timestamp: String, reason: String },
+
+    /// 重複的數據記錄
+    #[error("發現重複記錄: 時間戳記 {timestamp}")]
+    DuplicateEntry { timestamp: String },
+
+    /// 時間順序錯誤
+    #[error("時間順序錯誤: 前一筆 {previous} > 當前 {current}")]
+    OutOfOrder { previous: String, current: String },
+
+    /// 數據間隔過大
+    #[error("數據間隔過大: {gap_seconds} 秒 (最大允許: {max_gap_seconds} 秒)")]
+    LargeGap {
+        gap_seconds: i64,
+        max_gap_seconds: i64,
+    },
+
+    /// 無效的數值
+    #[error("無效的數值: {field} = {value}, 原因: {reason}")]
+    InvalidValue {
         field: String,
-        message: String,
-        context: Option<HashMap<String, String>>,
+        value: String,
+        reason: String,
     },
-    
-    #[error("數據邏輯錯誤: {message}")]
-    LogicError {
-        message: String,
-        context: Option<HashMap<String, String>>,
-    },
-    
-    #[error("缺失必要數據: {field}")]
-    MissingData {
-        field: String,
-        context: Option<HashMap<String, String>>,
-    },
-    
-    #[error("數據一致性錯誤: {message}")]
-    ConsistencyError {
-        message: String,
-        context: Option<HashMap<String, String>>,
-    },
-    
-    #[error("時間序列錯誤: {message}")]
-    TimeSeriesError {
-        message: String,
-        context: Option<HashMap<String, String>>,
-    },
-    
-    #[error("數據重複: {message}")]
-    DuplicateDataError {
-        message: String,
-        timestamp: Option<DateTime<Utc>>,
-        context: Option<HashMap<String, String>>,
-    },
-    
-    #[error("系統錯誤: {message}")]
-    SystemError {
-        message: String,
-        source: Option<Box<dyn std::error::Error + Send + Sync>>,
-    },
+
+    /// 數據類型錯誤
+    #[error("數據類型錯誤: 預期 {expected}, 實際 {actual}")]
+    TypeMismatch { expected: String, actual: String },
+
+    /// 批次驗證錯誤
+    #[error("批次驗證失敗: 共 {total} 筆記錄, {error_count} 筆錯誤")]
+    BatchValidationFailed { total: usize, error_count: usize },
+
+    /// 自定義驗證規則失敗
+    #[error("自定義驗證失敗: {rule} - {message}")]
+    CustomRuleFailed { rule: String, message: String },
 }
 
-impl DataValidationError {
-    // 添加上下文信息到錯誤
-    pub fn with_context(self, context: HashMap<String, String>) -> Self {
-        match self {
-            Self::RangeError { field, value, message, .. } => Self::RangeError {
-                field,
-                value,
-                message,
-                context: Some(context),
-            },
-            Self::FormatError { field, message, .. } => Self::FormatError {
-                field,
-                message,
-                context: Some(context),
-            },
-            Self::LogicError { message, .. } => Self::LogicError {
-                message,
-                context: Some(context),
-            },
-            Self::MissingData { field, .. } => Self::MissingData {
-                field,
-                context: Some(context),
-            },
-            Self::ConsistencyError { message, .. } => Self::ConsistencyError {
-                message,
-                context: Some(context),
-            },
-            Self::TimeSeriesError { message, .. } => Self::TimeSeriesError {
-                message,
-                context: Some(context),
-            },
-            Self::DuplicateDataError { message, timestamp, .. } => Self::DuplicateDataError {
-                message,
-                timestamp,
-                context: Some(context),
-            },
-            Self::SystemError { message, source } => Self::SystemError {
-                message,
-                source,
-            },
-        }
+/// 驗證結果類型
+pub type ValidationResult<T> = Result<T, ValidationError>;
+
+/// 驗證錯誤集合
+#[derive(Debug, Default)]
+pub struct ValidationErrors {
+    errors: Vec<(usize, ValidationError)>, // (行號, 錯誤)
+}
+
+impl ValidationErrors {
+    /// 創建新的錯誤集合
+    pub fn new() -> Self {
+        Self::default()
     }
-    
-    // 添加時間戳到重複數據錯誤
-    pub fn duplicate_with_timestamp(message: String, timestamp: DateTime<Utc>) -> Self {
-        Self::DuplicateDataError {
-            message,
-            timestamp: Some(timestamp),
-            context: None,
-        }
+
+    /// 添加錯誤
+    pub fn add(&mut self, line: usize, error: ValidationError) {
+        self.errors.push((line, error));
     }
-    
-    // 從其他錯誤轉換
-    pub fn from_error<E>(err: E, message: &str) -> Self 
-    where 
-        E: std::error::Error + Send + Sync + 'static 
-    {
-        Self::SystemError {
-            message: message.to_string(),
-            source: Some(Box::new(err)),
-        }
+
+    /// 檢查是否有錯誤
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+    }
+
+    /// 獲取錯誤數量
+    pub fn error_count(&self) -> usize {
+        self.errors.len()
+    }
+
+    /// 獲取所有錯誤
+    pub fn errors(&self) -> &[(usize, ValidationError)] {
+        &self.errors
+    }
+
+    /// 轉換為迭代器
+    pub fn iter(&self) -> impl Iterator<Item = &(usize, ValidationError)> {
+        self.errors.iter()
+    }
+
+    /// 合併其他錯誤集合
+    pub fn merge(&mut self, other: ValidationErrors) {
+        self.errors.extend(other.errors);
     }
 }
 
-pub type ValidationResult<T> = Result<T, DataValidationError>; 
+impl IntoIterator for ValidationErrors {
+    type Item = (usize, ValidationError);
+    type IntoIter = std::vec::IntoIter<(usize, ValidationError)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.errors.into_iter()
+    }
+}

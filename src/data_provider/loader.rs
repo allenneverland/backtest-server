@@ -1,7 +1,10 @@
-use crate::domain_types::{Day, DailyOhlcv, Hour, HourlyOhlcv, MinuteOhlcv, TickData};
+use crate::domain_types::{
+    Day, FifteenMinutes, FiveMinutes, Frequency, Hour, Minute, Month, 
+    OhlcvSeries, Tick, TickSeries, Week,
+};
 use crate::redis::pool::RedisPool;
 use crate::storage::{
-    models::market_data::{MinuteBar, Tick},
+    models::market_data::{MinuteBar, Tick as DbTick},
     repository::{TimeRange, market_data::{MarketDataRepository, PgMarketDataRepository}},
 };
 use async_trait::async_trait;
@@ -40,36 +43,64 @@ pub enum DataLoaderError {
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     },
+    
+    #[error("不支援的頻率: {0}")]
+    InvalidFrequency(String),
 }
 
 pub type Result<T> = std::result::Result<T, DataLoaderError>;
 
+/// 包裝不同頻率的 OHLCV 資料
+#[derive(Debug)]
+pub enum AnyOhlcvSeries {
+    Minute(OhlcvSeries<Minute>),
+    FiveMinutes(OhlcvSeries<FiveMinutes>),
+    FifteenMinutes(OhlcvSeries<FifteenMinutes>),
+    Hour(OhlcvSeries<Hour>),
+    Day(OhlcvSeries<Day>),
+    Week(OhlcvSeries<Week>),
+    Month(OhlcvSeries<Month>),
+}
+
+impl AnyOhlcvSeries {
+    /// 獲取 instrument_id
+    pub fn instrument_id(&self) -> &str {
+        match self {
+            AnyOhlcvSeries::Minute(s) => s.instrument_id(),
+            AnyOhlcvSeries::FiveMinutes(s) => s.instrument_id(),
+            AnyOhlcvSeries::FifteenMinutes(s) => s.instrument_id(),
+            AnyOhlcvSeries::Hour(s) => s.instrument_id(),
+            AnyOhlcvSeries::Day(s) => s.instrument_id(),
+            AnyOhlcvSeries::Week(s) => s.instrument_id(),
+            AnyOhlcvSeries::Month(s) => s.instrument_id(),
+        }
+    }
+    
+    /// 獲取頻率
+    pub fn frequency(&self) -> Frequency {
+        match self {
+            AnyOhlcvSeries::Minute(_) => Frequency::Minute,
+            AnyOhlcvSeries::FiveMinutes(_) => Frequency::FiveMinutes,
+            AnyOhlcvSeries::FifteenMinutes(_) => Frequency::FifteenMinutes,
+            AnyOhlcvSeries::Hour(_) => Frequency::Hour,
+            AnyOhlcvSeries::Day(_) => Frequency::Day,
+            AnyOhlcvSeries::Week(_) => Frequency::Week,
+            AnyOhlcvSeries::Month(_) => Frequency::Month,
+        }
+    }
+}
+
 /// 資料載入器的通用介面
 #[async_trait]
 pub trait DataLoader: Send + Sync {
-    /// 載入分鐘級 OHLCV 資料
-    async fn load_minute_ohlcv(
+    /// 載入指定頻率的 OHLCV 資料
+    async fn load_ohlcv(
         &self,
         instrument_id: i32,
+        frequency: Frequency,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
-    ) -> Result<MinuteOhlcv>;
-    
-    /// 載入小時級 OHLCV 資料
-    async fn load_hourly_ohlcv(
-        &self,
-        instrument_id: i32,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
-    ) -> Result<HourlyOhlcv>;
-    
-    /// 載入日級 OHLCV 資料
-    async fn load_daily_ohlcv(
-        &self,
-        instrument_id: i32,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
-    ) -> Result<DailyOhlcv>;
+    ) -> Result<AnyOhlcvSeries>;
     
     /// 載入 Tick 資料
     async fn load_ticks(
@@ -77,7 +108,7 @@ pub trait DataLoader: Send + Sync {
         instrument_id: i32,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
-    ) -> Result<TickData>;
+    ) -> Result<TickSeries<Tick>>;
 }
 
 /// 市場資料載入器實現
@@ -113,21 +144,22 @@ impl MarketDataLoader {
 #[async_trait]
 impl DataLoader for MarketDataLoader {
     #[instrument(skip(self))]
-    async fn load_minute_ohlcv(
+    async fn load_ohlcv(
         &self,
         instrument_id: i32,
+        frequency: Frequency,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
-    ) -> Result<MinuteOhlcv> {
+    ) -> Result<AnyOhlcvSeries> {
         // 驗證時間範圍
         if start >= end {
             return Err(DataLoaderError::InvalidTimeRange { start, end });
         }
         
-        debug!("載入分鐘級 OHLCV 資料: instrument_id={}, start={}, end={}", 
-               instrument_id, start, end);
+        debug!("載入 {:?} 級 OHLCV 資料: instrument_id={}, start={}, end={}", 
+               frequency, instrument_id, start, end);
         
-        // 從資料庫載入資料
+        // 從資料庫載入分鐘級資料作為基礎
         let market_data_repo = PgMarketDataRepository::new((*self.database).clone());
         let time_range = TimeRange::new(start, end);
         let bars = market_data_repo
@@ -145,36 +177,41 @@ impl DataLoader for MarketDataLoader {
         // 轉換為 Polars DataFrame
         let df = minute_bars_to_dataframe(bars)?;
         
-        // 建立 MinuteOhlcv
-        Ok(MinuteOhlcv::from_lazy(df.lazy(), instrument_id.to_string()))
-    }
-    
-    #[instrument(skip(self))]
-    async fn load_hourly_ohlcv(
-        &self,
-        instrument_id: i32,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
-    ) -> Result<HourlyOhlcv> {
-        // 載入分鐘級資料
-        let minute_data = self.load_minute_ohlcv(instrument_id, start, end).await?;
+        // 建立分鐘級 OHLCV
+        let minute_ohlcv = OhlcvSeries::<Minute>::from_lazy(df.lazy(), instrument_id.to_string());
         
-        // 重新採樣為小時級資料
-        Ok(minute_data.resample_to::<Hour>()?)
-    }
-    
-    #[instrument(skip(self))]
-    async fn load_daily_ohlcv(
-        &self,
-        instrument_id: i32,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
-    ) -> Result<DailyOhlcv> {
-        // 載入分鐘級資料
-        let minute_data = self.load_minute_ohlcv(instrument_id, start, end).await?;
-        
-        // 重新採樣為日級資料
-        Ok(minute_data.resample_to::<Day>()?)
+        // 根據請求的頻率進行重採樣或直接返回
+        match frequency {
+            Frequency::Tick => {
+                return Err(DataLoaderError::InvalidFrequency(
+                    "無法將 OHLCV 資料轉換為 Tick 頻率".to_string()
+                ));
+            }
+            Frequency::Second => {
+                return Err(DataLoaderError::InvalidFrequency(
+                    "秒級資料尚未實現".to_string()
+                ));
+            }
+            Frequency::Minute => Ok(AnyOhlcvSeries::Minute(minute_ohlcv)),
+            Frequency::FiveMinutes => {
+                Ok(AnyOhlcvSeries::FiveMinutes(minute_ohlcv.resample_to::<FiveMinutes>()?))
+            }
+            Frequency::FifteenMinutes => {
+                Ok(AnyOhlcvSeries::FifteenMinutes(minute_ohlcv.resample_to::<FifteenMinutes>()?))
+            }
+            Frequency::Hour => {
+                Ok(AnyOhlcvSeries::Hour(minute_ohlcv.resample_to::<Hour>()?))
+            }
+            Frequency::Day => {
+                Ok(AnyOhlcvSeries::Day(minute_ohlcv.resample_to::<Day>()?))
+            }
+            Frequency::Week => {
+                Ok(AnyOhlcvSeries::Week(minute_ohlcv.resample_to::<Week>()?))
+            }
+            Frequency::Month => {
+                Ok(AnyOhlcvSeries::Month(minute_ohlcv.resample_to::<Month>()?))
+            }
+        }
     }
     
     #[instrument(skip(self))]
@@ -183,7 +220,7 @@ impl DataLoader for MarketDataLoader {
         instrument_id: i32,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
-    ) -> Result<TickData> {
+    ) -> Result<TickSeries<Tick>> {
         // 驗證時間範圍
         if start >= end {
             return Err(DataLoaderError::InvalidTimeRange { start, end });
@@ -210,8 +247,8 @@ impl DataLoader for MarketDataLoader {
         // 轉換為 Polars DataFrame
         let df = ticks_to_dataframe(ticks)?;
         
-        // 建立 TickData
-        Ok(TickData::from_lazy(df.lazy(), instrument_id.to_string()))
+        // 建立 TickSeries
+        Ok(TickSeries::<Tick>::from_lazy(df.lazy(), instrument_id.to_string()))
     }
 }
 
@@ -249,7 +286,7 @@ fn minute_bars_to_dataframe(bars: Vec<MinuteBar>) -> Result<DataFrame> {
 }
 
 /// 將 Tick 資料轉換為 DataFrame
-fn ticks_to_dataframe(ticks: Vec<Tick>) -> Result<DataFrame> {
+fn ticks_to_dataframe(ticks: Vec<DbTick>) -> Result<DataFrame> {
     let mut time_vec = Vec::with_capacity(ticks.len());
     let mut price_vec = Vec::with_capacity(ticks.len());
     let mut volume_vec = Vec::with_capacity(ticks.len());
@@ -282,7 +319,6 @@ mod tests {
     fn test_minute_bars_to_dataframe() {
         let bars = vec![
             MinuteBar {
-                id: 1,
                 instrument_id: 1001,
                 time: DateTime::parse_from_rfc3339("2024-01-01T10:00:00Z")
                     .unwrap()
@@ -291,10 +327,12 @@ mod tests {
                 high: Decimal::from_str("101.0").unwrap(),
                 low: Decimal::from_str("100.0").unwrap(),
                 close: Decimal::from_str("100.8").unwrap(),
-                volume: 1000,
+                volume: Decimal::from_str("1000").unwrap(),
+                amount: None,
+                open_interest: None,
+                created_at: Utc::now(),
             },
             MinuteBar {
-                id: 2,
                 instrument_id: 1001,
                 time: DateTime::parse_from_rfc3339("2024-01-01T10:01:00Z")
                     .unwrap()
@@ -303,7 +341,10 @@ mod tests {
                 high: Decimal::from_str("101.2").unwrap(),
                 low: Decimal::from_str("100.7").unwrap(),
                 close: Decimal::from_str("101.0").unwrap(),
-                volume: 1500,
+                volume: Decimal::from_str("1500").unwrap(),
+                amount: None,
+                open_interest: None,
+                created_at: Utc::now(),
             },
         ];
         
@@ -318,5 +359,27 @@ mod tests {
         assert!(df.column("close").is_ok());
         assert!(df.column("volume").is_ok());
         assert!(df.column("instrument_id").is_ok());
+    }
+    
+    #[test]
+    fn test_any_ohlcv_series() {
+        use crate::domain_types::types::ColumnName;
+        use polars::prelude::*;
+        
+        // 創建測試 DataFrame
+        let df = DataFrame::new(vec![
+            Series::new(ColumnName::TIME.into(), &[1704067200000i64, 1704067260000i64]).into(),
+            Series::new(ColumnName::OPEN.into(), &[100.0, 101.0]).into(),
+            Series::new(ColumnName::HIGH.into(), &[105.0, 106.0]).into(),
+            Series::new(ColumnName::LOW.into(), &[95.0, 96.0]).into(),
+            Series::new(ColumnName::CLOSE.into(), &[102.0, 103.0]).into(),
+            Series::new(ColumnName::VOLUME.into(), &[1000.0, 2000.0]).into(),
+        ]).unwrap();
+        
+        let minute_series = OhlcvSeries::<Minute>::from_lazy(df.lazy(), "TEST".to_string());
+        let any_series = AnyOhlcvSeries::Minute(minute_series);
+        
+        assert_eq!(any_series.instrument_id(), "TEST");
+        assert_eq!(any_series.frequency(), Frequency::Minute);
     }
 }

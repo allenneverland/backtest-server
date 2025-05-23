@@ -1,5 +1,7 @@
 Commend use Traditional Chinese with correct UTF-8 format
 
+Always use sequentialthinking mcp
+
 ## Common Development Commands
 
 ### Building and Running

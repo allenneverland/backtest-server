@@ -1,3 +1,3 @@
 pub mod loader;
 
-pub use loader::{DataLoader, DataLoaderError, MarketDataLoader};
+pub use loader::{AnyOhlcvSeries, DataLoader, DataLoaderError, MarketDataLoader};

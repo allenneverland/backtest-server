@@ -32,7 +32,6 @@ impl fmt::Display for AssetType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Frequency {
     Tick,
-    Second,
     Minute,
     FiveMinutes,
     FifteenMinutes,
@@ -47,7 +46,6 @@ impl Frequency {
     pub fn to_std_duration(&self) -> StdDuration {
         match self {
             Frequency::Tick => StdDuration::from_secs(0),
-            Frequency::Second => StdDuration::from_secs(1),
             Frequency::Minute => StdDuration::from_secs(60),
             Frequency::FiveMinutes => StdDuration::from_secs(300),
             Frequency::FifteenMinutes => StdDuration::from_secs(900),
@@ -62,7 +60,6 @@ impl Frequency {
     pub fn to_duration(&self) -> PolarsDuration {
         match self {
             Frequency::Tick => PolarsDuration::parse("0i"),
-            Frequency::Second => PolarsDuration::parse("1000i"),        // 1 second = 1,000 ms
             Frequency::Minute => PolarsDuration::parse("60000i"),       // 1 minute = 60,000 ms
             Frequency::FiveMinutes => PolarsDuration::parse("300000i"), // 5 minutes = 300,000 ms
             Frequency::FifteenMinutes => PolarsDuration::parse("900000i"), // 15 minutes = 900,000 ms
@@ -77,7 +74,6 @@ impl Frequency {
     pub fn to_polars_duration_string(&self) -> String {
         match self {
             Frequency::Tick => "ns".to_string(),
-            Frequency::Second => "1s".to_string(),
             Frequency::Minute => "1m".to_string(),
             Frequency::FiveMinutes => "5m".to_string(),
             Frequency::FifteenMinutes => "15m".to_string(),
@@ -207,13 +203,6 @@ impl FrequencyMarker for Tick {
     fn name() -> &'static str { "Tick" }
 }
 
-/// 秒級頻率標記
-pub struct Second;
-impl FrequencyMarker for Second {
-    fn to_frequency() -> Frequency { Frequency::Second }
-    fn name() -> &'static str { "Second" }
-}
-
 /// 分鐘級頻率標記
 pub struct Minute;
 impl FrequencyMarker for Minute {
@@ -261,6 +250,24 @@ pub struct Month;
 impl FrequencyMarker for Month {
     fn to_frequency() -> Frequency { Frequency::Month }
     fn name() -> &'static str { "Month" }
+}
+
+/// 定義所有支援的 OHLCV 頻率
+/// 這個宏只提供頻率列表，不生成任何代碼
+/// 使用者可以在其他模組中使用這個宏來生成相關代碼
+#[macro_export]
+macro_rules! for_each_ohlcv_frequency {
+    ($macro:ident) => {
+        $macro! {
+            Minute => Minute,
+            FiveMinutes => FiveMinutes,
+            FifteenMinutes => FifteenMinutes,
+            Hour => Hour,
+            Day => Day,
+            Week => Week,
+            Month => Month,
+        }
+    };
 }
 
 // ========== 數據格式 trait ==========

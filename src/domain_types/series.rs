@@ -187,7 +187,7 @@ impl<F: FrequencyMarker, D: DataFormat> FinancialSeries<F, D> {
 
 // ========== 類型別名 ==========
 
-use super::types::{OhlcvFormat, TickFormat, Day, Minute, Hour, Tick, Second, FiveMinutes, FifteenMinutes, Week, Month};
+use super::types::{OhlcvFormat, TickFormat, Day, Minute, Hour, Tick, FiveMinutes, FifteenMinutes, Week, Month};
 
 /// OHLCV 時間序列類型別名
 pub type OhlcvSeries<F> = FinancialSeries<F, OhlcvFormat>;
@@ -220,12 +220,6 @@ pub type MonthlyOhlcv = OhlcvSeries<Month>;
 
 /// Tick 數據（最小頻率）
 pub type TickData = TickSeries<Tick>;
-
-/// 秒級 Tick 數據
-pub type SecondTick = TickSeries<Second>;
-
-/// 分鐘級 Tick 數據
-pub type MinuteTick = TickSeries<Minute>;
 
 #[cfg(test)]
 mod tests {

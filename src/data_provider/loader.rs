@@ -1,7 +1,7 @@
-use crate::domain_types::{
+use crate::{for_each_ohlcv_frequency, domain_types::{
     Day, FifteenMinutes, FiveMinutes, Frequency, Hour, Minute, Month, 
     OhlcvSeries, Tick, TickSeries, Week,
-};
+}};
 use crate::redis::pool::RedisPool;
 use crate::storage::{
     models::market_data::{MinuteBar, Tick as DbTick},
@@ -50,45 +50,80 @@ pub enum DataLoaderError {
 
 pub type Result<T> = std::result::Result<T, DataLoaderError>;
 
-/// 包裝不同頻率的 OHLCV 資料
-#[derive(Debug)]
-pub enum AnyOhlcvSeries {
-    Minute(OhlcvSeries<Minute>),
-    FiveMinutes(OhlcvSeries<FiveMinutes>),
-    FifteenMinutes(OhlcvSeries<FifteenMinutes>),
-    Hour(OhlcvSeries<Hour>),
-    Day(OhlcvSeries<Day>),
-    Week(OhlcvSeries<Week>),
-    Month(OhlcvSeries<Month>),
+/// 定義 AnyOhlcvSeries 枚舉和實現
+macro_rules! define_any_ohlcv_series {
+    ($($marker:ident => $freq:ident,)*) => {
+        /// 包裝不同頻率的 OHLCV 資料
+        #[derive(Debug)]
+        pub enum AnyOhlcvSeries {
+            $($marker(OhlcvSeries<$marker>),)*
+        }
+        
+        impl AnyOhlcvSeries {
+            /// 獲取 instrument_id
+            pub fn instrument_id(&self) -> &str {
+                match self {
+                    $(AnyOhlcvSeries::$marker(s) => s.instrument_id(),)*
+                }
+            }
+            
+            /// 獲取頻率
+            pub fn frequency(&self) -> Frequency {
+                match self {
+                    $(AnyOhlcvSeries::$marker(_) => Frequency::$freq,)*
+                }
+            }
+            
+            /// 獲取 LazyFrame 引用
+            pub fn lazy_frame(&self) -> &LazyFrame {
+                match self {
+                    $(AnyOhlcvSeries::$marker(s) => s.lazy_frame(),)*
+                }
+            }
+            
+            /// 執行計算並返回 DataFrame
+            pub fn collect(self) -> PolarsResult<DataFrame> {
+                match self {
+                    $(AnyOhlcvSeries::$marker(s) => s.collect(),)*
+                }
+            }
+        }
+    };
 }
 
-impl AnyOhlcvSeries {
-    /// 獲取 instrument_id
-    pub fn instrument_id(&self) -> &str {
-        match self {
-            AnyOhlcvSeries::Minute(s) => s.instrument_id(),
-            AnyOhlcvSeries::FiveMinutes(s) => s.instrument_id(),
-            AnyOhlcvSeries::FifteenMinutes(s) => s.instrument_id(),
-            AnyOhlcvSeries::Hour(s) => s.instrument_id(),
-            AnyOhlcvSeries::Day(s) => s.instrument_id(),
-            AnyOhlcvSeries::Week(s) => s.instrument_id(),
-            AnyOhlcvSeries::Month(s) => s.instrument_id(),
+// 使用宏生成 AnyOhlcvSeries
+for_each_ohlcv_frequency!(define_any_ohlcv_series);
+
+/// 定義從分鐘級資料創建任意頻率 OHLCV 的函數
+macro_rules! define_create_ohlcv_by_frequency {
+    ($($marker:ident => $freq:ident,)*) => {
+        fn create_ohlcv_by_frequency(
+            minute_ohlcv: OhlcvSeries<Minute>,
+            frequency: Frequency,
+        ) -> Result<AnyOhlcvSeries> {
+            match frequency {
+                Frequency::Tick => {
+                    Err(DataLoaderError::InvalidFrequency(
+                        "無法將 OHLCV 資料轉換為 Tick 頻率".to_string()
+                    ))
+                }
+                $(
+                    Frequency::$freq => {
+                        // 特殊處理分鐘級資料（不需要重採樣）
+                        if stringify!($marker) == "Minute" {
+                            Ok(AnyOhlcvSeries::Minute(minute_ohlcv))
+                        } else {
+                            Ok(AnyOhlcvSeries::$marker(minute_ohlcv.resample_to::<$marker>()?))
+                        }
+                    }
+                )*
+            }
         }
-    }
-    
-    /// 獲取頻率
-    pub fn frequency(&self) -> Frequency {
-        match self {
-            AnyOhlcvSeries::Minute(_) => Frequency::Minute,
-            AnyOhlcvSeries::FiveMinutes(_) => Frequency::FiveMinutes,
-            AnyOhlcvSeries::FifteenMinutes(_) => Frequency::FifteenMinutes,
-            AnyOhlcvSeries::Hour(_) => Frequency::Hour,
-            AnyOhlcvSeries::Day(_) => Frequency::Day,
-            AnyOhlcvSeries::Week(_) => Frequency::Week,
-            AnyOhlcvSeries::Month(_) => Frequency::Month,
-        }
-    }
+    };
 }
+
+// 使用宏生成函數
+for_each_ohlcv_frequency!(define_create_ohlcv_by_frequency);
 
 /// 資料載入器的通用介面
 #[async_trait]
@@ -181,37 +216,7 @@ impl DataLoader for MarketDataLoader {
         let minute_ohlcv = OhlcvSeries::<Minute>::from_lazy(df.lazy(), instrument_id.to_string());
         
         // 根據請求的頻率進行重採樣或直接返回
-        match frequency {
-            Frequency::Tick => {
-                return Err(DataLoaderError::InvalidFrequency(
-                    "無法將 OHLCV 資料轉換為 Tick 頻率".to_string()
-                ));
-            }
-            Frequency::Second => {
-                return Err(DataLoaderError::InvalidFrequency(
-                    "秒級資料尚未實現".to_string()
-                ));
-            }
-            Frequency::Minute => Ok(AnyOhlcvSeries::Minute(minute_ohlcv)),
-            Frequency::FiveMinutes => {
-                Ok(AnyOhlcvSeries::FiveMinutes(minute_ohlcv.resample_to::<FiveMinutes>()?))
-            }
-            Frequency::FifteenMinutes => {
-                Ok(AnyOhlcvSeries::FifteenMinutes(minute_ohlcv.resample_to::<FifteenMinutes>()?))
-            }
-            Frequency::Hour => {
-                Ok(AnyOhlcvSeries::Hour(minute_ohlcv.resample_to::<Hour>()?))
-            }
-            Frequency::Day => {
-                Ok(AnyOhlcvSeries::Day(minute_ohlcv.resample_to::<Day>()?))
-            }
-            Frequency::Week => {
-                Ok(AnyOhlcvSeries::Week(minute_ohlcv.resample_to::<Week>()?))
-            }
-            Frequency::Month => {
-                Ok(AnyOhlcvSeries::Month(minute_ohlcv.resample_to::<Month>()?))
-            }
-        }
+        create_ohlcv_by_frequency(minute_ohlcv, frequency)
     }
     
     #[instrument(skip(self))]

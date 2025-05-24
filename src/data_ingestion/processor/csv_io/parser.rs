@@ -339,31 +339,6 @@ mod tests {
     }
     
     #[test]
-    fn test_parse_tick() {
-        let df = create_test_tick_df();
-        let result = CsvParser::parse_tick::<crate::domain_types::Second>(
-            df,
-            "TEST".to_string(),
-            "time",
-            Some("%Y-%m-%d %H:%M:%S")
-        );
-        
-        assert!(result.is_ok());
-        let series = result.unwrap();
-        assert_eq!(series.instrument_id(), "TEST");
-        assert_eq!(series.frequency(), crate::domain_types::Frequency::Second);
-        
-        // 檢查數據
-        let collected = series.collect().unwrap();
-        assert_eq!(collected.height(), 3);
-        assert!(collected.column(ColumnName::TIME).is_ok());
-        assert!(collected.column(ColumnName::PRICE).is_ok());
-        assert!(collected.column(ColumnName::VOLUME).is_ok());
-        assert!(collected.column(ColumnName::BID).is_ok());
-        assert!(collected.column(ColumnName::ASK).is_ok());
-    }
-    
-    #[test]
     fn test_parse_missing_required_column() {
         let df = df![
             "time" => ["2024-01-01"],
@@ -385,33 +360,6 @@ mod tests {
                 assert!(["low", "close", "volume"].contains(&col.as_str()));
             }
             _ => panic!("Expected MissingColumn error"),
-        }
-    }
-    
-    #[test]
-    fn test_time_column_conversion() {
-        // 測試不同的時間格式
-        let test_cases = vec![
-            ("%Y-%m-%d %H:%M:%S", "2024-01-01 09:00:00"),
-            ("%Y-%m-%dT%H:%M:%S", "2024-01-01T09:00:00"),
-            ("%Y/%m/%d %H:%M:%S", "2024/01/01 09:00:00"),
-        ];
-        
-        for (format, time_str) in test_cases {
-            let df = df![
-                "time" => [time_str],
-                "price" => [100.0],
-                "volume" => [1000.0],
-            ].unwrap();
-            
-            let result = CsvParser::parse_tick::<crate::domain_types::Second>(
-                df,
-                "TEST".to_string(),
-                "time",
-                Some(format)
-            );
-            
-            assert!(result.is_ok(), "Failed to parse time format: {}", format);
         }
     }
 }

@@ -630,10 +630,10 @@ mod tests {
 
     #[test]
     fn test_with_ohlcv_frame() {
-        use crate::domain_types::DailyOhlcv;
+        use crate::domain_types::{OhlcvSeries, Day};
         
         let df = create_test_dataframe();
-        let ohlcv_frame = DailyOhlcv::new(df, "AAPL".to_string()).unwrap();
+        let ohlcv_frame = OhlcvSeries::<Day>::new(df, "AAPL".to_string()).unwrap();
 
         // 在FinancialSeries上應用技術指標
         let with_sma = ohlcv_frame

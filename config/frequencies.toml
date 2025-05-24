@@ -1,0 +1,112 @@
+# Frequency definitions for BacktestServer
+# This file is the single source of truth for all frequency definitions
+
+[[frequency]]
+name = "Tick"
+enum_name = "Tick"
+struct_name = "Tick"
+seconds = 0
+milliseconds = 0
+polars_string = "ns"
+display_name = "Tick"
+alias_suffix = ""
+is_ohlcv = false
+
+[[frequency]]
+name = "Second"
+enum_name = "Second"
+struct_name = "Second"
+seconds = 1
+milliseconds = 1000
+polars_string = "1s"
+display_name = "Second"
+alias_suffix = "Second"
+is_ohlcv = true
+
+[[frequency]]
+name = "Minute"
+enum_name = "Minute"
+struct_name = "Minute"
+seconds = 60
+milliseconds = 60000
+polars_string = "1m"
+display_name = "Minute"
+alias_suffix = "Minute"
+is_ohlcv = true
+
+[[frequency]]
+name = "FiveMinutes"
+enum_name = "FiveMinutes"
+struct_name = "FiveMinutes"
+seconds = 300
+milliseconds = 300000
+polars_string = "5m"
+display_name = "FiveMinutes"
+alias_suffix = "FiveMinute"
+is_ohlcv = true
+
+[[frequency]]
+name = "TenMinutes"
+enum_name = "TenMinutes"
+struct_name = "TenMinutes"
+seconds = 600
+milliseconds = 600000
+polars_string = "10m"
+display_name = "TenMinutes"
+alias_suffix = "TenMinute"
+is_ohlcv = true
+
+[[frequency]]
+name = "FifteenMinutes"
+enum_name = "FifteenMinutes"
+struct_name = "FifteenMinutes"
+seconds = 900
+milliseconds = 900000
+polars_string = "15m"
+display_name = "FifteenMinutes"
+alias_suffix = "FifteenMinute"
+is_ohlcv = true
+
+[[frequency]]
+name = "Hour"
+enum_name = "Hour"
+struct_name = "Hour"
+seconds = 3600
+milliseconds = 3600000
+polars_string = "1h"
+display_name = "Hour"
+alias_suffix = "Hourly"
+is_ohlcv = true
+
+[[frequency]]
+name = "Day"
+enum_name = "Day"
+struct_name = "Day"
+seconds = 86400
+milliseconds = 86400000
+polars_string = "1d"
+display_name = "Day"
+alias_suffix = "Daily"
+is_ohlcv = true
+
+[[frequency]]
+name = "Week"
+enum_name = "Week"
+struct_name = "Week"
+seconds = 604800
+milliseconds = 604800000
+polars_string = "1w"
+display_name = "Week"
+alias_suffix = "Weekly"
+is_ohlcv = true
+
+[[frequency]]
+name = "Month"
+enum_name = "Month"
+struct_name = "Month"
+seconds = 2592000
+milliseconds = 2592000000
+polars_string = "1mo"
+display_name = "Month"
+alias_suffix = "Monthly"
+is_ohlcv = true

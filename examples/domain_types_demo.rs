@@ -7,8 +7,8 @@
 //! 4. 使用 Polars 進行高效數據處理
 
 use backtest_server::domain_types::{
-    // 泛型時間序列和類型別名
-    DailyOhlcv, MinuteOhlcv, TickData,
+    // 泛型時間序列
+    OhlcvSeries, TickData,
     
     // 頻率標記類型和 traits
     Day, Minute, Tick, FrequencyMarker,
@@ -68,11 +68,11 @@ fn demo_ohlcv_series() -> PolarsResult<()> {
     ]?;
 
     // 創建分鐘級 OHLCV 序列
-    let minute_ohlcv = MinuteOhlcv::new(ohlcv_data.clone(), "AAPL".to_string())?;
+    let minute_ohlcv = OhlcvSeries::<Minute>::new(ohlcv_data.clone(), "AAPL".to_string())?;
     println!("分鐘級 OHLCV 序列: {:?}", minute_ohlcv);
 
     // 創建日級 OHLCV 序列  
-    let daily_ohlcv = DailyOhlcv::new(ohlcv_data.clone(), "AAPL".to_string())?;
+    let daily_ohlcv = OhlcvSeries::<Day>::new(ohlcv_data.clone(), "AAPL".to_string())?;
     println!("日級 OHLCV 序列: {:?}", daily_ohlcv);
 
     // 展示數據操作
@@ -80,7 +80,7 @@ fn demo_ohlcv_series() -> PolarsResult<()> {
     println!("收集的數據形狀: {:?}", collected.shape());
     
     // 為了獲取時間範圍，需要重新創建序列 (因為 collect 消費了原來的序列)
-    let minute_ohlcv_for_time = MinuteOhlcv::new(ohlcv_data.clone(), "AAPL".to_string())?;
+    let minute_ohlcv_for_time = OhlcvSeries::<Minute>::new(ohlcv_data.clone(), "AAPL".to_string())?;
     let time_range = minute_ohlcv_for_time.time_range()?;
     println!("時間範圍 (毫秒): {:?}", time_range);
 
@@ -134,7 +134,7 @@ fn demo_technical_indicators() -> PolarsResult<()> {
         ColumnName::VOLUME => (0..20).map(|i| 10000.0 + (i as f64) * 1000.0).collect::<Vec<_>>(),
     ]?;
 
-    let ohlcv_series = MinuteOhlcv::new(extended_data, "GOOGL".to_string())?;
+    let ohlcv_series = OhlcvSeries::<Minute>::new(extended_data, "GOOGL".to_string())?;
     
     // 計算移動平均線
     let with_sma = ohlcv_series
@@ -245,7 +245,7 @@ mod tests {
             ColumnName::VOLUME => [10000.0],
         ]?;
 
-        let series = MinuteOhlcv::new(data, "TEST".to_string())?;
+        let series = OhlcvSeries::<Minute>::new(data, "TEST".to_string())?;
         assert_eq!(series.instrument_id(), "TEST");
         Ok(())
     }

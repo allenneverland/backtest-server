@@ -1,7 +1,7 @@
 use backtest_server::domain_types::{
     indicators::IndicatorsExt,
-    types::{ColumnName, Frequency, Hour},
-    MinuteOhlcv, TickData,
+    types::ColumnName,
+    Frequency, Hour, Minute, OhlcvSeries, TickData,
 };
 use polars::prelude::*;
 
@@ -54,7 +54,7 @@ fn test_ohlcv_frame_creation_and_basic_operations() {
     let instrument_id = "AAPL";
 
     // Test frame creation
-    let frame = MinuteOhlcv::new(df.clone(), instrument_id.to_string()).unwrap();
+    let frame = OhlcvSeries::<Minute>::new(df.clone(), instrument_id.to_string()).unwrap();
 
     // Test basic properties
     assert_eq!(frame.instrument_id(), instrument_id);
@@ -84,7 +84,7 @@ fn test_ohlcv_frame_creation_and_basic_operations() {
     assert_eq!(filtered_df.height(), 3);
 
     // Test sorting
-    let sorted = MinuteOhlcv::new(df, instrument_id.to_string()).unwrap().sort_by_time(true); // Descending
+    let sorted = OhlcvSeries::<Minute>::new(df, instrument_id.to_string()).unwrap().sort_by_time(true); // Descending
     let sorted_df = sorted.collect().unwrap();
     let sorted_time_col = sorted_df.column(ColumnName::TIME.into()).unwrap();
     assert_eq!(sorted_time_col.i64().unwrap().get(0).unwrap(), 5000);
@@ -148,7 +148,7 @@ fn test_tick_frame_creation_and_basic_operations() {
 #[test]
 fn test_frame_indicators_integration() {
     let df = create_test_ohlcv_data();
-    let frame = MinuteOhlcv::new(df.clone(), "AAPL".to_string()).unwrap();
+    let frame = OhlcvSeries::<Minute>::new(df.clone(), "AAPL".to_string()).unwrap();
 
     // Convert to DataFrame to apply indicators
     let df = frame.collect().unwrap();
@@ -183,7 +183,7 @@ fn test_frame_indicators_integration() {
                             assert!(with_obv.schema().contains("obv"));
                             
                             // Convert back to FinancialSeries and verify
-                            if let Ok(result_frame) = MinuteOhlcv::new(with_obv, "AAPL".to_string()) {
+                            if let Ok(result_frame) = OhlcvSeries::<Minute>::new(with_obv, "AAPL".to_string()) {
                                 assert_eq!(result_frame.instrument_id(), "AAPL");
                                 assert_eq!(result_frame.frequency(), Frequency::Minute);
                                 
@@ -217,7 +217,7 @@ fn test_frame_indicators_integration() {
 #[test]
 fn test_multiple_frequency_operations() {
     let df = create_test_ohlcv_data();
-    let minute_frame = MinuteOhlcv::new(df, "AAPL".to_string()).unwrap();
+    let minute_frame = OhlcvSeries::<Minute>::new(df, "AAPL".to_string()).unwrap();
 
     // Test resampling to different frequency
     match minute_frame.resample_to::<Hour>() {

@@ -1,9 +1,8 @@
 //! 基本市場數據類型定義
 
-use polars::prelude::{Duration as PolarsDuration, DataFrame, PolarsResult};
+use polars::prelude::{DataFrame, PolarsResult};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::time::Duration as StdDuration;
 use thiserror::Error;
 
 /// 金融資產類型
@@ -28,62 +27,7 @@ impl fmt::Display for AssetType {
     }
 }
 
-/// 數據頻率定義
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Frequency {
-    Tick,
-    Minute,
-    FiveMinutes,
-    FifteenMinutes,
-    Hour,
-    Day,
-    Week,
-    Month,
-}
-
-impl Frequency {
-    /// 轉換為表示該頻率的 std::time::Duration
-    pub fn to_std_duration(&self) -> StdDuration {
-        match self {
-            Frequency::Tick => StdDuration::from_secs(0),
-            Frequency::Minute => StdDuration::from_secs(60),
-            Frequency::FiveMinutes => StdDuration::from_secs(300),
-            Frequency::FifteenMinutes => StdDuration::from_secs(900),
-            Frequency::Hour => StdDuration::from_secs(3600),
-            Frequency::Day => StdDuration::from_secs(86400),
-            Frequency::Week => StdDuration::from_secs(604800),
-            Frequency::Month => StdDuration::from_secs(2592000), // 簡化，使用30天
-        }
-    }
-
-    /// 轉換為表示該頻率的 Polars Duration
-    pub fn to_duration(&self) -> PolarsDuration {
-        match self {
-            Frequency::Tick => PolarsDuration::parse("0i"),
-            Frequency::Minute => PolarsDuration::parse("60000i"),       // 1 minute = 60,000 ms
-            Frequency::FiveMinutes => PolarsDuration::parse("300000i"), // 5 minutes = 300,000 ms
-            Frequency::FifteenMinutes => PolarsDuration::parse("900000i"), // 15 minutes = 900,000 ms
-            Frequency::Hour => PolarsDuration::parse("3600000i"),       // 1 hour = 3,600,000 ms
-            Frequency::Day => PolarsDuration::parse("86400000i"),       // 1 day = 86,400,000 ms
-            Frequency::Week => PolarsDuration::parse("604800000i"),     // 1 week = 604,800,000 ms
-            Frequency::Month => PolarsDuration::parse("2592000000i"),   // 30 days = 2,592,000,000 ms
-        }
-    }
-
-    /// 轉換為 Polars 可識別的時間字串
-    pub fn to_polars_duration_string(&self) -> String {
-        match self {
-            Frequency::Tick => "ns".to_string(),
-            Frequency::Minute => "1m".to_string(),
-            Frequency::FiveMinutes => "5m".to_string(),
-            Frequency::FifteenMinutes => "15m".to_string(),
-            Frequency::Hour => "1h".to_string(),
-            Frequency::Day => "1d".to_string(),
-            Frequency::Week => "1w".to_string(),
-            Frequency::Month => "1mo".to_string(),
-        }
-    }
-}
+// Frequency types are now in the frequency module
 
 /// 交易方向（多/空）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -188,87 +132,6 @@ impl ColumnName {
     pub const ASK_VOLUME: &'static str = "ask_volume"; // 賣一量
 }
 
-// ========== 頻率標記類型 ==========
-
-/// 頻率標記 trait
-pub trait FrequencyMarker {
-    fn to_frequency() -> Frequency;
-    fn name() -> &'static str;
-}
-
-/// Tick 頻率標記
-pub struct Tick;
-impl FrequencyMarker for Tick {
-    fn to_frequency() -> Frequency { Frequency::Tick }
-    fn name() -> &'static str { "Tick" }
-}
-
-/// 分鐘級頻率標記
-pub struct Minute;
-impl FrequencyMarker for Minute {
-    fn to_frequency() -> Frequency { Frequency::Minute }
-    fn name() -> &'static str { "Minute" }
-}
-
-/// 5分鐘級頻率標記
-pub struct FiveMinutes;
-impl FrequencyMarker for FiveMinutes {
-    fn to_frequency() -> Frequency { Frequency::FiveMinutes }
-    fn name() -> &'static str { "FiveMinutes" }
-}
-
-/// 15分鐘級頻率標記
-pub struct FifteenMinutes;
-impl FrequencyMarker for FifteenMinutes {
-    fn to_frequency() -> Frequency { Frequency::FifteenMinutes }
-    fn name() -> &'static str { "FifteenMinutes" }
-}
-
-/// 小時級頻率標記
-pub struct Hour;
-impl FrequencyMarker for Hour {
-    fn to_frequency() -> Frequency { Frequency::Hour }
-    fn name() -> &'static str { "Hour" }
-}
-
-/// 日級頻率標記
-pub struct Day;
-impl FrequencyMarker for Day {
-    fn to_frequency() -> Frequency { Frequency::Day }
-    fn name() -> &'static str { "Day" }
-}
-
-/// 週級頻率標記
-pub struct Week;
-impl FrequencyMarker for Week {
-    fn to_frequency() -> Frequency { Frequency::Week }
-    fn name() -> &'static str { "Week" }
-}
-
-/// 月級頻率標記
-pub struct Month;
-impl FrequencyMarker for Month {
-    fn to_frequency() -> Frequency { Frequency::Month }
-    fn name() -> &'static str { "Month" }
-}
-
-/// 定義所有支援的 OHLCV 頻率
-/// 這個宏只提供頻率列表，不生成任何代碼
-/// 使用者可以在其他模組中使用這個宏來生成相關代碼
-#[macro_export]
-macro_rules! for_each_ohlcv_frequency {
-    ($macro:ident) => {
-        $macro! {
-            Minute => Minute,
-            FiveMinutes => FiveMinutes,
-            FifteenMinutes => FifteenMinutes,
-            Hour => Hour,
-            Day => Day,
-            Week => Week,
-            Month => Month,
-        }
-    };
-}
 
 // ========== 數據格式 trait ==========
 

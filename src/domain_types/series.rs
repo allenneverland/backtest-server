@@ -1,7 +1,8 @@
 //! 金融時間序列數據
 
 use super::resampler::Resampler;
-use super::types::{ColumnName, DataFormat, FrequencyMarker, Frequency};
+use super::frequency::*;
+use super::types::{ColumnName, DataFormat};
 use crate::utils::time_utils::{
     datetime_range_to_timestamp_range, timestamp_range_to_datetime_range,
 };
@@ -187,7 +188,7 @@ impl<F: FrequencyMarker, D: DataFormat> FinancialSeries<F, D> {
 
 // ========== 類型別名 ==========
 
-use super::types::{OhlcvFormat, TickFormat, Day, Minute, Hour, Tick, FiveMinutes, FifteenMinutes, Week, Month};
+use super::types::{OhlcvFormat, TickFormat};
 
 /// OHLCV 時間序列類型別名
 pub type OhlcvSeries<F> = FinancialSeries<F, OhlcvFormat>;
@@ -195,30 +196,8 @@ pub type OhlcvSeries<F> = FinancialSeries<F, OhlcvFormat>;
 /// Tick 時間序列類型別名
 pub type TickSeries<F> = FinancialSeries<F, TickFormat>;
 
-// 常用頻率組合的便利類型別名
-
-/// 日線 OHLCV 數據
-pub type DailyOhlcv = OhlcvSeries<Day>;
-
-/// 分鐘線 OHLCV 數據
-pub type MinuteOhlcv = OhlcvSeries<Minute>;
-
-/// 小時線 OHLCV 數據
-pub type HourlyOhlcv = OhlcvSeries<Hour>;
-
-/// 5分鐘線 OHLCV 數據
-pub type FiveMinuteOhlcv = OhlcvSeries<FiveMinutes>;
-
-/// 15分鐘線 OHLCV 數據
-pub type FifteenMinuteOhlcv = OhlcvSeries<FifteenMinutes>;
-
-/// 週線 OHLCV 數據
-pub type WeeklyOhlcv = OhlcvSeries<Week>;
-
-/// 月線 OHLCV 數據
-pub type MonthlyOhlcv = OhlcvSeries<Month>;
-
-/// Tick 數據（最小頻率）
+// 常用的類型別名（可選，方便使用）
+/// Tick 數據
 pub type TickData = TickSeries<Tick>;
 
 #[cfg(test)]
@@ -263,7 +242,7 @@ mod tests {
     #[test]
     fn test_daily_ohlcv_creation() {
         let df = create_test_ohlcv_dataframe();
-        let daily_ohlcv = DailyOhlcv::new(df, "AAPL".to_string()).unwrap();
+        let daily_ohlcv = OhlcvSeries::<Day>::new(df, "AAPL".to_string()).unwrap();
 
         assert_eq!(daily_ohlcv.instrument_id(), "AAPL");
         assert_eq!(daily_ohlcv.frequency(), Frequency::Day);
@@ -281,7 +260,7 @@ mod tests {
     #[test]
     fn test_method_chaining() {
         let df = create_test_ohlcv_dataframe();
-        let daily_ohlcv = DailyOhlcv::new(df, "AAPL".to_string()).unwrap();
+        let daily_ohlcv = OhlcvSeries::<Day>::new(df, "AAPL".to_string()).unwrap();
         
         // 測試過濾 - 從第二天到第四天
         let start_time = 1704067200000i64 + 86400000; // 2024-01-02
@@ -293,7 +272,7 @@ mod tests {
         
         // 測試排序和列選擇
         let df2 = create_test_ohlcv_dataframe();
-        let sorted_selected = DailyOhlcv::new(df2, "AAPL".to_string())
+        let sorted_selected = OhlcvSeries::<Day>::new(df2, "AAPL".to_string())
             .unwrap()
             .sort_by_time(false)
             .select_columns(&[ColumnName::TIME, ColumnName::CLOSE]);
@@ -305,7 +284,7 @@ mod tests {
     #[test]
     fn test_time_range() {
         let df = create_test_ohlcv_dataframe();
-        let daily_ohlcv = DailyOhlcv::new(df, "AAPL".to_string()).unwrap();
+        let daily_ohlcv = OhlcvSeries::<Day>::new(df, "AAPL".to_string()).unwrap();
 
         let (start, end) = daily_ohlcv.time_range().unwrap();
         assert_eq!(start, 1704067200000); // 2024-01-01
@@ -323,7 +302,7 @@ mod tests {
             Series::new(ColumnName::OPEN.into(), &[100.0, 101.0]).into(),
         ]).unwrap();
 
-        let result = DailyOhlcv::new(incomplete_df, "AAPL".to_string());
+        let result = OhlcvSeries::<Day>::new(incomplete_df, "AAPL".to_string());
         assert!(result.is_err());
     }
 
@@ -331,10 +310,10 @@ mod tests {
     fn test_type_aliases() {
         let df = create_test_ohlcv_dataframe();
         
-        // 測試不同的類型別名
-        let minute_ohlcv = MinuteOhlcv::new(df.clone(), "AAPL".to_string()).unwrap();
-        let hourly_ohlcv = HourlyOhlcv::new(df.clone(), "AAPL".to_string()).unwrap();
-        let five_min_ohlcv = FiveMinuteOhlcv::new(df, "AAPL".to_string()).unwrap();
+        // 測試不同的泛型類型
+        let minute_ohlcv = OhlcvSeries::<Minute>::new(df.clone(), "AAPL".to_string()).unwrap();
+        let hourly_ohlcv = OhlcvSeries::<Hour>::new(df.clone(), "AAPL".to_string()).unwrap();
+        let five_min_ohlcv = OhlcvSeries::<FiveMinutes>::new(df, "AAPL".to_string()).unwrap();
 
         assert_eq!(minute_ohlcv.frequency(), Frequency::Minute);
         assert_eq!(hourly_ohlcv.frequency(), Frequency::Hour);

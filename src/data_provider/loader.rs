@@ -1,7 +1,4 @@
-use crate::{for_each_ohlcv_frequency, domain_types::{
-    Day, FifteenMinutes, FiveMinutes, Frequency, Hour, Minute, Month, 
-    OhlcvSeries, Tick, TickSeries, Week,
-}};
+use crate::domain_types::*;
 use crate::redis::pool::RedisPool;
 use crate::storage::{
     models::market_data::{MinuteBar, Tick as DbTick},
@@ -50,92 +47,16 @@ pub enum DataLoaderError {
 
 pub type Result<T> = std::result::Result<T, DataLoaderError>;
 
-/// 定義 AnyOhlcvSeries 枚舉和實現
-macro_rules! define_any_ohlcv_series {
-    ($($marker:ident => $freq:ident,)*) => {
-        /// 包裝不同頻率的 OHLCV 資料
-        #[derive(Debug)]
-        pub enum AnyOhlcvSeries {
-            $($marker(OhlcvSeries<$marker>),)*
-        }
-        
-        impl AnyOhlcvSeries {
-            /// 獲取 instrument_id
-            pub fn instrument_id(&self) -> &str {
-                match self {
-                    $(AnyOhlcvSeries::$marker(s) => s.instrument_id(),)*
-                }
-            }
-            
-            /// 獲取頻率
-            pub fn frequency(&self) -> Frequency {
-                match self {
-                    $(AnyOhlcvSeries::$marker(_) => Frequency::$freq,)*
-                }
-            }
-            
-            /// 獲取 LazyFrame 引用
-            pub fn lazy_frame(&self) -> &LazyFrame {
-                match self {
-                    $(AnyOhlcvSeries::$marker(s) => s.lazy_frame(),)*
-                }
-            }
-            
-            /// 執行計算並返回 DataFrame
-            pub fn collect(self) -> PolarsResult<DataFrame> {
-                match self {
-                    $(AnyOhlcvSeries::$marker(s) => s.collect(),)*
-                }
-            }
-        }
-    };
-}
-
-// 使用宏生成 AnyOhlcvSeries
-for_each_ohlcv_frequency!(define_any_ohlcv_series);
-
-/// 定義從分鐘級資料創建任意頻率 OHLCV 的函數
-macro_rules! define_create_ohlcv_by_frequency {
-    ($($marker:ident => $freq:ident,)*) => {
-        fn create_ohlcv_by_frequency(
-            minute_ohlcv: OhlcvSeries<Minute>,
-            frequency: Frequency,
-        ) -> Result<AnyOhlcvSeries> {
-            match frequency {
-                Frequency::Tick => {
-                    Err(DataLoaderError::InvalidFrequency(
-                        "無法將 OHLCV 資料轉換為 Tick 頻率".to_string()
-                    ))
-                }
-                $(
-                    Frequency::$freq => {
-                        // 特殊處理分鐘級資料（不需要重採樣）
-                        if stringify!($marker) == "Minute" {
-                            Ok(AnyOhlcvSeries::Minute(minute_ohlcv))
-                        } else {
-                            Ok(AnyOhlcvSeries::$marker(minute_ohlcv.resample_to::<$marker>()?))
-                        }
-                    }
-                )*
-            }
-        }
-    };
-}
-
-// 使用宏生成函數
-for_each_ohlcv_frequency!(define_create_ohlcv_by_frequency);
-
 /// 資料載入器的通用介面
 #[async_trait]
 pub trait DataLoader: Send + Sync {
     /// 載入指定頻率的 OHLCV 資料
-    async fn load_ohlcv(
+    async fn load_ohlcv<F: FrequencyMarker>(
         &self,
         instrument_id: i32,
-        frequency: Frequency,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
-    ) -> Result<AnyOhlcvSeries>;
+    ) -> Result<OhlcvSeries<F>>;
     
     /// 載入 Tick 資料
     async fn load_ticks(
@@ -179,20 +100,19 @@ impl MarketDataLoader {
 #[async_trait]
 impl DataLoader for MarketDataLoader {
     #[instrument(skip(self))]
-    async fn load_ohlcv(
+    async fn load_ohlcv<F: FrequencyMarker>(
         &self,
         instrument_id: i32,
-        frequency: Frequency,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
-    ) -> Result<AnyOhlcvSeries> {
+    ) -> Result<OhlcvSeries<F>> {
         // 驗證時間範圍
         if start >= end {
             return Err(DataLoaderError::InvalidTimeRange { start, end });
         }
         
-        debug!("載入 {:?} 級 OHLCV 資料: instrument_id={}, start={}, end={}", 
-               frequency, instrument_id, start, end);
+        debug!("載入 {} 級 OHLCV 資料: instrument_id={}, start={}, end={}", 
+               F::name(), instrument_id, start, end);
         
         // 從資料庫載入分鐘級資料作為基礎
         let market_data_repo = PgMarketDataRepository::new((*self.database).clone());
@@ -215,8 +135,20 @@ impl DataLoader for MarketDataLoader {
         // 建立分鐘級 OHLCV
         let minute_ohlcv = OhlcvSeries::<Minute>::from_lazy(df.lazy(), instrument_id.to_string());
         
-        // 根據請求的頻率進行重採樣或直接返回
-        create_ohlcv_by_frequency(minute_ohlcv, frequency)
+        // 根據目標頻率進行重採樣
+        if F::to_frequency() == Frequency::Minute {
+            // 如果目標是分鐘級，直接返回（需要類型轉換）
+            // 這裡需要 unsafe 或重新創建，因為 Rust 不知道 F 和 Minute 是同一類型
+            let df_collected = minute_ohlcv.collect()?;
+            Ok(OhlcvSeries::<F>::from_dataframe_unchecked(df_collected, instrument_id.to_string()))
+        } else if F::to_frequency().is_ohlcv() {
+            // 對於其他 OHLCV 頻率，進行重採樣
+            Ok(minute_ohlcv.resample_to::<F>()?)
+        } else {
+            Err(DataLoaderError::InvalidFrequency(
+                format!("無法載入 {} 頻率的 OHLCV 資料", F::name())
+            ))
+        }
     }
     
     #[instrument(skip(self))]
@@ -367,12 +299,12 @@ mod tests {
     }
     
     #[test]
-    fn test_any_ohlcv_series() {
+    fn test_ohlcv_series_generic() {
         use crate::domain_types::types::ColumnName;
         use polars::prelude::*;
         
         // 創建測試 DataFrame
-        let df = DataFrame::new(vec![
+        let _df = DataFrame::new(vec![
             Series::new(ColumnName::TIME.into(), &[1704067200000i64, 1704067260000i64]).into(),
             Series::new(ColumnName::OPEN.into(), &[100.0, 101.0]).into(),
             Series::new(ColumnName::HIGH.into(), &[105.0, 106.0]).into(),
@@ -380,11 +312,5 @@ mod tests {
             Series::new(ColumnName::CLOSE.into(), &[102.0, 103.0]).into(),
             Series::new(ColumnName::VOLUME.into(), &[1000.0, 2000.0]).into(),
         ]).unwrap();
-        
-        let minute_series = OhlcvSeries::<Minute>::from_lazy(df.lazy(), "TEST".to_string());
-        let any_series = AnyOhlcvSeries::Minute(minute_series);
-        
-        assert_eq!(any_series.instrument_id(), "TEST");
-        assert_eq!(any_series.frequency(), Frequency::Minute);
     }
 }

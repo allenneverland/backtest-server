@@ -15,13 +15,6 @@
 - **金融工具管理**: 股票、外匯、加密貨幣等不同資產類型的創建
 - **類型安全性**: 編譯時類型檢查的展示
 
-#### 支持的時間序列類型
-- `MinuteOhlcv` - 分鐘級 OHLCV 數據
-- `DailyOhlcv` - 日級 OHLCV 數據
-- `HourlyOhlcv` - 小時級 OHLCV 數據
-- `TickData` - Tick 級別數據
-- `FiveMinuteOhlcv`, `FifteenMinuteOhlcv` - 其他頻率組合
-
 #### 支持的資產類型
 - 股票 (`Stock`)
 - 期貨 (`Future`)

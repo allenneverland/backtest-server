@@ -1,5 +1,6 @@
 // resampling.rs
-use super::types::{ColumnName, Frequency};
+use super::frequency::Frequency;
+use super::types::ColumnName;
 use polars::prelude::*;
 
 /// 提供重採樣核心功能的結構

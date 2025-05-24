@@ -138,6 +138,7 @@ src/                            # 源代碼目錄
 src/domain_types/                   # 核心領域類型模組目錄
 ├── types.rs                        # 基本類型定義 (資產類型、頻率等)
 ├── instrument.rs                   # 金融商品結構
+├── frequency.rs                    # 頻率定義
 ├── frame.rs                        # 基於 Polars 的市場數據框架
 ├── series.rs                       # 時間序列相關功能
 └── indicators.rs                   # 基本技術指標

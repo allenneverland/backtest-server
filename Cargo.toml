@@ -110,6 +110,9 @@ opt-level = 0
 [build-dependencies]
 toml = "0.8.22"
 serde = { version = "1.0.219", features = ["derive"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+syn = "2.0"
 
 [package.metadata.rust-analyzer]
 # 啟用所有功能

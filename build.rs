@@ -1,9 +1,11 @@
+use proc_macro2::TokenStream;
+use quote::quote;
 use std::env;
 use std::fs;
 use std::path::Path;
 
-// Note: We need to duplicate these types in build.rs because we can't import from the crate being built
-// These definitions must match those in src/domain_types/frequency.rs
+// Note: These types are only used in build.rs for parsing the TOML file
+// The actual types used in the crate are generated from this data
 
 #[derive(Debug, serde::Deserialize)]
 struct FrequencyConfig {
@@ -42,38 +44,39 @@ fn main() {
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("frequencies_generated.rs");
     
-    fs::write(&dest_path, frequencies_macro)
+    fs::write(&dest_path, frequencies_macro.to_string())
         .expect("Failed to write generated frequency code");
 }
 
-fn generate_frequencies_macro(frequencies: &[FrequencyDef]) -> String {
-    let mut output = String::new();
+fn generate_frequencies_macro(frequencies: &[FrequencyDef]) -> TokenStream {
+    // 為每個頻率生成 token
+    let frequency_entries: Vec<TokenStream> = frequencies
+        .iter()
+        .map(|freq| {
+            let enum_name = syn::Ident::new(&freq.enum_name, proc_macro2::Span::call_site());
+            let alias_suffix = &freq.alias_suffix;
+            let is_ohlcv = freq.is_ohlcv;
+            let seconds = freq.seconds;
+            let milliseconds = freq.milliseconds;
+            let polars_string = &freq.polars_string;
+            let display_name = &freq.display_name;
+            
+            quote! {
+                (#enum_name, #alias_suffix, #is_ohlcv, #seconds, #milliseconds, #polars_string, #display_name)
+            }
+        })
+        .collect();
     
-    // 生成主頻率定義宏
-    output.push_str("/// 主頻率定義宏 - 包含所有頻率的元數據\n");
-    output.push_str("/// 這是所有其他宏的數據源\n");
-    output.push_str("macro_rules! frequencies {\n");
-    output.push_str("    ($call:ident) => {\n");
-    output.push_str("        $call! {\n");
-    
-    for (i, freq) in frequencies.iter().enumerate() {
-        let comma = if i < frequencies.len() - 1 { "," } else { "" };
-        output.push_str(&format!(
-            "            ({}, {:?}, {}, {}, {}u64, {:?}, {:?}){}\n",
-            freq.enum_name,
-            freq.alias_suffix,
-            freq.is_ohlcv,
-            freq.seconds,
-            freq.milliseconds,
-            freq.polars_string,
-            freq.display_name,
-            comma
-        ));
+    // 生成完整的宏定義
+    quote! {
+        /// 主頻率定義宏 - 包含所有頻率的元數據
+        /// 這是所有其他宏的數據源
+        macro_rules! frequencies {
+            ($call:ident) => {
+                $call! {
+                    #(#frequency_entries),*
+                }
+            };
+        }
     }
-    
-    output.push_str("        }\n");
-    output.push_str("    };\n");
-    output.push_str("}\n");
-    
-    output
 }

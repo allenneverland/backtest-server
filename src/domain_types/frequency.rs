@@ -1,53 +1,10 @@
-//! 頻率定義模組 - 從 TOML 檔案動態生成所有頻率相關的程式碼
+//! 頻率定義模組 - 從 config/frequencies.toml 編譯時生成
 //! 
-//! 這個模組是所有頻率定義的單一來源，所有頻率相關的程式碼都從 config/frequencies.toml 自動生成
+//! 這個模組包含所有頻率相關的類型定義，在編譯時從配置檔案自動生成。
+//! 所有頻率定義都是靜態的，提供零成本抽象和完整的類型安全。
 
 use serde::{Deserialize, Serialize};
 use std::time::Duration as StdDuration;
-use std::path::Path;
-
-/// 頻率配置 - 從 TOML 檔案載入
-#[derive(Debug, Deserialize, Clone)]
-pub struct FrequencyConfig {
-    pub frequency: Vec<FrequencyDef>,
-}
-
-/// 單個頻率定義
-#[derive(Debug, Deserialize, Clone)]
-pub struct FrequencyDef {
-    pub name: String,
-    pub enum_name: String,
-    pub struct_name: String,
-    pub seconds: u64,
-    pub milliseconds: u64,
-    pub polars_string: String,
-    pub display_name: String,
-    pub alias_suffix: String,
-    pub is_ohlcv: bool,
-}
-
-impl FrequencyConfig {
-    /// 從檔案載入頻率配置
-    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
-        let content = std::fs::read_to_string(path)?;
-        Ok(toml::from_str(&content)?)
-    }
-    
-    /// 從預設位置載入
-    pub fn load_default() -> Result<Self, Box<dyn std::error::Error>> {
-        Self::load_from_file("config/frequencies.toml")
-    }
-    
-    /// 獲取所有 OHLCV 頻率
-    pub fn ohlcv_frequencies(&self) -> Vec<&FrequencyDef> {
-        self.frequency.iter().filter(|f| f.is_ohlcv).collect()
-    }
-    
-    /// 獲取所有頻率名稱
-    pub fn frequency_names(&self) -> Vec<&str> {
-        self.frequency.iter().map(|f| f.name.as_str()).collect()
-    }
-}
 
 // 包含由 build.rs 生成的頻率宏定義
 include!(concat!(env!("OUT_DIR"), "/frequencies_generated.rs"));

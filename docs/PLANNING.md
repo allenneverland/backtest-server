@@ -1,4 +1,4 @@
-# BacktestServer 專案規劃
+# backtest-server 專案規劃
 
 ## 目錄
 
@@ -45,7 +45,7 @@
 
 ### 1.1 願景與目標
 
-BacktestServer 是一個使用 Rust 開發的高效能金融回測伺服器，專為支持多策略和動態策略管理設計。專案的主要目標是：
+backtest-server 是一個使用 Rust 開發的高效能金融回測伺服器，專為支持多策略和動態策略管理設計。專案的主要目標是：
 
 1. **高效能**：利用 Rust 的系統級性能，提供比現有 Python 或 Java 等回測系統更高效的回測處理能力
 2. **可擴展性**：支持多種資產類型、交易所和資料頻率，並易於擴展新的功能模組
@@ -56,7 +56,7 @@ BacktestServer 是一個使用 Rust 開發的高效能金融回測伺服器，�
 
 ### 1.2 範圍界定
 
-BacktestServer 專案範圍包括：
+backtest-server 專案範圍包括：
 
 - 金融市場數據的導入、清洗、存儲和提供
 - 策略 DSL 的解析和執行
@@ -107,7 +107,7 @@ BacktestServer 專案範圍包括：
 
 ### 2.1 架構概述
 
-BacktestServer 採用模組化、多層次的系統架構：
+backtest-server 採用模組化、多層次的系統架構：
 
 1. **資料層**：負責數據的儲存和訪問
    - TimescaleDB 用於時間序列數據
@@ -162,7 +162,7 @@ BacktestServer 採用模組化、多層次的系統架構：
 
 ### 2.3 模組化設計
 
-BacktestServer 採用高度模組化的設計，主要模組包括：
+backtest-server 採用高度模組化的設計，主要模組包括：
 
 1. **領域類型模組 (domain_types)**：定義核心領域類型和資料結構
 2. **數據導入模組 (data_ingestion)**：處理外部數據導入和驗證
@@ -467,7 +467,7 @@ BacktestServer 採用高度模組化的設計，主要模組包括：
 
 ### 5.1 資料庫技術選型
 
-BacktestServer 使用 TimescaleDB 作為主要資料庫，這是 PostgreSQL 的時間序列擴展，特別適合金融數據管理：
+backtest-server 使用 TimescaleDB 作為主要資料庫，這是 PostgreSQL 的時間序列擴展，特別適合金融數據管理：
 
 **優勢**:
 - 高效時間序列查詢
@@ -536,7 +536,7 @@ BacktestServer 使用 TimescaleDB 作為主要資料庫，這是 PostgreSQL 的�
 
 ### 6.1 測試類型
 
-BacktestServer 採用多層次測試策略：
+backtest-server 採用多層次測試策略：
 
 1. **單元測試**
    - 位於各模組中的 `tests` 子模組
@@ -602,7 +602,7 @@ BacktestServer 採用多層次測試策略：
 
 ### 7.1 部署環境
 
-BacktestServer 支援以下部署方式：
+backtest-server 支援以下部署方式：
 
 1. **Docker 容器化**
    - 主要應用容器

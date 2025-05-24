@@ -2,10 +2,10 @@
 name = "backtest_server"
 version = "0.1.0"
 edition = "2021"
-authors = ["BacktestServer Team"]
+authors = ["backtest-server Team"]
 description = "Rust based financial backtesting server"
 readme = "README.md"
-repository = "https://github.com/allen3680/backtest_server"
+repository = "https://gitlab.com/stratplat/backtest-server.git"
 license = "MIT"
 
 [[bin]]

@@ -2,6 +2,33 @@ Commend use Traditional Chinese with correct UTF-8 format
 
 Always use sequentialthinking mcp
 
+## Gitlab
+
+Only use the following labels:
+### type label:
+bug - Bug 修復
+feature - 新功能
+enhancement - 改進現有功能
+refactor - 重構程式碼
+documentation - 文件相關
+test - 測試相關
+security - 安全性問題
+
+### priority label:
+critical - 緊急修復
+high - 高優先級
+medium - 中等優先級
+low - 低優先級
+
+Only use the following milestone:
+### milestone:
+第一階段：專案設置和基礎架構 id: 6021454
+第二階段：核心數據功能 id:6021455
+第三階段：回測與執行模組 id:6021457
+第四階段：策略與隔離運行時 id:6021459
+第五階段：消息系統集成與伺服器功能 id:6021460
+第六階段：集成與測試 id:6021461
+
 ## Common Development Commands
 
 ### Building and Running

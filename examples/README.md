@@ -1,6 +1,6 @@
-# BacktestServer 範例程式碼
+# backtest-server 範例程式碼
 
-本目錄包含 BacktestServer 項目的範例程式碼，用於展示各個模組的功能和使用方式。
+本目錄包含 backtest-server 項目的範例程式碼，用於展示各個模組的功能和使用方式。
 
 ## 可用範例
 

@@ -1,4 +1,4 @@
-# BacktestServer - 高性能金融回測伺服器
+# backtest-server - 高性能金融回測伺服器
 
 ## 概述
 

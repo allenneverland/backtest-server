@@ -33,6 +33,10 @@
   - 支援領域模型層 <-> 計算核心層轉換
   - 提供可選型別和時間範圍轉換
 
+
+## 第二階段：核心數據功能（2-3週）
+
+
 ## 領域類型模組 (domain_types)
 
 ### 1. 基本類型實現
@@ -77,8 +81,6 @@
 - ✅ 實現金融商品儲存庫（`repository/instrument.rs`）`[sqlx, tokio]` ⚡(依賴任務6)
   - 實現 `PgInstrumentRepository`
   - 提供商品基本信息存取
-
-## 第二階段：核心數據功能（2-3週）
 
 ### 新增：Redis存儲模組
 - ✅ 實現Redis客戶端（`redis/client.rs`）`[redis, tokio, async-trait]` ⚡(依賴任務7)

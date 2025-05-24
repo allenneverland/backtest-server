@@ -1,4 +1,4 @@
-# Frequency definitions for BacktestServer
+# Frequency definitions for backtest-server
 # This file is the single source of truth for all frequency definitions
 
 [[frequency]]

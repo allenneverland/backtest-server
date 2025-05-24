@@ -122,3 +122,5 @@ dump.rdb
 
 /src-old
 raw/
+
+.claude/

@@ -569,7 +569,7 @@ backtest-server 採用多層次測試策略：
    - `proptest` 用於基於屬性的測試
 
 2. **CI/CD 整合**
-   - GitLab 自動執行測試
+   - Github Actions 自動執行測試
    - 每次提交和合併請求時運行測試
    - 定期執行完整測試套件
 

@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["backtest-server Team"]
 description = "Rust based financial backtesting server"
 readme = "README.md"
-repository = "https://gitlab.com/stratplat/backtest-server.git"
+repository = "https://github.com/allenneverland/backtest-server.git"
 license = "MIT"
 
 [[bin]]

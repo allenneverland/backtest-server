@@ -181,7 +181,6 @@ src/
 ### Project Awareness & Context
 
 - Always read STRUCTURE.md, PLANNING.md, DEPENDENCIES.md at the start of a new conversation to understand the project's architecture, goals, style, and constraints.
-- Check TASK.md before starting a new task. If the task isn't listed, add it with a brief description and today's date.
 - Use consistent naming conventions, file structure, and architecture patterns as described in PLANNING.md.
 - When exploring a new feature, first identify which module or component it belongs to.
 - Check existing implementations before creating new ones to maintain consistency.
@@ -201,12 +200,6 @@ src/
 - Write tests before fixing bugs to verify the issue and prevent regressions.
 - Keep tests readable and maintainable.
 - Test edge cases and error conditions thoroughly.
-
-### Task Completion
-
-- Mark completed tasks in TASK.md immediately after finishing them.
-- Add new sub-tasks or TODOs discovered during development to TASK.md under a "Discovered During Work" section.
-- Document any unexpected challenges or decisions made during implementation.
 
 ### Style & Conventions
 
@@ -288,5 +281,4 @@ These commands generate HTML documentation from the code and docstrings, providi
 - Never assume missing context. Ask questions if uncertain about requirements or existing code.
 - Never hallucinate libraries or functions – only use known, verified Rust crates as specified in DEPENDENCIES.md.
 - Always confirm file paths and module names exist before referencing them in code or tests.
-- Never delete or overwrite existing code unless explicitly instructed to or if part of a task from TASK.md.
 - When updating existing code, preserve the original architecture and design patterns unless instructions specify otherwise.

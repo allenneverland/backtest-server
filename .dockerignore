@@ -1,6 +1,5 @@
 # 忽略版本控制文件
 .git
-.github
 .gitignore
 
 # 忽略構建輸出

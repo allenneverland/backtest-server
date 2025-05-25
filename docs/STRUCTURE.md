@@ -57,10 +57,6 @@ backtest_server/                # 專案根目錄
 ├── Makefile.toml               # cargo-make任務定義
 ├── .cargo/                     # Cargo配置目錄
 │   └── config.toml             # Cargo配置文件
-├── .gitlab/                    # GitLab配置
-│   └── workflows/
-│       ├── ci.yml              # 持續整合配置
-│       └── cd.yml              # 發布流程配置
 ├── Dockerfile                  # Docker容器定義
 ├── Dockerfile.db               # TimescaleDB數據庫容器定義
 ├── Dockerfile.rabbitmq         # RabbitMQ容器定義

@@ -49,15 +49,16 @@ pub struct CsvReader {
     config: CsvReaderConfig,
 }
 
+impl Default for CsvReader {
+    fn default() -> Self {
+        Self::new(CsvReaderConfig::default())
+    }
+}
+
 impl CsvReader {
     /// 創建新的 CSV 讀取器
     pub fn new(config: CsvReaderConfig) -> Self {
         Self { config }
-    }
-
-    /// 使用預設配置創建 CSV 讀取器
-    pub fn default() -> Self {
-        Self::new(CsvReaderConfig::default())
     }
 
     /// 設定分隔符

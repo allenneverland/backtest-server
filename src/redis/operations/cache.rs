@@ -116,7 +116,7 @@ impl<P: RedisPool> CacheManager<P> {
             .arg(&prefixed_key)
             .arg(&serialized)
             .arg("EX")
-            .arg(ttl_secs as u64)
+            .arg(ttl_secs)
             .query_async::<()>(&mut conn)
             .await
         {
@@ -149,7 +149,7 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
                 .arg(&prefixed_key)
                 .arg(&serialized)
                 .arg("EX")
-                .arg(ttl as u64)
+                .arg(ttl)
                 .query_async::<()>(&mut conn)
                 .await
             {

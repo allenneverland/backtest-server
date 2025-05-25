@@ -166,15 +166,13 @@ impl<T: TimeSeriesRecord> TimeSeriesValidator<T> {
             }
 
             // 檢查時間順序
-            if self.strict_ascending && timestamp <= prev_timestamp {
-                errors.add(
-                    i,
-                    ValidationError::OutOfOrder {
-                        previous: prev_timestamp.to_rfc3339(),
-                        current: timestamp.to_rfc3339(),
-                    },
-                );
-            } else if !self.strict_ascending && timestamp < prev_timestamp {
+            let is_out_of_order = if self.strict_ascending {
+                timestamp <= prev_timestamp
+            } else {
+                timestamp < prev_timestamp
+            };
+
+            if is_out_of_order {
                 errors.add(
                     i,
                     ValidationError::OutOfOrder {

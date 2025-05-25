@@ -1,6 +1,7 @@
 use super::error::ValidationErrors;
 use super::traits::{ValidationConfig, Validator};
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 
 /// 驗證器類型
@@ -16,14 +17,15 @@ pub enum ValidatorType {
     Custom(String),
 }
 
-impl ValidatorType {
-    /// 從字串創建驗證器類型
-    pub fn from_str(s: &str) -> Self {
+impl FromStr for ValidatorType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "ohlcv" => ValidatorType::Ohlcv,
-            "tick" => ValidatorType::Tick,
-            "timeseries" | "time_series" => ValidatorType::TimeSeries,
-            custom => ValidatorType::Custom(custom.to_string()),
+            "ohlcv" => Ok(ValidatorType::Ohlcv),
+            "tick" => Ok(ValidatorType::Tick),
+            "timeseries" | "time_series" => Ok(ValidatorType::TimeSeries),
+            custom => Ok(ValidatorType::Custom(custom.to_string())),
         }
     }
 }

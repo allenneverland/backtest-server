@@ -240,7 +240,7 @@ impl ReportFormatter {
             report.end_time.format("%Y-%m-%d %H:%M:%S")
         ));
         output.push_str(&format!("處理時間: {:.2} 秒\n", report.processing_time()));
-        output.push_str("\n");
+        output.push('\n');
 
         output.push_str("統計摘要:\n");
         output.push_str(&format!("  總記錄數: {}\n", report.total_records));
@@ -254,14 +254,14 @@ impl ReportFormatter {
             report.invalid_records,
             (1.0 - report.success_rate()) * 100.0
         ));
-        output.push_str("\n");
+        output.push('\n');
 
         if !report.error_summary.top_errors.is_empty() {
             output.push_str("最常見的錯誤:\n");
             for (error_type, count) in &report.error_summary.top_errors {
                 output.push_str(&format!("  {}: {} 次\n", error_type, count));
             }
-            output.push_str("\n");
+            output.push('\n');
         }
 
         if !report.statistics.is_empty() {

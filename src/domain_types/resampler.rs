@@ -56,9 +56,9 @@ impl Resampler {
     pub fn tick_to_ohlcv(df: &DataFrame, frequency: Frequency) -> PolarsResult<DataFrame> {
         // 驗證必要的列是否存在
         for col_name in [ColumnName::TIME, ColumnName::PRICE, ColumnName::VOLUME].iter() {
-            if !df.schema().contains(*col_name) {
+            if !df.schema().contains(col_name) {
                 return Err(PolarsError::ColumnNotFound(
-                    format!("Column '{}' not found in DataFrame", *col_name).into(),
+                    format!("Column '{}' not found in DataFrame", col_name).into(),
                 ));
             }
         }

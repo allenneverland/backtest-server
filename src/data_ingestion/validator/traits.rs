@@ -124,7 +124,7 @@ impl<T> CompositeValidator<T> {
     }
 
     /// 添加驗證器
-    pub fn add(mut self, validator: Box<dyn Validator<Data = T>>) -> Self {
+    pub fn add_validator(mut self, validator: Box<dyn Validator<Data = T>>) -> Self {
         self.validators.push(validator);
         self
     }

@@ -27,20 +27,21 @@ pub enum ErrorCode {
     NotImplemented,
 }
 
-impl ToString for ErrorCode {
-    fn to_string(&self) -> String {
-        match self {
-            ErrorCode::BadRequest => "BAD_REQUEST".to_string(),
-            ErrorCode::Unauthorized => "UNAUTHORIZED".to_string(),
-            ErrorCode::Forbidden => "FORBIDDEN".to_string(),
-            ErrorCode::NotFound => "NOT_FOUND".to_string(),
-            ErrorCode::Conflict => "CONFLICT".to_string(),
-            ErrorCode::InternalServerError => "INTERNAL_SERVER_ERROR".to_string(),
-            ErrorCode::ServiceUnavailable => "SERVICE_UNAVAILABLE".to_string(),
-            ErrorCode::Timeout => "TIMEOUT".to_string(),
-            ErrorCode::ValidationError => "VALIDATION_ERROR".to_string(),
-            ErrorCode::NotImplemented => "NOT_IMPLEMENTED".to_string(),
-        }
+impl std::fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let error_str = match self {
+            ErrorCode::BadRequest => "BAD_REQUEST",
+            ErrorCode::Unauthorized => "UNAUTHORIZED",
+            ErrorCode::Forbidden => "FORBIDDEN",
+            ErrorCode::NotFound => "NOT_FOUND",
+            ErrorCode::Conflict => "CONFLICT",
+            ErrorCode::InternalServerError => "INTERNAL_SERVER_ERROR",
+            ErrorCode::ServiceUnavailable => "SERVICE_UNAVAILABLE",
+            ErrorCode::Timeout => "TIMEOUT",
+            ErrorCode::ValidationError => "VALIDATION_ERROR",
+            ErrorCode::NotImplemented => "NOT_IMPLEMENTED",
+        };
+        write!(f, "{}", error_str)
     }
 }
 

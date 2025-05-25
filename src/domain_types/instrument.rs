@@ -2,7 +2,7 @@
 
 use super::types::{AssetType, DomainError, Result};
 use crate::utils::time_utils::{
-    opt_datetime_to_opt_timestamp_ms, opt_timestamp_ms_to_opt_datetime
+    opt_datetime_to_opt_timestamp_ms, opt_timestamp_ms_to_opt_datetime,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -394,7 +394,7 @@ impl Instrument {
         self.is_active = false;
         self.touch();
     }
-    
+
     /// 將可選的日期時間轉換為毫秒時間戳（供資料庫層使用）
     ///
     /// 這個方法主要用於在將 Instrument 存入資料庫時，
@@ -402,12 +402,12 @@ impl Instrument {
     pub fn listing_date_to_timestamp(&self) -> Option<i64> {
         opt_datetime_to_opt_timestamp_ms(&self.listing_date)
     }
-    
+
     /// 將可選的日期時間轉換為毫秒時間戳（供資料庫層使用）
     pub fn expiry_date_to_timestamp(&self) -> Option<i64> {
         opt_datetime_to_opt_timestamp_ms(&self.expiry_date)
     }
-    
+
     /// 從毫秒時間戳創建 Instrument 的日期時間字段
     ///
     /// 這個方法主要用於從資料庫讀取 Instrument 時，
@@ -415,7 +415,7 @@ impl Instrument {
     pub fn timestamp_to_listing_date(timestamp: Option<i64>) -> Option<DateTime<Utc>> {
         opt_timestamp_ms_to_opt_datetime(timestamp)
     }
-    
+
     /// 從毫秒時間戳創建 Instrument 的日期時間字段
     pub fn timestamp_to_expiry_date(timestamp: Option<i64>) -> Option<DateTime<Utc>> {
         opt_timestamp_ms_to_opt_datetime(timestamp)
@@ -496,13 +496,13 @@ mod tests {
         assert_ne!(inst.instrument_id, "AAPL"); // Should be a UUID
         assert_eq!(inst.symbol, "AAPL");
     }
-    
+
     #[test]
     fn test_datetime_timestamp_conversion() {
         // 創建帶有日期時間的金融商品
         let listing_date = Utc::now();
         let expiry_date = listing_date + chrono::Duration::days(90);
-        
+
         let inst = Instrument::builder()
             .instrument_id("TEST123")
             .symbol("TEST")
@@ -512,30 +512,40 @@ mod tests {
             .expiry_date(expiry_date)
             .build()
             .unwrap();
-            
+
         // 測試轉換為毫秒時間戳
         let listing_ts = inst.listing_date_to_timestamp();
         let expiry_ts = inst.expiry_date_to_timestamp();
-        
+
         assert!(listing_ts.is_some());
         assert!(expiry_ts.is_some());
-        
+
         // 測試從毫秒時間戳轉換回日期時間
         let listing_dt = Instrument::timestamp_to_listing_date(listing_ts);
         let expiry_dt = Instrument::timestamp_to_expiry_date(expiry_ts);
-        
+
         assert!(listing_dt.is_some());
         assert!(expiry_dt.is_some());
-        
+
         // 比較原始日期時間和轉換後的日期時間
-        let listing_diff = (listing_date - listing_dt.unwrap()).num_milliseconds().abs();
+        let listing_diff = (listing_date - listing_dt.unwrap())
+            .num_milliseconds()
+            .abs();
         let expiry_diff = (expiry_date - expiry_dt.unwrap()).num_milliseconds().abs();
-        
+
         // 允許1毫秒的轉換誤差
-        assert!(listing_diff <= 1, "Listing date conversion error too large: {}", listing_diff);
-        assert!(expiry_diff <= 1, "Expiry date conversion error too large: {}", expiry_diff);
+        assert!(
+            listing_diff <= 1,
+            "Listing date conversion error too large: {}",
+            listing_diff
+        );
+        assert!(
+            expiry_diff <= 1,
+            "Expiry date conversion error too large: {}",
+            expiry_diff
+        );
     }
-    
+
     #[test]
     fn test_optional_datetime_conversion() {
         // 測試 None 值的情況
@@ -546,11 +556,11 @@ mod tests {
             .asset_type(AssetType::Stock)
             .build()
             .unwrap();
-            
+
         // None 值應該轉換為 None
         assert!(inst.listing_date.is_none());
         assert!(inst.listing_date_to_timestamp().is_none());
-        
+
         // None 時間戳應該轉換為 None DateTime
         assert!(Instrument::timestamp_to_listing_date(None).is_none());
     }

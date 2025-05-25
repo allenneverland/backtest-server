@@ -213,35 +213,50 @@ impl Instrument {
     }
 
     /// 設置股票特定屬性
-    pub fn set_stock_attributes(&mut self, attrs: StockAttributes) -> Result<(), serde_json::Error> {
+    pub fn set_stock_attributes(
+        &mut self,
+        attrs: StockAttributes,
+    ) -> Result<(), serde_json::Error> {
         let json = serde_json::to_value(attrs)?;
         self.attributes = Some(Json(json));
         Ok(())
     }
 
     /// 設置期貨特定屬性
-    pub fn set_future_attributes(&mut self, attrs: FutureAttributes) -> Result<(), serde_json::Error> {
+    pub fn set_future_attributes(
+        &mut self,
+        attrs: FutureAttributes,
+    ) -> Result<(), serde_json::Error> {
         let json = serde_json::to_value(attrs)?;
         self.attributes = Some(Json(json));
         Ok(())
     }
 
     /// 設置選擇權特定屬性
-    pub fn set_option_attributes(&mut self, attrs: OptionAttributes) -> Result<(), serde_json::Error> {
+    pub fn set_option_attributes(
+        &mut self,
+        attrs: OptionAttributes,
+    ) -> Result<(), serde_json::Error> {
         let json = serde_json::to_value(attrs)?;
         self.attributes = Some(Json(json));
         Ok(())
     }
 
     /// 設置外匯特定屬性
-    pub fn set_forex_attributes(&mut self, attrs: ForexAttributes) -> Result<(), serde_json::Error> {
+    pub fn set_forex_attributes(
+        &mut self,
+        attrs: ForexAttributes,
+    ) -> Result<(), serde_json::Error> {
         let json = serde_json::to_value(attrs)?;
         self.attributes = Some(Json(json));
         Ok(())
     }
 
     /// 設置虛擬貨幣特定屬性
-    pub fn set_crypto_attributes(&mut self, attrs: CryptoAttributes) -> Result<(), serde_json::Error> {
+    pub fn set_crypto_attributes(
+        &mut self,
+        attrs: CryptoAttributes,
+    ) -> Result<(), serde_json::Error> {
         let json = serde_json::to_value(attrs)?;
         self.attributes = Some(Json(json));
         Ok(())

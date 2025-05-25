@@ -127,7 +127,7 @@ mod tests {
         // 使用真實的時間戳（從2024-01-01開始，每秒一個tick）
         let base_timestamp = 1704067200000i64; // 2024-01-01 00:00:00 UTC in milliseconds
         let time_data: Vec<i64> = (0..5).map(|i| base_timestamp + i * 1000).collect(); // 每秒增加1000ms
-        
+
         let time = Series::new(ColumnName::TIME.into(), &time_data);
         let price = Series::new(
             ColumnName::PRICE.into(),
@@ -144,7 +144,7 @@ mod tests {
         let result = Resampler::tick_to_ohlcv(&df, Frequency::Minute);
 
         match &result {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 eprintln!("tick_to_ohlcv error: {:?}", e);
             }

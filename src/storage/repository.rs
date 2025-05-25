@@ -1,8 +1,8 @@
-use chrono::{DateTime, NaiveDate, Utc};
-use sqlx::PgPool;
 use crate::utils::time_utils::{
     datetime_range_to_timestamp_range, timestamp_range_to_datetime_range,
 };
+use chrono::{DateTime, NaiveDate, Utc};
+use sqlx::PgPool;
 
 // 重新導出子模塊
 pub mod aggregate;
@@ -79,15 +79,15 @@ impl TimeRange {
     }
 
     /// 從i64毫秒時間戳創建TimeRange
-    /// 
+    ///
     /// 這個方法用於將計算核心層的時間戳轉換為資料庫層使用的TimeRange
     pub fn from_timestamps(start_ts: i64, end_ts: i64) -> Self {
         let (start, end) = timestamp_range_to_datetime_range(start_ts, end_ts);
         Self { start, end }
     }
-    
+
     /// 將TimeRange轉換為i64毫秒時間戳元組
-    /// 
+    ///
     /// 這個方法用於將TimeRange轉換為計算核心層使用的時間戳
     pub fn to_timestamps(&self) -> (i64, i64) {
         datetime_range_to_timestamp_range(&self.start, &self.end)

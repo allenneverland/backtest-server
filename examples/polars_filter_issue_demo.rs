@@ -8,11 +8,11 @@ fn main() {
 
     // Create test data with large timestamp values (milliseconds since epoch)
     let timestamps = vec![
-        1704067200000i64,     // 2024-01-01 00:00:00 UTC
-        1704153600000i64,     // 2024-01-02 00:00:00 UTC
-        1704240000000i64,     // 2024-01-03 00:00:00 UTC
-        1704326400000i64,     // 2024-01-04 00:00:00 UTC
-        1704412800000i64,     // 2024-01-05 00:00:00 UTC
+        1704067200000i64, // 2024-01-01 00:00:00 UTC
+        1704153600000i64, // 2024-01-02 00:00:00 UTC
+        1704240000000i64, // 2024-01-03 00:00:00 UTC
+        1704326400000i64, // 2024-01-04 00:00:00 UTC
+        1704412800000i64, // 2024-01-05 00:00:00 UTC
     ];
 
     let values = vec![100.0, 101.0, 102.0, 103.0, 104.0];
@@ -30,12 +30,12 @@ fn main() {
     // Test 1: Direct DataFrame filtering (this should work)
     println!("Test 1: Direct DataFrame filtering");
     let start_time = 1704153600000i64; // 2024-01-02
-    let end_time = 1704326400000i64;   // 2024-01-04
+    let end_time = 1704326400000i64; // 2024-01-04
 
     let time_col = df.column("time").unwrap();
     let time_ca = time_col.i64().unwrap();
     let mask = time_ca.gt_eq(start_time) & time_ca.lt_eq(end_time);
-    
+
     let filtered_df = df.filter(&mask).unwrap();
     println!("Filtered result (should have 3 rows):");
     println!("{}\n", filtered_df);
@@ -43,7 +43,7 @@ fn main() {
     // Test 2: LazyFrame filtering with lit() - this causes Int128 error
     println!("Test 2: LazyFrame filtering with lit()");
     let lazy_df = df.clone().lazy();
-    
+
     // This is where the Int128 error occurs
     let filtered_lazy = lazy_df.filter(
         col("time")
@@ -65,7 +65,7 @@ fn main() {
     // Test 3: LazyFrame filtering with explicit cast
     println!("Test 3: LazyFrame filtering with explicit cast to Int64");
     let lazy_df2 = df.clone().lazy();
-    
+
     let filtered_lazy2 = lazy_df2.filter(
         col("time")
             .gt_eq(lit(start_time).cast(DataType::Int64))
@@ -129,22 +129,24 @@ fn main() {
 
     // Test 6: Working solution - use smaller divisor to avoid Int128
     println!("Test 6: Working solution - scale down timestamps");
-    
+
     // Scale down the timestamps to avoid Int128 inference
-    let scaled_df = df.clone().lazy()
+    let scaled_df = df
+        .clone()
+        .lazy()
         .with_column((col("time") / lit(1000000)).alias("time_scaled"))
         .collect()
         .unwrap();
-    
+
     let scaled_start = start_time / 1000000;
     let scaled_end = end_time / 1000000;
-    
+
     let filtered_scaled = scaled_df.lazy().filter(
         col("time_scaled")
             .gt_eq(lit(scaled_start))
             .and(col("time_scaled").lt_eq(lit(scaled_end))),
     );
-    
+
     match filtered_scaled.collect() {
         Ok(result) => {
             println!("Success with scaled timestamps!");

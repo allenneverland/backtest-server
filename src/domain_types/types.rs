@@ -132,29 +132,28 @@ impl ColumnName {
     pub const ASK_VOLUME: &'static str = "ask_volume"; // 賣一量
 }
 
-
 // ========== 數據格式 trait ==========
 
 /// 數據格式 trait - 定義不同金融數據格式的要求
 pub trait DataFormat {
     /// 獲取此格式所需的必要列名
     fn required_columns() -> &'static [&'static str];
-    
+
     /// 驗證 DataFrame 是否符合此格式的要求
     fn validate_dataframe(df: &DataFrame) -> PolarsResult<()> {
         let required = Self::required_columns();
         let schema = df.schema();
-        
+
         for &col in required {
             if !schema.contains(col) {
                 return Err(polars::prelude::PolarsError::ColumnNotFound(
-                    format!("Required column '{}' not found", col).into()
+                    format!("Required column '{}' not found", col).into(),
                 ));
             }
         }
         Ok(())
     }
-    
+
     /// 格式名稱，用於調試和錯誤訊息
     fn format_name() -> &'static str;
 }
@@ -173,7 +172,7 @@ impl DataFormat for OhlcvFormat {
             ColumnName::VOLUME,
         ]
     }
-    
+
     fn format_name() -> &'static str {
         "OHLCV"
     }
@@ -184,13 +183,9 @@ pub struct TickFormat;
 
 impl DataFormat for TickFormat {
     fn required_columns() -> &'static [&'static str] {
-        &[
-            ColumnName::TIME,
-            ColumnName::PRICE,
-            ColumnName::VOLUME,
-        ]
+        &[ColumnName::TIME, ColumnName::PRICE, ColumnName::VOLUME]
     }
-    
+
     fn format_name() -> &'static str {
         "Tick"
     }

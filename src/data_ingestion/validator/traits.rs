@@ -16,7 +16,7 @@ pub trait Validator: Send + Sync {
     /// 批次驗證數據
     fn validate_batch(&self, data: &[Self::Data]) -> Result<(), ValidationErrors> {
         let mut errors = ValidationErrors::new();
-        
+
         for (index, record) in data.iter().enumerate() {
             if let Err(e) = self.validate_record(record) {
                 errors.add(index, e);
@@ -102,7 +102,9 @@ impl ValidationConfig {
 
     /// 獲取參數
     pub fn get_param<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
-        self.params.get(key).and_then(|v| serde_json::from_value(v.clone()).ok())
+        self.params
+            .get(key)
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
     }
 }
 
@@ -152,7 +154,7 @@ impl<T: Send + Sync> Validator for CompositeValidator<T> {
 
     fn validate_batch(&self, data: &[Self::Data]) -> Result<(), ValidationErrors> {
         let mut all_errors = ValidationErrors::new();
-        
+
         for validator in &self.validators {
             if !validator.config().enabled {
                 continue;
@@ -160,7 +162,7 @@ impl<T: Send + Sync> Validator for CompositeValidator<T> {
 
             if let Err(errors) = validator.validate_batch(data) {
                 all_errors.merge(errors);
-                
+
                 // 檢查是否超過最大錯誤數
                 if let Some(max) = self.config.max_errors {
                     if all_errors.error_count() >= max {

@@ -60,7 +60,7 @@ impl ValidationReport {
         self.total_records += 1;
         self.invalid_records += 1;
         self.error_summary.add_error(&error);
-        
+
         if let Some(ref mut errors) = self.detailed_errors {
             errors.push(DetailedError {
                 line,
@@ -80,14 +80,14 @@ impl ValidationReport {
         report.total_records = total_records;
         report.valid_records = total_records.saturating_sub(errors.error_count());
         report.invalid_records = errors.error_count();
-        
+
         for (line, error) in errors.iter() {
             report.error_summary.add_error(error);
-            
+
             if report.detailed_errors.is_none() {
                 report.detailed_errors = Some(Vec::new());
             }
-            
+
             if let Some(ref mut detailed) = report.detailed_errors {
                 detailed.push(DetailedError {
                     line: *line,
@@ -96,7 +96,7 @@ impl ValidationReport {
                 });
             }
         }
-        
+
         report.finish()
     }
 
@@ -142,7 +142,7 @@ impl ValidationReport {
             merged.valid_records += report.valid_records;
             merged.invalid_records += report.invalid_records;
             merged.error_summary.merge(report.error_summary);
-            
+
             if let Some(errors) = report.detailed_errors {
                 if merged.detailed_errors.is_none() {
                     merged.detailed_errors = Some(Vec::new());
@@ -176,7 +176,9 @@ impl ErrorSummary {
 
     /// 更新最常見錯誤
     fn update_top_errors(&mut self) {
-        let mut counts: Vec<(String, usize)> = self.error_counts.iter()
+        let mut counts: Vec<(String, usize)> = self
+            .error_counts
+            .iter()
             .map(|(k, v)| (k.clone(), *v))
             .collect();
         counts.sort_by(|a, b| b.1.cmp(&a.1));
@@ -227,21 +229,33 @@ impl ReportFormatter {
     /// 格式化為人類可讀的文字
     pub fn format_text(report: &ValidationReport) -> String {
         let mut output = String::new();
-        
+
         output.push_str(&format!("=== 驗證報告: {} ===\n", report.validator_name));
-        output.push_str(&format!("開始時間: {}\n", report.start_time.format("%Y-%m-%d %H:%M:%S")));
-        output.push_str(&format!("結束時間: {}\n", report.end_time.format("%Y-%m-%d %H:%M:%S")));
+        output.push_str(&format!(
+            "開始時間: {}\n",
+            report.start_time.format("%Y-%m-%d %H:%M:%S")
+        ));
+        output.push_str(&format!(
+            "結束時間: {}\n",
+            report.end_time.format("%Y-%m-%d %H:%M:%S")
+        ));
         output.push_str(&format!("處理時間: {:.2} 秒\n", report.processing_time()));
         output.push_str("\n");
-        
+
         output.push_str("統計摘要:\n");
         output.push_str(&format!("  總記錄數: {}\n", report.total_records));
-        output.push_str(&format!("  有效記錄: {} ({:.2}%)\n", 
-            report.valid_records, report.success_rate() * 100.0));
-        output.push_str(&format!("  無效記錄: {} ({:.2}%)\n", 
-            report.invalid_records, (1.0 - report.success_rate()) * 100.0));
+        output.push_str(&format!(
+            "  有效記錄: {} ({:.2}%)\n",
+            report.valid_records,
+            report.success_rate() * 100.0
+        ));
+        output.push_str(&format!(
+            "  無效記錄: {} ({:.2}%)\n",
+            report.invalid_records,
+            (1.0 - report.success_rate()) * 100.0
+        ));
         output.push_str("\n");
-        
+
         if !report.error_summary.top_errors.is_empty() {
             output.push_str("最常見的錯誤:\n");
             for (error_type, count) in &report.error_summary.top_errors {
@@ -249,14 +263,14 @@ impl ReportFormatter {
             }
             output.push_str("\n");
         }
-        
+
         if !report.statistics.is_empty() {
             output.push_str("其他統計:\n");
             for (key, value) in &report.statistics {
                 output.push_str(&format!("  {}: {}\n", key, value));
             }
         }
-        
+
         output
     }
 

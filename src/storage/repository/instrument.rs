@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Result};
 use chrono::Utc;
-use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
 use serde_json::Value;
-use sqlx::{PgPool, Postgres, Transaction};
 use sqlx::types::Json;
+use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::domain_types::types::AssetType;
 use crate::storage::models::instrument::*;
@@ -28,7 +28,7 @@ impl InstrumentRepository {
         // 計算屬性 JSON 值
         let attributes_json = match &instrument.attributes {
             Some(json_val) => json_val.0.clone(),
-            None => Value::Object(serde_json::Map::new())
+            None => Value::Object(serde_json::Map::new()),
         };
 
         let result = sqlx::query!(
@@ -71,51 +71,71 @@ impl InstrumentRepository {
     }
 
     /// 創建股票及其特定屬性
-    pub async fn create_stock(&self, mut instrument: InstrumentInsert, stock_attrs: StockAttributes) -> Result<Instrument> {
+    pub async fn create_stock(
+        &self,
+        mut instrument: InstrumentInsert,
+        stock_attrs: StockAttributes,
+    ) -> Result<Instrument> {
         // 將股票特定屬性轉換為JSON
         let attrs_json = serde_json::to_value(stock_attrs)?;
         instrument.attributes = Some(Json(attrs_json));
-        
+
         // 創建金融商品
         self.create(instrument).await
     }
 
     /// 創建期貨及其特定屬性
-    pub async fn create_future(&self, mut instrument: InstrumentInsert, future_attrs: FutureAttributes) -> Result<Instrument> {
+    pub async fn create_future(
+        &self,
+        mut instrument: InstrumentInsert,
+        future_attrs: FutureAttributes,
+    ) -> Result<Instrument> {
         // 將期貨特定屬性轉換為JSON
         let attrs_json = serde_json::to_value(future_attrs)?;
         instrument.attributes = Some(Json(attrs_json));
-        
+
         // 創建金融商品
         self.create(instrument).await
     }
 
     /// 創建選擇權及其特定屬性
-    pub async fn create_option(&self, mut instrument: InstrumentInsert, option_attrs: OptionAttributes) -> Result<Instrument> {
+    pub async fn create_option(
+        &self,
+        mut instrument: InstrumentInsert,
+        option_attrs: OptionAttributes,
+    ) -> Result<Instrument> {
         // 將選擇權特定屬性轉換為JSON
         let attrs_json = serde_json::to_value(option_attrs)?;
         instrument.attributes = Some(Json(attrs_json));
-        
+
         // 創建金融商品
         self.create(instrument).await
     }
 
     /// 創建外匯及其特定屬性
-    pub async fn create_forex(&self, mut instrument: InstrumentInsert, forex_attrs: ForexAttributes) -> Result<Instrument> {
+    pub async fn create_forex(
+        &self,
+        mut instrument: InstrumentInsert,
+        forex_attrs: ForexAttributes,
+    ) -> Result<Instrument> {
         // 將外匯特定屬性轉換為JSON
         let attrs_json = serde_json::to_value(forex_attrs)?;
         instrument.attributes = Some(Json(attrs_json));
-        
+
         // 創建金融商品
         self.create(instrument).await
     }
 
     /// 創建加密貨幣及其特定屬性
-    pub async fn create_crypto(&self, mut instrument: InstrumentInsert, crypto_attrs: CryptoAttributes) -> Result<Instrument> {
+    pub async fn create_crypto(
+        &self,
+        mut instrument: InstrumentInsert,
+        crypto_attrs: CryptoAttributes,
+    ) -> Result<Instrument> {
         // 將加密貨幣特定屬性轉換為JSON
         let attrs_json = serde_json::to_value(crypto_attrs)?;
         instrument.attributes = Some(Json(attrs_json));
-        
+
         // 創建金融商品
         self.create(instrument).await
     }
@@ -143,7 +163,11 @@ impl InstrumentRepository {
     }
 
     /// 根據交易代碼和交易所獲取金融商品
-    pub async fn get_by_symbol_and_exchange(&self, symbol: &str, exchange_id: i32) -> Result<Option<Instrument>> {
+    pub async fn get_by_symbol_and_exchange(
+        &self,
+        symbol: &str,
+        exchange_id: i32,
+    ) -> Result<Option<Instrument>> {
         let record = sqlx::query_as!(
             Instrument,
             r#"
@@ -167,10 +191,10 @@ impl InstrumentRepository {
 
     /// 根據交易代碼、交易所和類型獲取金融商品
     pub async fn get_by_symbol_exchange_and_type(
-        &self, 
-        symbol: &str, 
-        exchange_id: i32, 
-        instrument_type: &str
+        &self,
+        symbol: &str,
+        exchange_id: i32,
+        instrument_type: &str,
     ) -> Result<Option<Instrument>> {
         let record = sqlx::query_as!(
             Instrument,
@@ -331,7 +355,11 @@ impl InstrumentRepository {
     }
 
     /// 更新金融商品
-    pub async fn update(&self, instrument_id: i32, instrument: InstrumentInsert) -> Result<Instrument> {
+    pub async fn update(
+        &self,
+        instrument_id: i32,
+        instrument: InstrumentInsert,
+    ) -> Result<Instrument> {
         let now = Utc::now();
 
         let _result = sqlx::query!(
@@ -378,20 +406,25 @@ impl InstrumentRepository {
     }
 
     /// 更新股票特定屬性
-    pub async fn update_stock_attributes(&self, instrument_id: i32, attrs: StockAttributes) -> Result<Instrument> {
+    pub async fn update_stock_attributes(
+        &self,
+        instrument_id: i32,
+        attrs: StockAttributes,
+    ) -> Result<Instrument> {
         // 获取当前金融商品
-        let mut instrument = self.get_by_id(instrument_id)
+        let mut instrument = self
+            .get_by_id(instrument_id)
             .await?
             .ok_or_else(|| anyhow!("Instrument not found"))?;
-        
+
         // 確保是股票類型
         if instrument.instrument_type != "STOCK" {
             return Err(anyhow!("Instrument is not a stock"));
         }
-        
+
         // 設置新的屬性
         instrument.set_stock_attributes(attrs)?;
-        
+
         // 更新屬性
         let now = Utc::now();
         sqlx::query!(
@@ -406,28 +439,33 @@ impl InstrumentRepository {
         )
         .execute(&self.pool)
         .await?;
-        
+
         // 重新獲取
         self.get_by_id(instrument_id)
             .await?
             .ok_or_else(|| anyhow!("Instrument not found after update"))
     }
-    
+
     /// 更新期貨特定屬性
-    pub async fn update_future_attributes(&self, instrument_id: i32, attrs: FutureAttributes) -> Result<Instrument> {
+    pub async fn update_future_attributes(
+        &self,
+        instrument_id: i32,
+        attrs: FutureAttributes,
+    ) -> Result<Instrument> {
         // 获取当前金融商品
-        let mut instrument = self.get_by_id(instrument_id)
+        let mut instrument = self
+            .get_by_id(instrument_id)
             .await?
             .ok_or_else(|| anyhow!("Instrument not found"))?;
-        
+
         // 確保是期貨類型
         if instrument.instrument_type != "FUTURE" {
             return Err(anyhow!("Instrument is not a future"));
         }
-        
+
         // 設置新的屬性
         instrument.set_future_attributes(attrs)?;
-        
+
         // 更新屬性
         let now = Utc::now();
         sqlx::query!(
@@ -442,7 +480,7 @@ impl InstrumentRepository {
         )
         .execute(&self.pool)
         .await?;
-        
+
         // 重新獲取
         self.get_by_id(instrument_id)
             .await?
@@ -461,12 +499,15 @@ impl InstrumentRepository {
         )
         .execute(&self.pool)
         .await?;
-        
+
         Ok(result.rows_affected() > 0)
     }
 
     /// 獲取金融商品和交易所資訊
-    pub async fn get_instrument_with_exchange(&self, instrument_id: i32) -> Result<Option<InstrumentWithExchange>> {
+    pub async fn get_instrument_with_exchange(
+        &self,
+        instrument_id: i32,
+    ) -> Result<Option<InstrumentWithExchange>> {
         let record = sqlx::query_as!(
             InstrumentWithExchange,
             r#"
@@ -570,7 +611,7 @@ impl InstrumentRepository {
         let trading_start_date = domain_instrument
             .listing_date
             .map(|dt| dt.naive_utc().date());
-        
+
         let trading_end_date = domain_instrument
             .expiry_date
             .map(|dt| dt.naive_utc().date());
@@ -604,7 +645,12 @@ impl InstrumentRepository {
             "OPTIONCONTRACT" => AssetType::Option,
             "FOREX" => AssetType::Forex,
             "CRYPTO" => AssetType::Crypto,
-            _ => return Err(anyhow!("Unknown instrument type: {}", db_instrument.instrument_type)),
+            _ => {
+                return Err(anyhow!(
+                    "Unknown instrument type: {}",
+                    db_instrument.instrument_type
+                ))
+            }
         };
 
         // 從NaiveDate轉換為UTC DateTime
@@ -613,7 +659,7 @@ impl InstrumentRepository {
             use chrono::TimeZone;
             Utc.from_utc_datetime(&d.and_hms_opt(0, 0, 0).unwrap())
         });
-        
+
         let expiry_date = db_instrument.trading_end_date.map(|d| {
             use chrono::TimeZone;
             Utc.from_utc_datetime(&d.and_hms_opt(23, 59, 59).unwrap())
@@ -639,7 +685,10 @@ impl InstrumentRepository {
             listing_date,
             expiry_date,
             lot_size: db_instrument.lot_size.unwrap_or(1) as f64,
-            tick_size: db_instrument.tick_size.map(|d| d.to_f64().unwrap_or(0.01)).unwrap_or(0.01),
+            tick_size: db_instrument
+                .tick_size
+                .map(|d| d.to_f64().unwrap_or(0.01))
+                .unwrap_or(0.01),
             created_at: db_instrument.created_at,
             updated_at: db_instrument.updated_at,
             attributes,
@@ -658,21 +707,20 @@ impl DbExecutor for InstrumentRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rust_decimal_macros::dec;
-    use crate::storage::models::instrument::{InstrumentInsert, StockAttributes};
-    use crate::domain_types::types::AssetType;
     use crate::domain_types::instrument::{
-        Instrument as DomainInstrument, 
-        StockAttributes as DomainStockAttributes
+        Instrument as DomainInstrument, StockAttributes as DomainStockAttributes,
     };
-    use std::str::FromStr;
+    use crate::domain_types::types::AssetType;
+    use crate::storage::models::instrument::{InstrumentInsert, StockAttributes};
     use chrono::NaiveDate;
+    use rust_decimal_macros::dec;
     use sqlx::postgres::PgPoolOptions;
+    use std::str::FromStr;
 
     async fn setup_test_db() -> PgPool {
         let database_url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/testdb".to_string());
-        
+
         PgPoolOptions::new()
             .max_connections(5)
             .connect(&database_url)
@@ -684,14 +732,16 @@ mod tests {
     async fn test_create_and_get_instrument() -> Result<()> {
         let pool = setup_test_db().await;
         let repo = InstrumentRepository::new(pool);
-        
+
         // 創建基本的金融商品
         let instrument = InstrumentInsert {
             symbol: "AAPL".to_string(),
-            exchange_id: None,  // 不使用外鍵約束以便測試
+            exchange_id: None, // 不使用外鍵約束以便測試
             instrument_type: "STOCK".to_string(),
             name: "Apple Inc.".to_string(),
-            description: Some("Apple Inc. is an American multinational technology company.".to_string()),
+            description: Some(
+                "Apple Inc. is an American multinational technology company.".to_string(),
+            ),
             currency: "USD".to_string(),
             tick_size: Some(dec!(0.01)),
             lot_size: Some(100),
@@ -700,27 +750,27 @@ mod tests {
             trading_end_date: None,
             attributes: None,
         };
-        
+
         // 創建金融商品
         let created = repo.create(instrument).await?;
-        
+
         // 確認創建成功
         assert_eq!(created.symbol, "AAPL");
         assert_eq!(created.name, "Apple Inc.");
         assert_eq!(created.instrument_type, "STOCK");
-        
+
         // 獲取金融商品
         let fetched = repo.get_by_id(created.instrument_id).await?;
-        
+
         assert!(fetched.is_some());
         let fetched = fetched.unwrap();
-        
+
         assert_eq!(fetched.symbol, "AAPL");
         assert_eq!(fetched.name, "Apple Inc.");
-        
+
         // 清理測試數據
         repo.delete(created.instrument_id).await?;
-        
+
         Ok(())
     }
 
@@ -728,14 +778,17 @@ mod tests {
     async fn test_create_stock_with_attributes() -> Result<()> {
         let pool = setup_test_db().await;
         let repo = InstrumentRepository::new(pool);
-        
+
         // 創建基本的金融商品
         let instrument = InstrumentInsert {
             symbol: "MSFT".to_string(),
-            exchange_id: None,  // 不使用外鍵約束以便測試
+            exchange_id: None, // 不使用外鍵約束以便測試
             instrument_type: "STOCK".to_string(),
             name: "Microsoft Corporation".to_string(),
-            description: Some("Microsoft Corporation is an American multinational technology company.".to_string()),
+            description: Some(
+                "Microsoft Corporation is an American multinational technology company."
+                    .to_string(),
+            ),
             currency: "USD".to_string(),
             tick_size: Some(dec!(0.01)),
             lot_size: Some(100),
@@ -744,7 +797,7 @@ mod tests {
             trading_end_date: None,
             attributes: None,
         };
-        
+
         // 創建股票特定屬性
         let stock_attrs = StockAttributes {
             sector: Some("Technology".to_string()),
@@ -757,22 +810,22 @@ mod tests {
             dividend_yield: Some(dec!(0.9)),
             pe_ratio: Some(dec!(30.5)),
         };
-        
+
         // 創建股票及其特定屬性
         let created = repo.create_stock(instrument, stock_attrs).await?;
-        
+
         // 獲取股票
         let fetched = repo.get_by_id(created.instrument_id).await?;
         assert!(fetched.is_some());
         let stock = fetched.unwrap();
-        
+
         // 獲取股票屬性
         let stock_attrs = stock.get_stock_attributes();
         assert!(stock_attrs.is_some());
-        
+
         // 清理測試數據
         repo.delete(created.instrument_id).await?;
-        
+
         Ok(())
     }
 
@@ -803,12 +856,12 @@ mod tests {
 
         // 轉換為數據庫模型
         let db_model = InstrumentRepository::domain_to_db_model(&domain_instrument, None);
-        
+
         assert_eq!(db_model.symbol, "AAPL");
         assert_eq!(db_model.name, "Apple Inc.");
         assert_eq!(db_model.instrument_type, "STOCK");
         assert_eq!(db_model.exchange_id, None);
-        
+
         // 創建模擬的數據庫實例以測試反向轉換
         let now = Utc::now();
         let db_instance = Instrument {
@@ -817,7 +870,9 @@ mod tests {
             exchange_id: None,
             instrument_type: "STOCK".to_string(),
             name: "Apple Inc.".to_string(),
-            description: Some("Apple Inc. designs, manufactures, and markets smartphones.".to_string()),
+            description: Some(
+                "Apple Inc. designs, manufactures, and markets smartphones.".to_string(),
+            ),
             currency: "USD".to_string(),
             tick_size: Some(dec!(0.01)),
             lot_size: Some(100),
@@ -828,15 +883,16 @@ mod tests {
             created_at: now,
             updated_at: now,
         };
-        
+
         // 轉換回域模型
-        let converted_domain = InstrumentRepository::db_to_domain_model(&db_instance, Some("NASDAQ".to_string()))?;
-        
+        let converted_domain =
+            InstrumentRepository::db_to_domain_model(&db_instance, Some("NASDAQ".to_string()))?;
+
         assert_eq!(converted_domain.instrument_id, "1");
         assert_eq!(converted_domain.symbol, "AAPL");
         assert_eq!(converted_domain.exchange, "NASDAQ");
         assert_eq!(converted_domain.asset_type, AssetType::Stock);
-        
+
         Ok(())
     }
 }

@@ -2,4 +2,4 @@
 
 pub mod csv_io;
 
-pub use csv_io::{CsvReader, CsvParser, CsvError, CsvResult};
+pub use csv_io::{CsvError, CsvParser, CsvReader, CsvResult};

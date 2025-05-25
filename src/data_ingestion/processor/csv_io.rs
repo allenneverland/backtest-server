@@ -1,9 +1,9 @@
 //! CSV 檔案讀取與處理模組
 
-pub mod reader;
-pub mod parser;
 pub mod error;
+pub mod parser;
+pub mod reader;
 
-pub use reader::CsvReader;
-pub use parser::CsvParser;
 pub use error::{CsvError, CsvResult};
+pub use parser::CsvParser;
+pub use reader::CsvReader;

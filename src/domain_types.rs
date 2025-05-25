@@ -13,13 +13,20 @@ pub use instrument::Instrument;
 pub use resampler::Resampler;
 
 // 新的泛型時間序列
-pub use series::{FinancialSeries, OhlcvSeries, TickSeries, TickData};
+pub use series::{FinancialSeries, OhlcvSeries, TickData, TickSeries};
 
 // 基礎類型和trait
 pub use types::{
-    AssetType, ColumnName, Direction, DomainError, OrderType, Result,
+    AssetType,
+    ColumnName,
     // 數據格式類型
-    DataFormat, OhlcvFormat, TickFormat,
+    DataFormat,
+    Direction,
+    DomainError,
+    OhlcvFormat,
+    OrderType,
+    Result,
+    TickFormat,
 };
 
 // 頻率相關類型

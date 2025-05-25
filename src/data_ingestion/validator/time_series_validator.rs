@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 pub trait TimeSeriesRecord: Send + Sync {
     /// 獲取時間戳記
     fn timestamp(&self) -> &DateTime<Utc>;
-    
+
     /// 獲取記錄的唯一標識（用於檢測重複）
     fn unique_key(&self) -> String {
         self.timestamp().to_rfc3339()
@@ -72,14 +72,18 @@ impl<T: TimeSeriesRecord> TimeSeriesValidator<T> {
     /// 設置是否允許重複
     pub fn with_allow_duplicates(mut self, allow: bool) -> Self {
         self.allow_duplicates = allow;
-        self.config = self.config.with_param("allow_duplicates", serde_json::json!(allow));
+        self.config = self
+            .config
+            .with_param("allow_duplicates", serde_json::json!(allow));
         self
     }
 
     /// 設置是否要求嚴格遞增
     pub fn with_strict_ascending(mut self, strict: bool) -> Self {
         self.strict_ascending = strict;
-        self.config = self.config.with_param("strict_ascending", serde_json::json!(strict));
+        self.config = self
+            .config
+            .with_param("strict_ascending", serde_json::json!(strict));
         self
     }
 
@@ -91,14 +95,18 @@ impl<T: TimeSeriesRecord> TimeSeriesValidator<T> {
     ) -> Self {
         self.min_timestamp = min;
         self.max_timestamp = max;
-        
+
         if let Some(min) = min {
-            self.config = self.config.with_param("min_timestamp", serde_json::json!(min.to_rfc3339()));
+            self.config = self
+                .config
+                .with_param("min_timestamp", serde_json::json!(min.to_rfc3339()));
         }
         if let Some(max) = max {
-            self.config = self.config.with_param("max_timestamp", serde_json::json!(max.to_rfc3339()));
+            self.config = self
+                .config
+                .with_param("max_timestamp", serde_json::json!(max.to_rfc3339()));
         }
-        
+
         self
     }
 
@@ -134,24 +142,24 @@ impl<T: TimeSeriesRecord> TimeSeriesValidator<T> {
         let mut errors = ValidationErrors::new();
         let mut seen_timestamps = HashSet::new();
         let mut stats = TimeSeriesStats::default();
-        
+
         // 第一筆記錄
         let first = &records[0];
         stats.start_time = Some(*first.timestamp());
         stats.total_records = records.len();
-        
+
         // 驗證第一筆記錄的時間範圍
         if let Err(e) = self.validate_timestamp_range(first.timestamp()) {
             errors.add(0, e);
         }
-        
+
         seen_timestamps.insert(first.unique_key());
 
         // 驗證後續記錄
         for (i, record) in records.iter().enumerate().skip(1) {
             let timestamp = record.timestamp();
             let prev_timestamp = records[i - 1].timestamp();
-            
+
             // 驗證時間範圍
             if let Err(e) = self.validate_timestamp_range(timestamp) {
                 errors.add(i, e);
@@ -159,30 +167,39 @@ impl<T: TimeSeriesRecord> TimeSeriesValidator<T> {
 
             // 檢查時間順序
             if self.strict_ascending && timestamp <= prev_timestamp {
-                errors.add(i, ValidationError::OutOfOrder {
-                    previous: prev_timestamp.to_rfc3339(),
-                    current: timestamp.to_rfc3339(),
-                });
+                errors.add(
+                    i,
+                    ValidationError::OutOfOrder {
+                        previous: prev_timestamp.to_rfc3339(),
+                        current: timestamp.to_rfc3339(),
+                    },
+                );
             } else if !self.strict_ascending && timestamp < prev_timestamp {
-                errors.add(i, ValidationError::OutOfOrder {
-                    previous: prev_timestamp.to_rfc3339(),
-                    current: timestamp.to_rfc3339(),
-                });
+                errors.add(
+                    i,
+                    ValidationError::OutOfOrder {
+                        previous: prev_timestamp.to_rfc3339(),
+                        current: timestamp.to_rfc3339(),
+                    },
+                );
             }
 
             // 檢查重複
             let key = record.unique_key();
             if !self.allow_duplicates && seen_timestamps.contains(&key) {
-                errors.add(i, ValidationError::DuplicateEntry {
-                    timestamp: timestamp.to_rfc3339(),
-                });
+                errors.add(
+                    i,
+                    ValidationError::DuplicateEntry {
+                        timestamp: timestamp.to_rfc3339(),
+                    },
+                );
                 stats.duplicate_count += 1;
             }
             seen_timestamps.insert(key);
 
             // 計算時間間隔
             let gap_ms = (*timestamp - *prev_timestamp).num_milliseconds();
-            
+
             // 更新統計
             if gap_ms > 0 {
                 stats.gaps.push(gap_ms);
@@ -193,23 +210,29 @@ impl<T: TimeSeriesRecord> TimeSeriesValidator<T> {
             // 檢查最小間隔
             if let Some(min_gap) = self.min_gap_ms {
                 if gap_ms > 0 && gap_ms < min_gap {
-                    errors.add(i, ValidationError::InvalidTimestamp {
-                        timestamp: timestamp.to_rfc3339(),
-                        reason: format!(
-                            "時間間隔 {} 毫秒小於最小允許值 {} 毫秒",
-                            gap_ms, min_gap
-                        ),
-                    });
+                    errors.add(
+                        i,
+                        ValidationError::InvalidTimestamp {
+                            timestamp: timestamp.to_rfc3339(),
+                            reason: format!(
+                                "時間間隔 {} 毫秒小於最小允許值 {} 毫秒",
+                                gap_ms, min_gap
+                            ),
+                        },
+                    );
                 }
             }
 
             // 檢查最大間隔
             if let Some(max_gap) = self.max_gap_ms {
                 if gap_ms > max_gap {
-                    errors.add(i, ValidationError::LargeGap {
-                        gap_seconds: gap_ms / 1000,
-                        max_gap_seconds: max_gap / 1000,
-                    });
+                    errors.add(
+                        i,
+                        ValidationError::LargeGap {
+                            gap_seconds: gap_ms / 1000,
+                            max_gap_seconds: max_gap / 1000,
+                        },
+                    );
                     stats.gap_violations += 1;
                 }
             }
@@ -338,16 +361,25 @@ mod tests {
     fn test_valid_series() {
         let validator = TimeSeriesValidator::<TestRecord>::new();
         let now = Utc::now();
-        
+
         let records = vec![
-            TestRecord { timestamp: now, value: 100.0 },
-            TestRecord { timestamp: now + Duration::seconds(1), value: 101.0 },
-            TestRecord { timestamp: now + Duration::seconds(2), value: 102.0 },
+            TestRecord {
+                timestamp: now,
+                value: 100.0,
+            },
+            TestRecord {
+                timestamp: now + Duration::seconds(1),
+                value: 101.0,
+            },
+            TestRecord {
+                timestamp: now + Duration::seconds(2),
+                value: 102.0,
+            },
         ];
-        
+
         let result = validator.validate_series(&records);
         assert!(result.is_ok());
-        
+
         let stats = result.unwrap();
         assert_eq!(stats.total_records, 3);
         assert_eq!(stats.duplicate_count, 0);
@@ -358,44 +390,66 @@ mod tests {
     fn test_out_of_order() {
         let validator = TimeSeriesValidator::<TestRecord>::new();
         let now = Utc::now();
-        
+
         let records = vec![
-            TestRecord { timestamp: now, value: 100.0 },
-            TestRecord { timestamp: now + Duration::seconds(2), value: 102.0 },
-            TestRecord { timestamp: now + Duration::seconds(1), value: 101.0 }, // out of order
+            TestRecord {
+                timestamp: now,
+                value: 100.0,
+            },
+            TestRecord {
+                timestamp: now + Duration::seconds(2),
+                value: 102.0,
+            },
+            TestRecord {
+                timestamp: now + Duration::seconds(1),
+                value: 101.0,
+            }, // out of order
         ];
-        
+
         let result = validator.validate_series(&records);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_duplicates() {
-        let validator = TimeSeriesValidator::<TestRecord>::new()
-            .with_allow_duplicates(false);
+        let validator = TimeSeriesValidator::<TestRecord>::new().with_allow_duplicates(false);
         let now = Utc::now();
-        
+
         let records = vec![
-            TestRecord { timestamp: now, value: 100.0 },
-            TestRecord { timestamp: now, value: 101.0 }, // duplicate timestamp
-            TestRecord { timestamp: now + Duration::seconds(1), value: 102.0 },
+            TestRecord {
+                timestamp: now,
+                value: 100.0,
+            },
+            TestRecord {
+                timestamp: now,
+                value: 101.0,
+            }, // duplicate timestamp
+            TestRecord {
+                timestamp: now + Duration::seconds(1),
+                value: 102.0,
+            },
         ];
-        
+
         let result = validator.validate_series(&records);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_gap_validation() {
-        let validator = TimeSeriesValidator::<TestRecord>::new()
-            .with_max_gap(Duration::seconds(5));
+        let validator = TimeSeriesValidator::<TestRecord>::new().with_max_gap(Duration::seconds(5));
         let now = Utc::now();
-        
+
         let records = vec![
-            TestRecord { timestamp: now, value: 100.0 },
-            TestRecord { timestamp: now + Duration::seconds(10), value: 101.0 }, // gap too large
+            TestRecord {
+                timestamp: now,
+                value: 100.0,
+            },
+            TestRecord {
+                timestamp: now + Duration::seconds(10),
+                value: 101.0,
+            }, // gap too large
         ];
-        
+
         let result = validator.validate_series(&records);
         assert!(result.is_err());
     }

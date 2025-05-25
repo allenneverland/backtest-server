@@ -7,20 +7,31 @@
 //! 4. 使用 Polars 進行高效數據處理
 
 use backtest_server::domain_types::{
-    // 泛型時間序列
-    OhlcvSeries, TickData,
-    
-    // 頻率標記類型和 traits
-    Day, Minute, Tick, FrequencyMarker,
-    
-    // 數據格式類型和 traits
-    OhlcvFormat, TickFormat, DataFormat,
-    
     // 基礎類型
-    AssetType, ColumnName, Frequency, Direction, OrderType,
-    
+    AssetType,
+    ColumnName,
+    DataFormat,
+
+    // 頻率標記類型和 traits
+    Day,
+    Direction,
+    Frequency,
+    FrequencyMarker,
+
     // 功能擴展
-    IndicatorsExt, Instrument,
+    IndicatorsExt,
+    Instrument,
+    Minute,
+    // 數據格式類型和 traits
+    OhlcvFormat,
+    // 泛型時間序列
+    OhlcvSeries,
+    OrderType,
+
+    Tick,
+    TickData,
+
+    TickFormat,
 };
 
 use polars::prelude::*;
@@ -30,16 +41,16 @@ fn main() -> PolarsResult<()> {
 
     // 1. 創建範例 OHLCV 數據
     demo_ohlcv_series()?;
-    
+
     // 2. 創建範例 Tick 數據
     demo_tick_series()?;
-    
+
     // 3. 展示技術指標功能
     demo_technical_indicators()?;
-    
+
     // 4. 展示金融工具創建
     demo_instrument_creation();
-    
+
     // 5. 展示類型系統的編譯時安全性
     demo_type_safety();
 
@@ -55,7 +66,7 @@ fn demo_ohlcv_series() -> PolarsResult<()> {
     let ohlcv_data = df! [
         ColumnName::TIME => [
             1640995200000i64, // 2022-01-01 00:00:00
-            1640995260000i64, // 2022-01-01 00:01:00  
+            1640995260000i64, // 2022-01-01 00:01:00
             1640995320000i64, // 2022-01-01 00:02:00
             1640995380000i64, // 2022-01-01 00:03:00
             1640995440000i64, // 2022-01-01 00:04:00
@@ -71,14 +82,14 @@ fn demo_ohlcv_series() -> PolarsResult<()> {
     let minute_ohlcv = OhlcvSeries::<Minute>::new(ohlcv_data.clone(), "AAPL".to_string())?;
     println!("分鐘級 OHLCV 序列: {:?}", minute_ohlcv);
 
-    // 創建日級 OHLCV 序列  
+    // 創建日級 OHLCV 序列
     let daily_ohlcv = OhlcvSeries::<Day>::new(ohlcv_data.clone(), "AAPL".to_string())?;
     println!("日級 OHLCV 序列: {:?}", daily_ohlcv);
 
     // 展示數據操作
     let collected = minute_ohlcv.collect()?;
     println!("收集的數據形狀: {:?}", collected.shape());
-    
+
     // 為了獲取時間範圍，需要重新創建序列 (因為 collect 消費了原來的序列)
     let minute_ohlcv_for_time = OhlcvSeries::<Minute>::new(ohlcv_data.clone(), "AAPL".to_string())?;
     let time_range = minute_ohlcv_for_time.time_range()?;
@@ -135,12 +146,12 @@ fn demo_technical_indicators() -> PolarsResult<()> {
     ]?;
 
     let ohlcv_series = OhlcvSeries::<Minute>::new(extended_data, "GOOGL".to_string())?;
-    
+
     // 計算移動平均線
     let with_sma = ohlcv_series
         .collect()?
         .sma(ColumnName::CLOSE, 5, Some("sma_5"))?;
-    
+
     println!("添加 5 期移動平均線後的數據形狀: {:?}", with_sma.shape());
     println!("帶 SMA 的數據預覽:");
     println!("{}", with_sma.head(Some(10)));
@@ -192,7 +203,7 @@ fn demo_type_safety() {
     // 展示不同頻率標記的使用
     println!("支持的頻率類型:");
     println!("- Day: {}", Day::name());
-    println!("- Minute: {}", Minute::name());  
+    println!("- Minute: {}", Minute::name());
     println!("- Tick: {}", Tick::name());
 
     // 展示不同數據格式的使用
@@ -224,8 +235,16 @@ fn demo_type_safety() {
 
     println!("\n頻率轉換範例:");
     let freq = Frequency::Minute;
-    println!("- {:?} 轉為 Polars 持續時間字串: {}", freq, freq.to_polars_duration_string());
-    println!("- {:?} 轉為標準持續時間: {:?}", freq, freq.to_std_duration());
+    println!(
+        "- {:?} 轉為 Polars 持續時間字串: {}",
+        freq,
+        freq.to_polars_duration_string()
+    );
+    println!(
+        "- {:?} 轉為標準持續時間: {:?}",
+        freq,
+        freq.to_std_duration()
+    );
 
     println!();
 }

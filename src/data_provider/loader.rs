@@ -2,7 +2,10 @@ use crate::domain_types::*;
 use crate::redis::pool::RedisPool;
 use crate::storage::{
     models::market_data::{MinuteBar, Tick as DbTick},
-    repository::{TimeRange, market_data::{MarketDataRepository, PgMarketDataRepository}},
+    repository::{
+        market_data::{MarketDataRepository, PgMarketDataRepository},
+        TimeRange,
+    },
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -18,29 +21,29 @@ use tracing::{debug, instrument};
 pub enum DataLoaderError {
     #[error("資料庫錯誤: {0}")]
     Database(#[from] sqlx::Error),
-    
+
     #[error("Redis 錯誤: {0}")]
     Redis(#[from] redis::RedisError),
-    
+
     #[error("Polars 錯誤: {0}")]
     Polars(#[from] PolarsError),
-    
+
     #[error("儲存器錯誤: {0}")]
     Repository(#[from] anyhow::Error),
-    
+
     #[error("找不到指定的資料: instrument_id={instrument_id}, start={start}, end={end}")]
     DataNotFound {
         instrument_id: i32,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     },
-    
+
     #[error("無效的時間範圍: start={start} 必須早於 end={end}")]
     InvalidTimeRange {
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     },
-    
+
     #[error("不支援的頻率: {0}")]
     InvalidFrequency(String),
 }
@@ -57,7 +60,7 @@ pub trait DataLoader: Send + Sync {
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> Result<OhlcvSeries<F>>;
-    
+
     /// 載入 Tick 資料
     async fn load_ticks(
         &self,
@@ -83,13 +86,13 @@ impl MarketDataLoader {
             cache_ttl_seconds: 300, // 預設 5 分鐘快取
         }
     }
-    
+
     /// 設定 Redis 連接池以啟用快取功能
     pub fn with_redis(mut self, redis_pool: Arc<dyn RedisPool>) -> Self {
         self.redis_pool = Some(redis_pool);
         self
     }
-    
+
     /// 設定快取過期時間（秒）
     pub fn with_cache_ttl(mut self, ttl_seconds: u64) -> Self {
         self.cache_ttl_seconds = ttl_seconds;
@@ -110,17 +113,22 @@ impl DataLoader for MarketDataLoader {
         if start >= end {
             return Err(DataLoaderError::InvalidTimeRange { start, end });
         }
-        
-        debug!("載入 {} 級 OHLCV 資料: instrument_id={}, start={}, end={}", 
-               F::name(), instrument_id, start, end);
-        
+
+        debug!(
+            "載入 {} 級 OHLCV 資料: instrument_id={}, start={}, end={}",
+            F::name(),
+            instrument_id,
+            start,
+            end
+        );
+
         // 從資料庫載入分鐘級資料作為基礎
         let market_data_repo = PgMarketDataRepository::new((*self.database).clone());
         let time_range = TimeRange::new(start, end);
         let bars = market_data_repo
             .get_minute_bars(instrument_id, time_range, None)
             .await?;
-        
+
         if bars.is_empty() {
             return Err(DataLoaderError::DataNotFound {
                 instrument_id,
@@ -128,29 +136,33 @@ impl DataLoader for MarketDataLoader {
                 end,
             });
         }
-        
+
         // 轉換為 Polars DataFrame
         let df = minute_bars_to_dataframe(bars)?;
-        
+
         // 建立分鐘級 OHLCV
         let minute_ohlcv = OhlcvSeries::<Minute>::from_lazy(df.lazy(), instrument_id.to_string());
-        
+
         // 根據目標頻率進行重採樣
         if F::to_frequency() == Frequency::Minute {
             // 如果目標是分鐘級，直接返回（需要類型轉換）
             // 這裡需要 unsafe 或重新創建，因為 Rust 不知道 F 和 Minute 是同一類型
             let df_collected = minute_ohlcv.collect()?;
-            Ok(OhlcvSeries::<F>::from_dataframe_unchecked(df_collected, instrument_id.to_string()))
+            Ok(OhlcvSeries::<F>::from_dataframe_unchecked(
+                df_collected,
+                instrument_id.to_string(),
+            ))
         } else if F::to_frequency().is_ohlcv() {
             // 對於其他 OHLCV 頻率，進行重採樣
             Ok(minute_ohlcv.resample_to::<F>()?)
         } else {
-            Err(DataLoaderError::InvalidFrequency(
-                format!("無法載入 {} 頻率的 OHLCV 資料", F::name())
-            ))
+            Err(DataLoaderError::InvalidFrequency(format!(
+                "無法載入 {} 頻率的 OHLCV 資料",
+                F::name()
+            )))
         }
     }
-    
+
     #[instrument(skip(self))]
     async fn load_ticks(
         &self,
@@ -162,17 +174,19 @@ impl DataLoader for MarketDataLoader {
         if start >= end {
             return Err(DataLoaderError::InvalidTimeRange { start, end });
         }
-        
-        debug!("載入 Tick 資料: instrument_id={}, start={}, end={}", 
-               instrument_id, start, end);
-        
+
+        debug!(
+            "載入 Tick 資料: instrument_id={}, start={}, end={}",
+            instrument_id, start, end
+        );
+
         // 從資料庫載入資料
         let market_data_repo = PgMarketDataRepository::new((*self.database).clone());
         let time_range = TimeRange::new(start, end);
         let ticks = market_data_repo
             .get_ticks(instrument_id, time_range, None)
             .await?;
-        
+
         if ticks.is_empty() {
             return Err(DataLoaderError::DataNotFound {
                 instrument_id,
@@ -180,12 +194,15 @@ impl DataLoader for MarketDataLoader {
                 end,
             });
         }
-        
+
         // 轉換為 Polars DataFrame
         let df = ticks_to_dataframe(ticks)?;
-        
+
         // 建立 TickSeries
-        Ok(TickSeries::<Tick>::from_lazy(df.lazy(), instrument_id.to_string()))
+        Ok(TickSeries::<Tick>::from_lazy(
+            df.lazy(),
+            instrument_id.to_string(),
+        ))
     }
 }
 
@@ -198,7 +215,7 @@ fn minute_bars_to_dataframe(bars: Vec<MinuteBar>) -> Result<DataFrame> {
     let mut close_vec = Vec::with_capacity(bars.len());
     let mut volume_vec = Vec::with_capacity(bars.len());
     let mut instrument_id_vec = Vec::with_capacity(bars.len());
-    
+
     for bar in bars {
         time_vec.push(bar.time.timestamp_millis());
         open_vec.push(bar.open.to_f64().unwrap_or(0.0));
@@ -208,7 +225,7 @@ fn minute_bars_to_dataframe(bars: Vec<MinuteBar>) -> Result<DataFrame> {
         volume_vec.push(bar.volume.to_f64().unwrap_or(0.0));
         instrument_id_vec.push(bar.instrument_id);
     }
-    
+
     let df = DataFrame::new(vec![
         Series::new("time".into(), time_vec).into(),
         Series::new("open".into(), open_vec).into(),
@@ -218,7 +235,7 @@ fn minute_bars_to_dataframe(bars: Vec<MinuteBar>) -> Result<DataFrame> {
         Series::new("volume".into(), volume_vec).into(),
         Series::new("instrument_id".into(), instrument_id_vec).into(),
     ])?;
-    
+
     Ok(df)
 }
 
@@ -228,21 +245,21 @@ fn ticks_to_dataframe(ticks: Vec<DbTick>) -> Result<DataFrame> {
     let mut price_vec = Vec::with_capacity(ticks.len());
     let mut volume_vec = Vec::with_capacity(ticks.len());
     let mut instrument_id_vec = Vec::with_capacity(ticks.len());
-    
+
     for tick in ticks {
         time_vec.push(tick.time.timestamp_millis());
         price_vec.push(tick.price.to_f64().unwrap_or(0.0));
         volume_vec.push(tick.volume.to_f64().unwrap_or(0.0));
         instrument_id_vec.push(tick.instrument_id);
     }
-    
+
     let df = DataFrame::new(vec![
         Series::new("time".into(), time_vec).into(),
         Series::new("price".into(), price_vec).into(),
         Series::new("volume".into(), volume_vec).into(),
         Series::new("instrument_id".into(), instrument_id_vec).into(),
     ])?;
-    
+
     Ok(df)
 }
 
@@ -251,7 +268,7 @@ mod tests {
     use super::*;
     use rust_decimal::Decimal;
     use std::str::FromStr;
-    
+
     #[test]
     fn test_minute_bars_to_dataframe() {
         let bars = vec![
@@ -284,9 +301,9 @@ mod tests {
                 created_at: Utc::now(),
             },
         ];
-        
+
         let df = minute_bars_to_dataframe(bars).unwrap();
-        
+
         assert_eq!(df.height(), 2);
         assert_eq!(df.width(), 7);
         assert!(df.column("time").is_ok());
@@ -297,20 +314,25 @@ mod tests {
         assert!(df.column("volume").is_ok());
         assert!(df.column("instrument_id").is_ok());
     }
-    
+
     #[test]
     fn test_ohlcv_series_generic() {
         use crate::domain_types::types::ColumnName;
         use polars::prelude::*;
-        
+
         // 創建測試 DataFrame
         let _df = DataFrame::new(vec![
-            Series::new(ColumnName::TIME.into(), &[1704067200000i64, 1704067260000i64]).into(),
+            Series::new(
+                ColumnName::TIME.into(),
+                &[1704067200000i64, 1704067260000i64],
+            )
+            .into(),
             Series::new(ColumnName::OPEN.into(), &[100.0, 101.0]).into(),
             Series::new(ColumnName::HIGH.into(), &[105.0, 106.0]).into(),
             Series::new(ColumnName::LOW.into(), &[95.0, 96.0]).into(),
             Series::new(ColumnName::CLOSE.into(), &[102.0, 103.0]).into(),
             Series::new(ColumnName::VOLUME.into(), &[1000.0, 2000.0]).into(),
-        ]).unwrap();
+        ])
+        .unwrap();
     }
 }

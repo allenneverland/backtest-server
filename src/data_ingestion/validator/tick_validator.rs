@@ -58,7 +58,9 @@ impl TickValidator {
     /// 設置最大時間間隔
     pub fn with_max_gap(mut self, seconds: i64) -> Self {
         self.max_gap_seconds = seconds;
-        self.config = self.config.with_param("max_gap_seconds", serde_json::json!(seconds));
+        self.config = self
+            .config
+            .with_param("max_gap_seconds", serde_json::json!(seconds));
         self
     }
 
@@ -66,7 +68,8 @@ impl TickValidator {
     pub fn with_price_range(mut self, min: f64, max: f64) -> Self {
         self.min_price = min;
         self.max_price = max;
-        self.config = self.config
+        self.config = self
+            .config
             .with_param("min_price", serde_json::json!(min))
             .with_param("max_price", serde_json::json!(max));
         self
@@ -76,7 +79,8 @@ impl TickValidator {
     pub fn with_volume_range(mut self, min: f64, max: f64) -> Self {
         self.min_volume = min;
         self.max_volume = max;
-        self.config = self.config
+        self.config = self
+            .config
             .with_param("min_volume", serde_json::json!(min))
             .with_param("max_volume", serde_json::json!(max));
         self
@@ -85,7 +89,9 @@ impl TickValidator {
     /// 設置最大買賣價差
     pub fn with_max_spread_percent(mut self, percent: f64) -> Self {
         self.max_spread_percent = percent;
-        self.config = self.config.with_param("max_spread_percent", serde_json::json!(percent));
+        self.config = self
+            .config
+            .with_param("max_spread_percent", serde_json::json!(percent));
         self
     }
 
@@ -246,7 +252,7 @@ impl TickValidator {
         }
 
         let mut prev_timestamp = records[0].timestamp;
-        
+
         for (_i, record) in records.iter().enumerate().skip(1) {
             // 檢查時間順序
             if record.timestamp <= prev_timestamp {
@@ -288,10 +294,10 @@ impl Validator for TickValidator {
     fn validate_record(&self, record: &Self::Data) -> ValidationResult<()> {
         // 驗證價格
         self.validate_price(record)?;
-        
+
         // 驗證買賣價
         self.validate_bid_ask(record)?;
-        
+
         // 驗證成交量
         self.validate_volume(record)?;
 
@@ -364,14 +370,8 @@ mod tests {
     #[test]
     fn test_valid_tick() {
         let validator = TickValidator::new();
-        let record = create_test_tick(
-            Utc::now(),
-            100.0,
-            1000.0,
-            Some(99.5),
-            Some(100.5),
-        );
-        
+        let record = create_test_tick(Utc::now(), 100.0, 1000.0, Some(99.5), Some(100.5));
+
         assert!(validator.validate_record(&record).is_ok());
     }
 
@@ -382,10 +382,10 @@ mod tests {
             Utc::now(),
             100.0,
             1000.0,
-            Some(101.0),  // bid > ask
+            Some(101.0), // bid > ask
             Some(99.0),
         );
-        
+
         assert!(validator.validate_record(&record).is_err());
     }
 
@@ -394,12 +394,12 @@ mod tests {
         let validator = TickValidator::new();
         let record = create_test_tick(
             Utc::now(),
-            105.0,  // price outside bid-ask
+            105.0, // price outside bid-ask
             1000.0,
             Some(99.0),
             Some(101.0),
         );
-        
+
         assert!(validator.validate_record(&record).is_err());
     }
 
@@ -410,10 +410,10 @@ mod tests {
             Utc::now(),
             100.0,
             1000.0,
-            Some(95.0),   // 5.26% spread
+            Some(95.0), // 5.26% spread
             Some(100.0),
         );
-        
+
         assert!(validator.validate_record(&record).is_err());
     }
 }

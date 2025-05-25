@@ -73,7 +73,7 @@ impl IndicatorsExt for DataFrame {
         let options = RollingOptionsFixedWindow {
             window_size: window,
             min_periods: window, // 確保窗口滿了才計算
-            center: false,      // SMA 通常向後看
+            center: false,       // SMA 通常向後看
             ..Default::default()
         };
 
@@ -195,9 +195,7 @@ impl IndicatorsExt for DataFrame {
             .alias(&middle_alias);
 
         // 計算滾動標準差
-        let std_expr = col(column)
-            .rolling_std(options)
-            .alias("__std");
+        let std_expr = col(column).rolling_std(options).alias("__std");
 
         // 計算上軌和下軌
         let upper_expr = (col(&middle_alias) + (lit(std_dev) * col("__std"))).alias(&upper_alias);
@@ -369,10 +367,12 @@ impl IndicatorsExt for DataFrame {
 
         // 計算真實範圍(TR)組件
         let high_low = (col(ColumnName::HIGH) - col(ColumnName::LOW)).alias("__hl");
-        let high_close =
-            (col(ColumnName::HIGH) - col(ColumnName::CLOSE).shift(lit(1))).abs().alias("__hc");
-        let low_close =
-            (col(ColumnName::LOW) - col(ColumnName::CLOSE).shift(lit(1))).abs().alias("__lc");
+        let high_close = (col(ColumnName::HIGH) - col(ColumnName::CLOSE).shift(lit(1)))
+            .abs()
+            .alias("__hc");
+        let low_close = (col(ColumnName::LOW) - col(ColumnName::CLOSE).shift(lit(1)))
+            .abs()
+            .alias("__lc");
 
         // 計算真實範圍 - 三個元素中的最大值
         let tr_expr = max_horizontal(&[col("__hl"), col("__hc"), col("__lc")])
@@ -506,11 +506,8 @@ mod tests {
         // 使用真實的日期時間戳 (每天一個數據點，從2024-01-01開始)
         let base_timestamp = 1704067200000i64; // 2024-01-01 00:00:00 UTC in milliseconds
         let time_data: Vec<i64> = (0..10).map(|i| base_timestamp + i * 86400000).collect(); // 每天增加86400000ms (24小時)
-        
-        let time = Series::new(
-            ColumnName::TIME.into(),
-            &time_data,
-        );
+
+        let time = Series::new(ColumnName::TIME.into(), &time_data);
         let open = Series::new(
             ColumnName::OPEN.into(),
             &[
@@ -630,14 +627,15 @@ mod tests {
 
     #[test]
     fn test_with_ohlcv_frame() {
-        use crate::domain_types::{OhlcvSeries, Day};
-        
+        use crate::domain_types::{Day, OhlcvSeries};
+
         let df = create_test_dataframe();
         let ohlcv_frame = OhlcvSeries::<Day>::new(df, "AAPL".to_string()).unwrap();
 
         // 在FinancialSeries上應用技術指標
         let with_sma = ohlcv_frame
-            .collect().unwrap()
+            .collect()
+            .unwrap()
             .sma(ColumnName::CLOSE, 3, None)
             .unwrap();
         let with_indicators = with_sma

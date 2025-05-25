@@ -29,7 +29,8 @@ impl ValidatorType {
 }
 
 /// 驗證器工廠函數類型
-pub type ValidatorFactory<T> = Arc<dyn Fn(ValidationConfig) -> Box<dyn Validator<Data = T>> + Send + Sync>;
+pub type ValidatorFactory<T> =
+    Arc<dyn Fn(ValidationConfig) -> Box<dyn Validator<Data = T>> + Send + Sync>;
 
 /// 驗證器註冊表
 pub struct ValidatorRegistry<T> {
@@ -59,7 +60,9 @@ impl<T: 'static> ValidatorRegistry<T> {
         validator_type: &ValidatorType,
         config: ValidationConfig,
     ) -> Option<Box<dyn Validator<Data = T>>> {
-        self.validators.get(validator_type).map(|factory| factory(config))
+        self.validators
+            .get(validator_type)
+            .map(|factory| factory(config))
     }
 
     /// 獲取所有註冊的驗證器類型
@@ -202,7 +205,7 @@ pub fn create_ohlcv_registry() -> ValidatorRegistry<super::ohlcv_validator::Ohlc
     // 註冊 OHLCV 驗證器
     registry.register(ValidatorType::Ohlcv, |config| {
         let mut validator = OhlcvValidator::new();
-        
+
         if let Some(max_gap) = config.get_param::<i64>("max_gap_seconds") {
             validator = validator.with_max_gap(max_gap);
         }
@@ -211,21 +214,21 @@ pub fn create_ohlcv_registry() -> ValidatorRegistry<super::ohlcv_validator::Ohlc
                 validator = validator.with_price_range(min_price, max_price);
             }
         }
-        
+
         Box::new(validator)
     });
 
     // 註冊時間序列驗證器
     registry.register(ValidatorType::TimeSeries, |config| {
         let mut validator = TimeSeriesValidator::new();
-        
+
         if let Some(allow_duplicates) = config.get_param::<bool>("allow_duplicates") {
             validator = validator.with_allow_duplicates(allow_duplicates);
         }
         if let Some(strict_ascending) = config.get_param::<bool>("strict_ascending") {
             validator = validator.with_strict_ascending(strict_ascending);
         }
-        
+
         Box::new(validator)
     });
 
@@ -242,25 +245,25 @@ pub fn create_tick_registry() -> ValidatorRegistry<super::tick_validator::TickRe
     // 註冊 Tick 驗證器
     registry.register(ValidatorType::Tick, |config| {
         let mut validator = TickValidator::new();
-        
+
         if let Some(max_gap) = config.get_param::<i64>("max_gap_seconds") {
             validator = validator.with_max_gap(max_gap);
         }
         if let Some(max_spread) = config.get_param::<f64>("max_spread_percent") {
             validator = validator.with_max_spread_percent(max_spread);
         }
-        
+
         Box::new(validator)
     });
 
     // 註冊時間序列驗證器
     registry.register(ValidatorType::TimeSeries, |config| {
         let mut validator = TimeSeriesValidator::new();
-        
+
         if let Some(allow_duplicates) = config.get_param::<bool>("allow_duplicates") {
             validator = validator.with_allow_duplicates(allow_duplicates);
         }
-        
+
         Box::new(validator)
     });
 
@@ -269,18 +272,18 @@ pub fn create_tick_registry() -> ValidatorRegistry<super::tick_validator::TickRe
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::ohlcv_validator::OhlcvRecord;
+    use super::*;
     use chrono::Utc;
 
     #[test]
     fn test_registry_registration() {
         let mut registry = ValidatorRegistry::<OhlcvRecord>::new();
-        
+
         registry.register(ValidatorType::Custom("test".to_string()), |_config| {
             Box::new(super::super::ohlcv_validator::OhlcvValidator::new())
         });
-        
+
         assert!(registry.is_registered(&ValidatorType::Custom("test".to_string())));
         assert!(!registry.is_registered(&ValidatorType::Ohlcv));
     }
@@ -291,9 +294,9 @@ mod tests {
         let chain = ValidatorChain::new()
             .add_from_registry(&registry, ValidatorType::Ohlcv, ValidationConfig::default())
             .unwrap();
-        
+
         assert_eq!(chain.len(), 1);
-        
+
         let record = OhlcvRecord {
             timestamp: Utc::now(),
             open: 100.0,
@@ -302,7 +305,7 @@ mod tests {
             close: 102.0,
             volume: 1000.0,
         };
-        
+
         assert!(chain.validate(&record).is_ok());
     }
 }

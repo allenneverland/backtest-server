@@ -1,5 +1,5 @@
 //! 頻率定義模組 - 從 config/frequencies.toml 編譯時生成
-//! 
+//!
 //! 這個模組包含所有頻率相關的類型定義，在編譯時從配置檔案自動生成。
 //! 所有頻率定義都是靜態的，提供零成本抽象和完整的類型安全。
 
@@ -19,7 +19,7 @@ macro_rules! generate_frequency_enum {
                 $variant,
             )*
         }
-        
+
         impl Frequency {
             /// 轉換為表示該頻率的 std::time::Duration
             pub fn to_std_duration(&self) -> StdDuration {
@@ -47,7 +47,7 @@ macro_rules! generate_frequency_enum {
                     )*
                 }
             }
-            
+
             /// 獲取頻率的秒數
             pub fn seconds(&self) -> u64 {
                 match self {
@@ -56,7 +56,7 @@ macro_rules! generate_frequency_enum {
                     )*
                 }
             }
-            
+
             /// 獲取頻率的毫秒數
             pub fn milliseconds(&self) -> u64 {
                 match self {
@@ -65,7 +65,7 @@ macro_rules! generate_frequency_enum {
                     )*
                 }
             }
-            
+
             /// 檢查是否為 OHLCV 頻率
             pub fn is_ohlcv(&self) -> bool {
                 match self {
@@ -74,7 +74,7 @@ macro_rules! generate_frequency_enum {
                     )*
                 }
             }
-            
+
             /// 獲取顯示名稱
             pub fn display_name(&self) -> &'static str {
                 match self {
@@ -83,7 +83,7 @@ macro_rules! generate_frequency_enum {
                     )*
                 }
             }
-            
+
             /// 獲取別名後綴
             pub fn alias_suffix(&self) -> &'static str {
                 match self {
@@ -92,7 +92,7 @@ macro_rules! generate_frequency_enum {
                     )*
                 }
             }
-            
+
             /// 獲取所有頻率列表
             pub fn all() -> Vec<Frequency> {
                 vec![
@@ -101,7 +101,7 @@ macro_rules! generate_frequency_enum {
                     )*
                 ]
             }
-            
+
             /// 獲取所有 OHLCV 頻率
             pub fn all_ohlcv() -> Vec<Frequency> {
                 Self::all().into_iter().filter(|f| f.is_ohlcv()).collect()
@@ -117,11 +117,11 @@ macro_rules! generate_frequency_structs {
         pub trait FrequencyMarker: Send + Sync + 'static {
             /// 轉換為對應的頻率枚舉
             fn to_frequency() -> Frequency;
-            
+
             /// 獲取頻率名稱
             fn name() -> &'static str;
         }
-        
+
         $(
             #[doc = concat!($display, " 頻率標記")]
             #[derive(Debug, Clone, Copy)]
@@ -169,7 +169,7 @@ macro_rules! generate_ohlcv_macro {
             };
         }
     };
-    
+
     // 過濾輔助宏
     (@filter $macro:ident, $variant:ident, true) => {
         $variant => $variant,
@@ -178,7 +178,6 @@ macro_rules! generate_ohlcv_macro {
         // 跳過非 OHLCV 頻率
     };
 }
-
 
 /// 生成所有頻率宏的內部宏
 macro_rules! generate_all_frequencies_macro {
@@ -197,7 +196,6 @@ macro_rules! generate_all_frequencies_macro {
     };
 }
 
-
 // 使用主宏生成所有程式碼
 frequencies!(generate_frequency_enum);
 frequencies!(generate_frequency_structs);
@@ -211,9 +209,18 @@ mod tests {
 
     #[test]
     fn test_frequency_conversions() {
-        assert_eq!(Frequency::Minute.to_std_duration(), StdDuration::from_secs(60));
-        assert_eq!(Frequency::Hour.to_std_duration(), StdDuration::from_secs(3600));
-        assert_eq!(Frequency::Day.to_std_duration(), StdDuration::from_secs(86400));
+        assert_eq!(
+            Frequency::Minute.to_std_duration(),
+            StdDuration::from_secs(60)
+        );
+        assert_eq!(
+            Frequency::Hour.to_std_duration(),
+            StdDuration::from_secs(3600)
+        );
+        assert_eq!(
+            Frequency::Day.to_std_duration(),
+            StdDuration::from_secs(86400)
+        );
     }
 
     #[test]

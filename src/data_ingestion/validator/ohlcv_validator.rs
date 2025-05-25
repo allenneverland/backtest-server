@@ -53,7 +53,9 @@ impl OhlcvValidator {
     /// 設置最大時間間隔
     pub fn with_max_gap(mut self, seconds: i64) -> Self {
         self.max_gap_seconds = seconds;
-        self.config = self.config.with_param("max_gap_seconds", serde_json::json!(seconds));
+        self.config = self
+            .config
+            .with_param("max_gap_seconds", serde_json::json!(seconds));
         self
     }
 
@@ -61,7 +63,8 @@ impl OhlcvValidator {
     pub fn with_price_range(mut self, min: f64, max: f64) -> Self {
         self.min_price = min;
         self.max_price = max;
-        self.config = self.config
+        self.config = self
+            .config
             .with_param("min_price", serde_json::json!(min))
             .with_param("max_price", serde_json::json!(max));
         self
@@ -71,7 +74,8 @@ impl OhlcvValidator {
     pub fn with_volume_range(mut self, min: f64, max: f64) -> Self {
         self.min_volume = min;
         self.max_volume = max;
-        self.config = self.config
+        self.config = self
+            .config
             .with_param("min_volume", serde_json::json!(min))
             .with_param("max_volume", serde_json::json!(max));
         self
@@ -82,10 +86,7 @@ impl OhlcvValidator {
         // 檢查 high >= low
         if record.high < record.low {
             return Err(ValidationError::InconsistentValue {
-                description: format!(
-                    "最高價 ({}) 低於最低價 ({})",
-                    record.high, record.low
-                ),
+                description: format!("最高價 ({}) 低於最低價 ({})", record.high, record.low),
             });
         }
 
@@ -224,10 +225,10 @@ impl Validator for OhlcvValidator {
     fn validate_record(&self, record: &Self::Data) -> ValidationResult<()> {
         // 驗證價格一致性
         self.validate_price_consistency(record)?;
-        
+
         // 驗證價格範圍
         self.validate_price_range(record)?;
-        
+
         // 驗證成交量
         self.validate_volume(record)?;
 
@@ -247,7 +248,9 @@ pub fn create_ohlcv_rules() -> Vec<ValidationRule<OhlcvRecord>> {
         // 檢查價格為正數
         ValidationRule::new(
             "positive_prices",
-            |record: &OhlcvRecord| record.open > 0.0 && record.high > 0.0 && record.low > 0.0 && record.close > 0.0,
+            |record: &OhlcvRecord| {
+                record.open > 0.0 && record.high > 0.0 && record.low > 0.0 && record.close > 0.0
+            },
             "所有價格必須為正數",
         ),
         // 檢查成交量合理性（非零時價格應有變動）
@@ -292,15 +295,8 @@ mod tests {
     #[test]
     fn test_valid_record() {
         let validator = OhlcvValidator::new();
-        let record = create_test_record(
-            Utc::now(),
-            100.0,
-            105.0,
-            99.0,
-            102.0,
-            1000.0,
-        );
-        
+        let record = create_test_record(Utc::now(), 100.0, 105.0, 99.0, 102.0, 1000.0);
+
         assert!(validator.validate_record(&record).is_ok());
     }
 
@@ -310,12 +306,12 @@ mod tests {
         let record = create_test_record(
             Utc::now(),
             100.0,
-            99.0,  // high < low
+            99.0, // high < low
             105.0,
             102.0,
             1000.0,
         );
-        
+
         assert!(validator.validate_record(&record).is_err());
     }
 
@@ -328,9 +324,9 @@ mod tests {
             105.0,
             99.0,
             102.0,
-            -100.0,  // negative volume
+            -100.0, // negative volume
         );
-        
+
         assert!(validator.validate_record(&record).is_err());
     }
 
@@ -338,13 +334,27 @@ mod tests {
     fn test_time_series_validation() {
         let validator = OhlcvValidator::new().with_max_gap(300); // 5 minutes
         let now = Utc::now();
-        
+
         let records = vec![
             create_test_record(now, 100.0, 105.0, 99.0, 102.0, 1000.0),
-            create_test_record(now + Duration::minutes(1), 102.0, 103.0, 101.0, 102.5, 500.0),
-            create_test_record(now + Duration::minutes(10), 102.5, 104.0, 102.0, 103.0, 800.0), // gap too large
+            create_test_record(
+                now + Duration::minutes(1),
+                102.0,
+                103.0,
+                101.0,
+                102.5,
+                500.0,
+            ),
+            create_test_record(
+                now + Duration::minutes(10),
+                102.5,
+                104.0,
+                102.0,
+                103.0,
+                800.0,
+            ), // gap too large
         ];
-        
+
         assert!(validator.validate_time_series(&records).is_err());
     }
 }

@@ -4,6 +4,19 @@
 # 使用與開發環境相同的 Rust 版本
 image: rust:1.87-slim-bullseye
 
+# 工作流程規則 - 避免重複的 pipeline
+workflow:
+  rules:
+    # 如果是 merge request，創建 pipeline
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # 如果是推送到主分支，創建 pipeline
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    # 如果是推送到分支且沒有開啟的 MR，創建 pipeline
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    # 其他分支推送，創建 pipeline
+    - if: $CI_COMMIT_BRANCH
+
 # 定義 CI/CD 階段
 stages:
   - prepare
@@ -147,9 +160,6 @@ build:debug:
     paths:
       - target/debug/
     expire_in: 1 hour
-  only:
-    - branches
-    - merge_requests
 
 build:release:
   stage: build
@@ -177,9 +187,9 @@ build:release:
     paths:
       - target/release/
     expire_in: 1 week
-  only:
-    - main
-    - tags
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
 
 # 測試階段：運行各種測試
 test:unit:
@@ -285,9 +295,6 @@ coverage:report:
     paths:
       - target/llvm-cov/html/
     expire_in: 1 week
-  only:
-    - main
-    - merge_requests
 
 # 部署階段（示例）
 deploy:staging:
@@ -309,9 +316,9 @@ deploy:staging:
   environment:
     name: staging
     url: https://staging.backtest-server.example.com
-  only:
-    - develop
-  when: manual
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+      when: manual
 
 deploy:production:
   stage: deploy
@@ -334,9 +341,9 @@ deploy:production:
   environment:
     name: production
     url: https://backtest-server.example.com
-  only:
-    - main
-  when: manual
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
   allow_failure: false
 
 # 通知設定（可選）
@@ -359,6 +366,6 @@ security:dependency-check:
     - cargo install cargo-audit --locked || true
     - cargo audit || echo "Security audit completed with warnings"
   allow_failure: true
-  only:
-    - main
-    - merge_requests
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"

@@ -86,9 +86,12 @@ CI_REGISTRY_PASSWORD=<your-password>
 ### 1. 觸發 Pipeline
 
 Pipeline 會在以下情況自動觸發：
-- 推送到任何分支
-- 建立或更新 Merge Request
+- 建立或更新 Merge Request（優先）
+- 推送到主分支（main）
+- 推送到沒有 MR 的分支
 - 建立新標籤
+
+**注意**：為避免重複 pipeline，當分支有開啟的 MR 時，只會運行 MR pipeline。
 
 ### 2. 查看測試報告
 

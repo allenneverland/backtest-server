@@ -13,7 +13,7 @@ use backtest_server::server::builder::ServerBuilder;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // 解析命令列參數
-    let matches = Command::new("BacktestServer")
+    let matches = Command::new("backtest-server")
         .version("0.1.0")
         .author("Your Name <your.email@example.com>")
         .about("回測伺服器")

@@ -5,7 +5,7 @@ use tracing::info;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser)]
-#[command(name = "migrate", about = "BacktestServer 數據庫遷移工具")]
+#[command(name = "migrate", about = "backtest-server 數據庫遷移工具")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

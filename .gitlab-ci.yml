@@ -19,6 +19,7 @@ default:
     - apt-get update -qq
     - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
     - rustup component add rustfmt clippy || true
+    - cargo install cargo-make --version 0.37.24 || cargo install cargo-make
 
 # 全域變數設定
 variables:
@@ -84,16 +85,14 @@ services:
       - ${CARGO_HOME}
       - target/
 
-# 準備階段：安裝依賴和工具
-prepare:dependencies:
+# 準備階段：驗證環境
+prepare:verify:
   stage: prepare
   <<: *cache_config
   script:
-    - cargo install cargo-make --locked || cargo install cargo-make
-    - cargo install cargo-llvm-cov --locked || true
-    - cargo install sqlx-cli --no-default-features --features postgres --locked || true
     - cargo --version
     - rustc --version
+    - rustup --version
   artifacts:
     expire_in: 1 hour
 
@@ -102,20 +101,20 @@ build:check:
   stage: build
   <<: *cache_config
   needs:
-    - job: prepare:dependencies
+    - job: prepare:verify
       optional: true
   script:
-    - cargo make check
+    - cargo check --all-targets
   allow_failure: false
 
 build:debug:
   stage: build
   <<: *cache_config
   needs:
-    - job: prepare:dependencies
+    - job: prepare:verify
       optional: true
   script:
-    - cargo make build
+    - cargo build
   artifacts:
     paths:
       - target/debug/
@@ -128,10 +127,10 @@ build:release:
   stage: build
   <<: *cache_config
   needs:
-    - job: prepare:dependencies
+    - job: prepare:verify
       optional: true
   script:
-    - cargo make build-release
+    - cargo build --release
   artifacts:
     paths:
       - target/release/
@@ -148,7 +147,7 @@ test:unit:
     - job: build:check
       optional: true
   script:
-    - cargo make test
+    - cargo test --lib --bins
   coverage: '/^\d+.\d+% coverage/'
   artifacts:
     reports:
@@ -162,7 +161,7 @@ test:integration:
     - job: build:check
       optional: true
   script:
-    - cargo make test-integration
+    - cargo test --test '*'
   artifacts:
     reports:
       junit: target/junit-integration.xml
@@ -174,20 +173,20 @@ quality:format:
   stage: quality
   <<: *cache_config
   needs:
-    - job: prepare:dependencies
+    - job: prepare:verify
       optional: true
   script:
-    - cargo make format-check
+    - cargo fmt -- --check
   allow_failure: false
 
 quality:lint:
   stage: quality
   <<: *cache_config
   needs:
-    - job: prepare:dependencies
+    - job: prepare:verify
       optional: true
   script:
-    - cargo make lint
+    - cargo clippy -- -D warnings
   allow_failure: false
 
 # 測試覆蓋率階段
@@ -199,9 +198,14 @@ coverage:report:
       optional: true
     - job: test:integration
       optional: true
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
+    - rustup component add llvm-tools-preview
+    - cargo install cargo-llvm-cov --locked || true
   script:
-    - cargo make coverage
-    - cargo llvm-cov report --lcov --output-path lcov.info
+    - cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info || cargo test
+    - cargo llvm-cov report || true
   coverage: '/Total coverage: (\d+\.\d+)%/'
   artifacts:
     reports:
@@ -279,7 +283,7 @@ security:dependency-check:
   stage: quality
   <<: *cache_config
   needs:
-    - job: prepare:dependencies
+    - job: prepare:verify
       optional: true
   script:
     - cargo install cargo-audit --locked

@@ -38,7 +38,7 @@ done
 
 # 檢查必要的任務
 echo "檢查 CI/CD 任務..."
-REQUIRED_JOBS=("prepare:dependencies" "build:check" "test:unit" "quality:format" "quality:lint")
+REQUIRED_JOBS=("prepare:verify" "build:check" "test:unit" "quality:format" "quality:lint")
 for job in "${REQUIRED_JOBS[@]}"; do
     if grep -q "^$job:" .gitlab-ci.yml; then
         echo "✅ 找到任務：$job"

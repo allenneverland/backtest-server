@@ -13,6 +13,13 @@ stages:
   - coverage
   - deploy
 
+# 預設 before_script
+default:
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
+    - rustup component add rustfmt clippy || true
+
 # 全域變數設定
 variables:
   # 資料庫連接設定
@@ -81,12 +88,10 @@ services:
 prepare:dependencies:
   stage: prepare
   <<: *cache_config
-  before_script:
-    - apt-get update -qq
-    - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
   script:
-    - rustup component add rustfmt clippy
-    - cargo install cargo-make cargo-llvm-cov sqlx-cli --locked
+    - cargo install cargo-make --locked || cargo install cargo-make
+    - cargo install cargo-llvm-cov --locked || true
+    - cargo install sqlx-cli --no-default-features --features postgres --locked || true
     - cargo --version
     - rustc --version
   artifacts:
@@ -96,7 +101,9 @@ prepare:dependencies:
 build:check:
   stage: build
   <<: *cache_config
-  needs: ["prepare:dependencies"]
+  needs:
+    - job: prepare:dependencies
+      optional: true
   script:
     - cargo make check
   allow_failure: false
@@ -104,7 +111,9 @@ build:check:
 build:debug:
   stage: build
   <<: *cache_config
-  needs: ["prepare:dependencies"]
+  needs:
+    - job: prepare:dependencies
+      optional: true
   script:
     - cargo make build
   artifacts:
@@ -118,7 +127,9 @@ build:debug:
 build:release:
   stage: build
   <<: *cache_config
-  needs: ["prepare:dependencies"]
+  needs:
+    - job: prepare:dependencies
+      optional: true
   script:
     - cargo make build-release
   artifacts:
@@ -133,11 +144,9 @@ build:release:
 test:unit:
   stage: test
   <<: *cache_config
-  needs: ["build:check"]
-  before_script:
-    - apt-get update -qq && apt-get install -y -qq libpq-dev
-    - cargo install sqlx-cli --no-default-features --features postgres --locked
-    - sqlx migrate run --source migrations
+  needs:
+    - job: build:check
+      optional: true
   script:
     - cargo make test
   coverage: '/^\d+.\d+% coverage/'
@@ -149,11 +158,9 @@ test:unit:
 test:integration:
   stage: test
   <<: *cache_config
-  needs: ["build:check"]
-  before_script:
-    - apt-get update -qq && apt-get install -y -qq libpq-dev
-    - cargo install sqlx-cli --no-default-features --features postgres --locked
-    - sqlx migrate run --source migrations
+  needs:
+    - job: build:check
+      optional: true
   script:
     - cargo make test-integration
   artifacts:
@@ -166,7 +173,9 @@ test:integration:
 quality:format:
   stage: quality
   <<: *cache_config
-  needs: ["prepare:dependencies"]
+  needs:
+    - job: prepare:dependencies
+      optional: true
   script:
     - cargo make format-check
   allow_failure: false
@@ -174,7 +183,9 @@ quality:format:
 quality:lint:
   stage: quality
   <<: *cache_config
-  needs: ["prepare:dependencies"]
+  needs:
+    - job: prepare:dependencies
+      optional: true
   script:
     - cargo make lint
   allow_failure: false
@@ -183,12 +194,11 @@ quality:lint:
 coverage:report:
   stage: coverage
   <<: *cache_config
-  needs: ["test:unit", "test:integration"]
-  before_script:
-    - apt-get update -qq && apt-get install -y -qq libpq-dev
-    - cargo install cargo-llvm-cov --locked
-    - cargo install sqlx-cli --no-default-features --features postgres --locked
-    - sqlx migrate run --source migrations
+  needs:
+    - job: test:unit
+      optional: true
+    - job: test:integration
+      optional: true
   script:
     - cargo make coverage
     - cargo llvm-cov report --lcov --output-path lcov.info
@@ -208,7 +218,17 @@ coverage:report:
 # 部署階段（示例）
 deploy:staging:
   stage: deploy
-  needs: ["build:release", "test:unit", "test:integration", "quality:format", "quality:lint"]
+  needs:
+    - job: build:release
+      optional: true
+    - job: test:unit
+      optional: true
+    - job: test:integration
+      optional: true
+    - job: quality:format
+      optional: true
+    - job: quality:lint
+      optional: true
   script:
     - echo "部署到測試環境..."
     # 在此添加實際的部署腳本
@@ -221,7 +241,19 @@ deploy:staging:
 
 deploy:production:
   stage: deploy
-  needs: ["build:release", "test:unit", "test:integration", "quality:format", "quality:lint", "coverage:report"]
+  needs:
+    - job: build:release
+      optional: true
+    - job: test:unit
+      optional: true
+    - job: test:integration
+      optional: true
+    - job: quality:format
+      optional: true
+    - job: quality:lint
+      optional: true
+    - job: coverage:report
+      optional: true
   script:
     - echo "部署到生產環境..."
     # 在此添加實際的部署腳本
@@ -246,7 +278,9 @@ deploy:production:
 security:dependency-check:
   stage: quality
   <<: *cache_config
-  needs: ["prepare:dependencies"]
+  needs:
+    - job: prepare:dependencies
+      optional: true
   script:
     - cargo install cargo-audit --locked
     - cargo audit

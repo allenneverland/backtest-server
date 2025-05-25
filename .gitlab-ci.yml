@@ -33,6 +33,8 @@ default:
     - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
     - rustup component add rustfmt clippy || true
     - cargo install cargo-make --version 0.37.24 || cargo install cargo-make
+    # 將 cargo bin 目錄加入 PATH
+    - export PATH="${CARGO_HOME}/bin:${PATH}"
 
 # 全域變數設定
 variables:
@@ -121,6 +123,8 @@ build:check:
     - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
     - rustup component add rustfmt clippy || true
     - cargo install sqlx-cli --no-default-features --features postgres --locked || true
+    # 將 cargo bin 目錄加入 PATH
+    - export PATH="${CARGO_HOME}/bin:${PATH}"
     # 等待資料庫服務啟動
     - |
       until pg_isready -h postgres -p 5432 -U ${DB_USER}; do
@@ -145,6 +149,8 @@ build:debug:
     - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
     - rustup component add rustfmt clippy || true
     - cargo install sqlx-cli --no-default-features --features postgres --locked || true
+    # 將 cargo bin 目錄加入 PATH
+    - export PATH="${CARGO_HOME}/bin:${PATH}"
     # 等待資料庫服務啟動
     - |
       until pg_isready -h postgres -p 5432 -U ${DB_USER}; do
@@ -172,6 +178,8 @@ build:release:
     - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
     - rustup component add rustfmt clippy || true
     - cargo install sqlx-cli --no-default-features --features postgres --locked || true
+    # 將 cargo bin 目錄加入 PATH
+    - export PATH="${CARGO_HOME}/bin:${PATH}"
     # 等待資料庫服務啟動
     - |
       until pg_isready -h postgres -p 5432 -U ${DB_USER}; do
@@ -203,6 +211,8 @@ test:unit:
     - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
     - rustup component add rustfmt clippy || true
     - cargo install sqlx-cli --no-default-features --features postgres --locked || true
+    # 將 cargo bin 目錄加入 PATH
+    - export PATH="${CARGO_HOME}/bin:${PATH}"
     # 等待資料庫服務啟動
     - |
       until pg_isready -h postgres -p 5432 -U ${DB_USER}; do
@@ -231,6 +241,8 @@ test:integration:
     - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
     - rustup component add rustfmt clippy || true
     - cargo install sqlx-cli --no-default-features --features postgres --locked || true
+    # 將 cargo bin 目錄加入 PATH
+    - export PATH="${CARGO_HOME}/bin:${PATH}"
     # 等待資料庫服務啟動
     - |
       until pg_isready -h postgres -p 5432 -U ${DB_USER}; do
@@ -283,6 +295,8 @@ coverage:report:
     - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
     - rustup component add llvm-tools-preview
     - cargo install cargo-llvm-cov --locked || true
+    # 將 cargo bin 目錄加入 PATH
+    - export PATH="${CARGO_HOME}/bin:${PATH}"
   script:
     - cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info || cargo test
     - cargo llvm-cov report || true

@@ -1,0 +1,21 @@
+# cargo-audit 配置文件
+# 用於管理已知的安全漏洞和警告
+
+[advisories]
+# 忽略的安全公告
+ignore = [
+    # RSA Marvin Attack - sqlx-mysql 依賴，目前無修復版本
+    "RUSTSEC-2023-0071",
+]
+
+# 忽略的警告類型
+# unmaintained = "warn"  # 將未維護的套件設為警告而非錯誤
+
+[output]
+# 輸出格式設定
+# quiet = false
+# deny = []
+
+[packages]
+# 特定套件的設定
+# source = "https://github.com/RustSec/advisory-db"

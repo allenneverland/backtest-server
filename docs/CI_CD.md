@@ -110,6 +110,13 @@ Pipeline 使用快取來加速構建：
 - 基於 `Cargo.lock` 和 `Cargo.toml` 的變化管理快取
 - 快取包含 cargo 依賴和 target 目錄
 
+## 安全掃描說明
+
+專案使用 `cargo-audit` 進行依賴安全掃描。目前有一個已知的安全漏洞：
+- **RUSTSEC-2023-0071**: RSA Marvin Attack - 來自 sqlx-mysql 依賴，目前無修復版本
+
+此漏洞已在 `.cargo/audit.toml` 中配置為忽略，不會導致 CI/CD 失敗。
+
 ## 故障排除
 
 ### 常見問題

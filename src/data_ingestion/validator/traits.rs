@@ -37,10 +37,10 @@ pub trait Validator: Send + Sync {
 /// 可組合的驗證器
 pub trait ComposableValidator: Validator {
     /// 與其他驗證器組合
-    fn and<V: Validator<Data = Self::Data>>(self, other: V) -> CompositeValidator<Self::Data>
+    fn and<V>(self, other: V) -> CompositeValidator<Self::Data>
     where
         Self: Sized + 'static,
-        V: 'static,
+        V: Validator<Data = Self::Data> + 'static,
     {
         CompositeValidator::new(vec![Box::new(self), Box::new(other)])
     }

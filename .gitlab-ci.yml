@@ -103,6 +103,20 @@ build:check:
   needs:
     - job: prepare:verify
       optional: true
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
+    - rustup component add rustfmt clippy || true
+    - cargo install sqlx-cli --no-default-features --features postgres --locked || true
+    # 等待資料庫服務啟動
+    - |
+      until pg_isready -h postgres -p 5432 -U ${DB_USER}; do
+        echo "Waiting for database..."
+        sleep 2
+      done
+    # 執行資料庫遷移
+    - sqlx database create || true
+    - sqlx migrate run --source migrations
   script:
     - cargo check --all-targets
   allow_failure: false
@@ -113,6 +127,20 @@ build:debug:
   needs:
     - job: prepare:verify
       optional: true
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
+    - rustup component add rustfmt clippy || true
+    - cargo install sqlx-cli --no-default-features --features postgres --locked || true
+    # 等待資料庫服務啟動
+    - |
+      until pg_isready -h postgres -p 5432 -U ${DB_USER}; do
+        echo "Waiting for database..."
+        sleep 2
+      done
+    # 執行資料庫遷移
+    - sqlx database create || true
+    - sqlx migrate run --source migrations
   script:
     - cargo build
   artifacts:
@@ -129,6 +157,20 @@ build:release:
   needs:
     - job: prepare:verify
       optional: true
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
+    - rustup component add rustfmt clippy || true
+    - cargo install sqlx-cli --no-default-features --features postgres --locked || true
+    # 等待資料庫服務啟動
+    - |
+      until pg_isready -h postgres -p 5432 -U ${DB_USER}; do
+        echo "Waiting for database..."
+        sleep 2
+      done
+    # 執行資料庫遷移
+    - sqlx database create || true
+    - sqlx migrate run --source migrations
   script:
     - cargo build --release
   artifacts:
@@ -146,6 +188,20 @@ test:unit:
   needs:
     - job: build:check
       optional: true
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
+    - rustup component add rustfmt clippy || true
+    - cargo install sqlx-cli --no-default-features --features postgres --locked || true
+    # 等待資料庫服務啟動
+    - |
+      until pg_isready -h postgres -p 5432 -U ${DB_USER}; do
+        echo "Waiting for database..."
+        sleep 2
+      done
+    # 執行資料庫遷移
+    - sqlx database create || true
+    - sqlx migrate run --source migrations
   script:
     - cargo test --lib --bins
   coverage: '/^\d+.\d+% coverage/'
@@ -160,6 +216,20 @@ test:integration:
   needs:
     - job: build:check
       optional: true
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq git pkg-config libssl-dev libpq-dev postgresql-client make cmake g++
+    - rustup component add rustfmt clippy || true
+    - cargo install sqlx-cli --no-default-features --features postgres --locked || true
+    # 等待資料庫服務啟動
+    - |
+      until pg_isready -h postgres -p 5432 -U ${DB_USER}; do
+        echo "Waiting for database..."
+        sleep 2
+      done
+    # 執行資料庫遷移
+    - sqlx database create || true
+    - sqlx migrate run --source migrations
   script:
     - cargo test --test '*'
   artifacts:

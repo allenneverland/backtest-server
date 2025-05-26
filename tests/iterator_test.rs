@@ -1,24 +1,15 @@
+mod common;
+
 use backtest_server::data_provider::{
     IteratorConfig, MarketDataIterator, OhlcvIterator, TickIterator,
 };
 use backtest_server::storage::repository::market_data::PgMarketDataRepository;
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
-use sqlx::PgPool;
-
-async fn setup_test_db() -> PgPool {
-    // Use test database URL from environment or default
-    let database_url = std::env::var("TEST_DATABASE_URL")
-        .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/backtest_test".to_string());
-    
-    PgPool::connect(&database_url)
-        .await
-        .expect("Failed to connect to test database")
-}
 
 #[tokio::test]
 async fn test_ohlcv_iterator_streams_data() {
-    let pool = setup_test_db().await;
+    let pool = common::setup_test_db().await;
     let repo = PgMarketDataRepository::new(pool);
     let instrument_id = 1;
     
@@ -44,8 +35,8 @@ async fn test_ohlcv_iterator_streams_data() {
         match result {
             Ok(bar) => {
                 // Verify bar is within time range
-                assert!(bar.timestamp >= start);
-                assert!(bar.timestamp <= end);
+                assert!(bar.time >= start);
+                assert!(bar.time <= end);
                 count += 1;
                 
                 if count >= 10 {
@@ -66,7 +57,7 @@ async fn test_ohlcv_iterator_streams_data() {
 
 #[tokio::test]
 async fn test_tick_iterator_streams_data() {
-    let pool = setup_test_db().await;
+    let pool = common::setup_test_db().await;
     let repo = PgMarketDataRepository::new(pool);
     let instrument_id = 1;
     
@@ -92,8 +83,8 @@ async fn test_tick_iterator_streams_data() {
         match result {
             Ok(tick) => {
                 // Verify tick is within time range
-                assert!(tick.timestamp >= start);
-                assert!(tick.timestamp <= end);
+                assert!(tick.time >= start);
+                assert!(tick.time <= end);
                 count += 1;
                 
                 if count >= 100 {
@@ -114,7 +105,7 @@ async fn test_tick_iterator_streams_data() {
 
 #[tokio::test]
 async fn test_iterator_respects_batch_size() {
-    let pool = setup_test_db().await;
+    let pool = common::setup_test_db().await;
     let repo = PgMarketDataRepository::new(pool);
     let instrument_id = 1;
     
@@ -124,13 +115,13 @@ async fn test_iterator_respects_batch_size() {
         time_range: (Utc::now() - chrono::Duration::days(1), Utc::now()),
     };
     
-    let iterator = OhlcvIterator::new(repo, instrument_id, config);
+    let _iterator = OhlcvIterator::new(repo, instrument_id, config);
     // Test will verify batch size behavior once implemented
 }
 
 #[tokio::test]
 async fn test_iterator_handles_empty_data() {
-    let pool = setup_test_db().await;
+    let pool = common::setup_test_db().await;
     let repo = PgMarketDataRepository::new(pool);
     let instrument_id = 1;
     

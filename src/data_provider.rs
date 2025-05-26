@@ -3,6 +3,6 @@ pub mod loader;
 
 pub use iterator::{
     IteratorConfig, IteratorError, MarketDataIterator, MultiSourceIterator, OhlcvIterator,
-    TickIterator,
+    OhlcvStream, TickIterator, TickStream,
 };
 pub use loader::{DataLoader, DataLoaderError, MarketDataLoader};

@@ -182,7 +182,6 @@ jobs:
     - name: Run clippy
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
-        SQLX_OFFLINE: true
       run: cargo clippy --all-targets --all-features -- -D warnings
 
   build:
@@ -249,14 +248,12 @@ jobs:
       if: matrix.mode == 'debug'
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
-        SQLX_OFFLINE: true
       run: cargo build --all-targets
 
     - name: Build (release)
       if: matrix.mode == 'release'
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
-        SQLX_OFFLINE: true
       run: cargo build --release --all-targets
 
   integration:

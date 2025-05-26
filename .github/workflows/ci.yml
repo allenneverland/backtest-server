@@ -30,7 +30,7 @@ jobs:
   test:
     name: Test Suite
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40  # 增加到 40 分鐘
     needs: fmt  # 等待格式檢查完成
     
     services:
@@ -104,8 +104,10 @@ jobs:
     - name: Install sqlx-cli
       run: |
         if ! command -v sqlx &> /dev/null; then
-          echo "Installing sqlx-cli..."
-          cargo install sqlx-cli --no-default-features --features postgres --locked
+          echo "Installing sqlx-cli from binary release..."
+          curl -L https://github.com/launchbadge/sqlx/releases/download/v0.8.2/sqlx-cli-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          sudo mv sqlx /usr/local/bin/
+          sqlx --version
         else
           echo "sqlx-cli already installed"
         fi
@@ -121,13 +123,25 @@ jobs:
         echo "Verifying continuous aggregates..."
         psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
 
+    - name: Build test binaries
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+      run: |
+        echo "Building test binaries at $(date)"
+        cargo test --no-run --all-features
+        echo "Build completed at $(date)"
+        
     - name: Run tests
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
         REDIS_URL: redis://localhost:6379
         RABBITMQ_URL: amqp://guest:guest@localhost:5672
         RUST_LOG: debug
-      run: cargo test --all-features
+        RUST_TEST_THREADS: 2  # 限制並行測試數量
+      run: |
+        echo "Starting tests at $(date)"
+        cargo test --all-features -- --nocapture
+        echo "Tests completed at $(date)"
 
     - name: Run doc tests
       run: cargo test --doc
@@ -185,8 +199,10 @@ jobs:
     - name: Install sqlx-cli
       run: |
         if ! command -v sqlx &> /dev/null; then
-          echo "Installing sqlx-cli..."
-          cargo install sqlx-cli --no-default-features --features postgres --locked
+          echo "Installing sqlx-cli from binary release..."
+          curl -L https://github.com/launchbadge/sqlx/releases/download/v0.8.2/sqlx-cli-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          sudo mv sqlx /usr/local/bin/
+          sqlx --version
         else
           echo "sqlx-cli already installed"
         fi
@@ -261,8 +277,10 @@ jobs:
     - name: Install sqlx-cli
       run: |
         if ! command -v sqlx &> /dev/null; then
-          echo "Installing sqlx-cli..."
-          cargo install sqlx-cli --no-default-features --features postgres --locked
+          echo "Installing sqlx-cli from binary release..."
+          curl -L https://github.com/launchbadge/sqlx/releases/download/v0.8.2/sqlx-cli-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          sudo mv sqlx /usr/local/bin/
+          sqlx --version
         else
           echo "sqlx-cli already installed"
         fi
@@ -365,8 +383,10 @@ jobs:
     - name: Install sqlx-cli
       run: |
         if ! command -v sqlx &> /dev/null; then
-          echo "Installing sqlx-cli..."
-          cargo install sqlx-cli --no-default-features --features postgres --locked
+          echo "Installing sqlx-cli from binary release..."
+          curl -L https://github.com/launchbadge/sqlx/releases/download/v0.8.2/sqlx-cli-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          sudo mv sqlx /usr/local/bin/
+          sqlx --version
         else
           echo "sqlx-cli already installed"
         fi

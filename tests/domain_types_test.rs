@@ -6,31 +6,31 @@ use polars::prelude::*;
 // Helper function to create test OHLCV data
 fn create_test_ohlcv_data() -> DataFrame {
     let time = Series::new(
-        ColumnName::TIME.into(),
+        ColumnName::TIME,
         &[1000i64, 2000i64, 3000i64, 4000i64, 5000i64],
     );
     let open = Series::new(
-        ColumnName::OPEN.into(),
+        ColumnName::OPEN,
         &[100.0, 101.0, 102.0, 103.0, 104.0],
     );
     let high = Series::new(
-        ColumnName::HIGH.into(),
+        ColumnName::HIGH,
         &[105.0, 106.0, 107.0, 108.0, 109.0],
     );
-    let low = Series::new(ColumnName::LOW.into(), &[95.0, 96.0, 97.0, 98.0, 99.0]);
+    let low = Series::new(ColumnName::LOW, &[95.0, 96.0, 97.0, 98.0, 99.0]);
     let close = Series::new(
-        ColumnName::CLOSE.into(),
+        ColumnName::CLOSE,
         &[102.0, 103.0, 104.0, 105.0, 106.0],
     );
-    let volume = Series::new(ColumnName::VOLUME.into(), &[1000, 2000, 3000, 4000, 5000]);
+    let volume = Series::new(ColumnName::VOLUME, &[1000, 2000, 3000, 4000, 5000]);
 
     DataFrame::new(vec![
-        time.into(),
-        open.into(),
-        high.into(),
-        low.into(),
-        close.into(),
-        volume.into(),
+        time,
+        open,
+        high,
+        low,
+        close,
+        volume,
     ])
     .unwrap()
 }
@@ -38,16 +38,16 @@ fn create_test_ohlcv_data() -> DataFrame {
 // Helper function to create test Tick data
 fn create_test_tick_data() -> DataFrame {
     let time = Series::new(
-        ColumnName::TIME.into(),
+        ColumnName::TIME,
         &[1000i64, 1001i64, 1002i64, 1003i64, 1004i64],
     );
     let price = Series::new(
-        ColumnName::PRICE.into(),
+        ColumnName::PRICE,
         &[100.0, 101.0, 102.0, 103.0, 104.0],
     );
-    let volume = Series::new(ColumnName::VOLUME.into(), &[10, 20, 30, 40, 50]);
+    let volume = Series::new(ColumnName::VOLUME, &[10, 20, 30, 40, 50]);
 
-    DataFrame::new(vec![time.into(), price.into(), volume.into()]).unwrap()
+    DataFrame::new(vec![time, price, volume]).unwrap()
 }
 
 // TODO: Fix Polars type coercion issues causing Int128 errors during filtering operations
@@ -68,13 +68,13 @@ fn test_ohlcv_frame_creation_and_basic_operations() {
     let df = frame.lazy_frame().clone().collect().unwrap();
     assert_eq!(df.height(), 5);
 
-    let time_col = df.column(ColumnName::TIME.into()).unwrap();
+    let time_col = df.column(ColumnName::TIME).unwrap();
     assert_eq!(time_col.i64().unwrap().get(0).unwrap(), 1000);
 
-    let open_col = df.column(ColumnName::OPEN.into()).unwrap();
+    let open_col = df.column(ColumnName::OPEN).unwrap();
     assert_eq!(open_col.f64().unwrap().get(0).unwrap(), 100.0);
 
-    let close_col = df.column(ColumnName::CLOSE.into()).unwrap();
+    let close_col = df.column(ColumnName::CLOSE).unwrap();
     assert_eq!(close_col.f64().unwrap().get(4).unwrap(), 106.0);
 
     // Test time range
@@ -92,7 +92,7 @@ fn test_ohlcv_frame_creation_and_basic_operations() {
         .unwrap()
         .sort_by_time(true); // Descending
     let sorted_df = sorted.collect().unwrap();
-    let sorted_time_col = sorted_df.column(ColumnName::TIME.into()).unwrap();
+    let sorted_time_col = sorted_df.column(ColumnName::TIME).unwrap();
     assert_eq!(sorted_time_col.i64().unwrap().get(0).unwrap(), 5000);
 }
 
@@ -114,13 +114,13 @@ fn test_tick_frame_creation_and_basic_operations() {
     let collected_df = frame.lazy_frame().clone().collect().unwrap();
     assert_eq!(collected_df.height(), 5);
 
-    let time_col = collected_df.column(ColumnName::TIME.into()).unwrap();
+    let time_col = collected_df.column(ColumnName::TIME).unwrap();
     assert_eq!(time_col.i64().unwrap().get(0).unwrap(), 1000);
 
-    let price_col = collected_df.column(ColumnName::PRICE.into()).unwrap();
+    let price_col = collected_df.column(ColumnName::PRICE).unwrap();
     assert_eq!(price_col.f64().unwrap().get(0).unwrap(), 100.0);
 
-    let volume_col = collected_df.column(ColumnName::VOLUME.into()).unwrap();
+    let volume_col = collected_df.column(ColumnName::VOLUME).unwrap();
     assert_eq!(volume_col.i32().unwrap().get(4).unwrap(), 50);
 
     // Test time range
@@ -138,7 +138,7 @@ fn test_tick_frame_creation_and_basic_operations() {
         .unwrap()
         .sort_by_time(true); // Descending
     let sorted_df = sorted.collect().unwrap();
-    let sorted_time_col = sorted_df.column(ColumnName::TIME.into()).unwrap();
+    let sorted_time_col = sorted_df.column(ColumnName::TIME).unwrap();
     assert_eq!(sorted_time_col.i64().unwrap().get(0).unwrap(), 1004);
 }
 
@@ -162,22 +162,22 @@ fn test_frame_indicators_integration() {
     let df = frame.collect().unwrap();
 
     // Apply SMA
-    let sma_result = df.sma(ColumnName::CLOSE.into(), 3, None);
+    let sma_result = df.sma(ColumnName::CLOSE, 3, None);
     if let Ok(with_sma) = sma_result {
         assert!(with_sma.schema().contains("sma_close_3"));
 
         // Try to apply Bollinger Bands
-        if let Ok(with_bands) = with_sma.bollinger_bands(ColumnName::CLOSE.into(), 3, 2.0, None) {
+        if let Ok(with_bands) = with_sma.bollinger_bands(ColumnName::CLOSE, 3, 2.0, None) {
             assert!(with_bands.schema().contains("bb_close_3_2_middle"));
             assert!(with_bands.schema().contains("bb_close_3_2_upper"));
             assert!(with_bands.schema().contains("bb_close_3_2_lower"));
 
             // Continue with RSI
-            if let Ok(with_rsi) = with_bands.rsi(ColumnName::CLOSE.into(), 3, None) {
+            if let Ok(with_rsi) = with_bands.rsi(ColumnName::CLOSE, 3, None) {
                 assert!(with_rsi.schema().contains("rsi_close_3"));
 
                 // Try MACD
-                if let Ok(with_macd) = with_rsi.macd(ColumnName::CLOSE.into(), 3, 6, 2, None) {
+                if let Ok(with_macd) = with_rsi.macd(ColumnName::CLOSE, 3, 6, 2, None) {
                     assert!(with_macd.schema().contains("macd_close_3_6_2_line"));
                     assert!(with_macd.schema().contains("macd_close_3_6_2_signal"));
                     assert!(with_macd.schema().contains("macd_close_3_6_2_histogram"));

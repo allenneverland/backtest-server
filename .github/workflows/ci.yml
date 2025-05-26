@@ -144,6 +144,8 @@ jobs:
         echo "Tests completed at $(date)"
 
     - name: Run doc tests
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
       run: cargo test --doc
 
   clippy:

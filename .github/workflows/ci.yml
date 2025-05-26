@@ -1,0 +1,257 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: backtest_server_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        ports:
+          - 5672:5672
+          - 15672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+      run: |
+        cargo build --bin migrate
+        cargo run --bin migrate -- run
+
+    - name: Run tests
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        REDIS_URL: redis://localhost:6379
+        RABBITMQ_URL: amqp://guest:guest@localhost:5672
+        RUST_LOG: debug
+      run: cargo test --all-features
+
+    - name: Run doc tests
+      run: cargo test --doc
+
+  fmt:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt
+
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: backtest_server_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Run clippy
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+      run: cargo clippy --all-targets --all-features -- -D warnings
+
+  build:
+    name: Build Check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        mode: [debug, release]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ runner.os }}-cargo-${{ matrix.mode }}-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Build (debug)
+      if: matrix.mode == 'debug'
+      run: cargo build --all-targets
+
+    - name: Build (release)
+      if: matrix.mode == 'release'
+      run: cargo build --release --all-targets
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: backtest_server_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        ports:
+          - 5672:5672
+          - 15672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+      run: |
+        cargo build --bin migrate
+        cargo run --bin migrate -- run
+
+    - name: Run integration tests
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        REDIS_URL: redis://localhost:6379
+        RABBITMQ_URL: amqp://guest:guest@localhost:5672
+        RUST_LOG: debug
+      run: cargo test --test '*' -- --test-threads=1

@@ -77,14 +77,22 @@ jobs:
       env:
         PGPASSWORD: postgres
       run: |
-        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+        echo "Creating TimescaleDB extension..."
+        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        echo "TimescaleDB extension created successfully"
+        psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
     - name: Run database migrations
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        RUST_LOG: sqlx=debug,backtest_server=debug
       run: |
+        echo "Building migration binary..."
         cargo build --bin migrate
-        cargo run --bin migrate -- run
+        echo "Running migrations..."
+        cargo run --bin migrate -- run || (echo "Migration failed!" && exit 1)
+        echo "Verifying continuous aggregates..."
+        PGPASSWORD=postgres psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
 
     - name: Run tests
       env:
@@ -154,14 +162,22 @@ jobs:
       env:
         PGPASSWORD: postgres
       run: |
-        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+        echo "Creating TimescaleDB extension..."
+        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        echo "TimescaleDB extension created successfully"
+        psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
     - name: Run database migrations
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        RUST_LOG: sqlx=debug,backtest_server=debug
       run: |
+        echo "Building migration binary..."
         cargo build --bin migrate
-        cargo run --bin migrate -- run
+        echo "Running migrations..."
+        cargo run --bin migrate -- run || (echo "Migration failed!" && exit 1)
+        echo "Verifying continuous aggregates..."
+        PGPASSWORD=postgres psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
 
     - name: Run clippy
       env:
@@ -211,14 +227,22 @@ jobs:
       env:
         PGPASSWORD: postgres
       run: |
-        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+        echo "Creating TimescaleDB extension..."
+        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        echo "TimescaleDB extension created successfully"
+        psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
     - name: Run database migrations
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        RUST_LOG: sqlx=debug,backtest_server=debug
       run: |
+        echo "Building migration binary..."
         cargo build --bin migrate
-        cargo run --bin migrate -- run
+        echo "Running migrations..."
+        cargo run --bin migrate -- run || (echo "Migration failed!" && exit 1)
+        echo "Verifying continuous aggregates..."
+        PGPASSWORD=postgres psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
 
     - name: Build (debug)
       if: matrix.mode == 'debug'
@@ -296,14 +320,22 @@ jobs:
       env:
         PGPASSWORD: postgres
       run: |
-        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+        echo "Creating TimescaleDB extension..."
+        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        echo "TimescaleDB extension created successfully"
+        psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
     - name: Run database migrations
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        RUST_LOG: sqlx=debug,backtest_server=debug
       run: |
+        echo "Building migration binary..."
         cargo build --bin migrate
-        cargo run --bin migrate -- run
+        echo "Running migrations..."
+        cargo run --bin migrate -- run || (echo "Migration failed!" && exit 1)
+        echo "Verifying continuous aggregates..."
+        PGPASSWORD=postgres psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
 
     - name: Run integration tests
       env:

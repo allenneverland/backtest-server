@@ -1,0 +1,98 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature] "
+labels: ["enhancement", "feature-request"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a new feature! Please provide detailed information about your request.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Pre-submission checklist
+      description: Please confirm the following before submitting
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: I have read the contributing guidelines
+          required: true
+
+  - type: textarea
+    id: problem_description
+    attributes:
+      label: 🎯 Problem Statement
+      description: What problem does this feature solve? What's the current pain point?
+      placeholder: Describe the problem or need this feature addresses...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: 💡 Proposed Solution
+      description: Describe your ideal solution to this problem
+      placeholder: Describe how you would like this feature to work...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives_considered
+    attributes:
+      label: 🤔 Alternatives Considered
+      description: Have you considered any alternative solutions or workarounds?
+      placeholder: Describe any alternative solutions you've considered...
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 🚨 Priority
+      description: How important is this feature to you?
+      options:
+        - P0 - Critical (Blocking workflow)
+        - P1 - High (Important for productivity)
+        - P2 - Medium (Nice to have)
+        - P3 - Low (Minor enhancement)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: user_type
+    attributes:
+      label: 👤 User Type
+      description: What type of user would benefit from this feature?
+      options:
+        - End User
+        - Developer
+        - Administrator
+        - All Users
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_cases
+    attributes:
+      label: 📖 Use Cases
+      description: Provide specific examples of how this feature would be used
+      placeholder: |
+        1. As a [user type], I want to [action] so that [benefit]
+        2. When [situation], I need to [action] to achieve [outcome]
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: ✅ Acceptance Criteria
+      description: What would make this feature complete? (Optional)
+      placeholder: |
+        - [ ] Feature should do X
+        - [ ] Feature should handle Y scenario
+        - [ ] Feature should integrate with Z
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: 📋 Additional Context
+      description: Add any other context, mockups, or examples
+      placeholder: Any additional information, screenshots, or examples...

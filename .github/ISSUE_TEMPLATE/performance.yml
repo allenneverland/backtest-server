@@ -1,0 +1,98 @@
+name: ⚡ Performance Issue
+description: Report performance problems or slowdowns
+title: "[Performance] "
+labels: ["performance", "bug"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us identify and fix performance issues! Please provide detailed information about the slowdown.
+
+  - type: textarea
+    id: performance_issue
+    attributes:
+      label: 🐌 Performance Issue Description
+      description: Describe the performance problem you're experiencing
+      placeholder: What specific performance issue are you encountering?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue_type
+    attributes:
+      label: 📊 Issue Type
+      description: What type of performance issue is this?
+      options:
+        - Slow loading time
+        - High memory usage
+        - High CPU usage
+        - Slow response time
+        - UI lag/freezing
+        - Database slowdown
+        - Network issues
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: 🔄 Steps to Reproduce
+      description: How can we reproduce this performance issue?
+      placeholder: |
+        1. Go to '...'
+        2. Perform action '...'
+        3. Notice slowdown when '...'
+    validations:
+      required: true
+
+  - type: input
+    id: expected_time
+    attributes:
+      label: ⏱️ Expected Performance
+      description: How fast should this operation be?
+      placeholder: e.g., "Should load in under 2 seconds"
+
+  - type: input
+    id: actual_time
+    attributes:
+      label: ⏰ Actual Performance
+      description: How long does it actually take?
+      placeholder: e.g., "Takes 15 seconds to load"
+
+  - type: textarea
+    id: system_info
+    attributes:
+      label: 💻 System Information
+      description: Provide details about your system
+      placeholder: |
+        - OS: 
+        - Browser: 
+        - Device: 
+        - RAM: 
+        - CPU: 
+        - Network: 
+    validations:
+      required: true
+
+  - type: textarea
+    id: profiling_data
+    attributes:
+      label: 📈 Profiling Data
+      description: Any performance profiling data (optional)
+      placeholder: Screenshots of DevTools, profiler output, etc.
+      render: shell
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 🚨 Priority
+      description: How critical is this performance issue?
+      options:
+        - P0 - Critical (System unusable)
+        - P1 - High (Significant impact on users)
+        - P2 - Medium (Noticeable but manageable)
+        - P3 - Low (Minor performance concern)
+    validations:
+      required: true

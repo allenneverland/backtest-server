@@ -1,0 +1,72 @@
+name: 📚 Documentation Issue
+description: Report problems with documentation or suggest improvements
+title: "[Docs] "
+labels: ["documentation"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us improve our documentation! Please provide details about the issue or suggestion.
+
+  - type: dropdown
+    id: doc_type
+    attributes:
+      label: 📋 Documentation Type
+      description: What type of documentation issue is this?
+      options:
+        - Missing Documentation
+        - Incorrect Information
+        - Unclear Instructions
+        - Typo/Grammar
+        - Outdated Content
+        - Improvement Suggestion
+    validations:
+      required: true
+
+  - type: input
+    id: doc_location
+    attributes:
+      label: 📍 Documentation Location
+      description: Where is the documentation issue located?
+      placeholder: e.g., README.md, docs/getting-started.md, Wiki page, etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue_description
+    attributes:
+      label: 🔍 Issue Description
+      description: Describe the documentation issue in detail
+      placeholder: What's wrong with the current documentation?
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested_improvement
+    attributes:
+      label: 💡 Suggested Improvement
+      description: How should this be improved or corrected?
+      placeholder: What would you like to see instead?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 🚨 Priority
+      description: How critical is this documentation issue?
+      options:
+        - P0 - Critical (Blocks users from getting started)
+        - P1 - High (Causes significant confusion)
+        - P2 - Medium (Minor confusion or improvement)
+        - P3 - Low (Cosmetic or nice-to-have)
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: 📋 Additional Context
+      description: Any other relevant information
+      placeholder: Screenshots, examples, or other helpful information...

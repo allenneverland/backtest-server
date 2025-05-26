@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discussions
+    url: https://github.com/allenneverland/backtest-server/discussions
+    about: For general questions and community discussions
+  - name: 🔒 Security Issues
+    url: https://github.com/allenneverland/backtest-server/security/advisories/new
+    about: For reporting security vulnerabilities privately
+  - name: 📧 Support
+    url: mailto:neverland3680@gmail.com
+    about: For direct support inquiries

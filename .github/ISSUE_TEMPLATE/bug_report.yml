@@ -1,0 +1,113 @@
+name: 🐛 Bug Report
+description: Report a software defect or unexpected behavior
+title: "[Bug] "
+labels: ["bug", "triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this issue! Please provide detailed information to help us quickly locate and fix the problem.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Pre-submission checklist
+      description: Please confirm the following before submitting
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: I have read the contributing guidelines
+          required: true
+
+  - type: textarea
+    id: bug_description
+    attributes:
+      label: 🔍 Bug Description
+      description: Clear and concise description of the bug
+      placeholder: Describe the bug you encountered...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: 🔄 Steps to Reproduce
+      description: How can we reproduce this issue?
+      placeholder: |
+        1. Go to '...'
+        2. Click on '....'
+        3. Scroll down to '....'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: ✅ Expected Behavior
+      description: What did you expect to happen?
+      placeholder: Describe what you expected to happen...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual_behavior
+    attributes:
+      label: ❌ Actual Behavior
+      description: What actually happened?
+      placeholder: Describe what actually happened...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 🚨 Priority
+      description: How critical is this issue?
+      options:
+        - P0 - Critical (Blocks release)
+        - P1 - High (Important feature broken)
+        - P2 - Medium (Standard priority)
+        - P3 - Low (Minor issue)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: browser
+    attributes:
+      label: 🌐 Browser (if applicable)
+      options:
+        - Chrome
+        - Firefox
+        - Safari
+        - Edge
+        - Other
+        - Not applicable
+
+  - type: input
+    id: browser_version
+    attributes:
+      label: Browser Version
+      placeholder: e.g., Chrome 119.0.6045.105
+
+  - type: input
+    id: operating_system
+    attributes:
+      label: 💻 Operating System
+      placeholder: e.g., Windows 11, macOS 14.1, Ubuntu 22.04
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: 📋 Additional Context
+      description: Add any other context, screenshots, or relevant information
+      placeholder: Any additional information that might help...
+
+  - type: textarea
+    id: error_logs
+    attributes:
+      label: 📄 Error Logs
+      description: If applicable, add error logs or console output
+      placeholder: Paste error logs here...
+      render: shell

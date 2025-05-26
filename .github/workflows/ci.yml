@@ -106,15 +106,9 @@ jobs:
         psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
     - name: Install sqlx-cli
-      run: |
-        if ! command -v sqlx &> /dev/null; then
-          echo "Installing sqlx-cli from binary release..."
-          curl -L https://github.com/launchbadge/sqlx/releases/download/v0.8.2/sqlx-cli-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          sudo mv sqlx /usr/local/bin/
-          sqlx --version
-        else
-          echo "sqlx-cli already installed"
-        fi
+      uses: taiki-e/install-action@v2
+      with:
+        tool: sqlx-cli@0.8.2
         
     - name: Run database migrations
       env:
@@ -201,15 +195,9 @@ jobs:
         psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
     - name: Install sqlx-cli
-      run: |
-        if ! command -v sqlx &> /dev/null; then
-          echo "Installing sqlx-cli from binary release..."
-          curl -L https://github.com/launchbadge/sqlx/releases/download/v0.8.2/sqlx-cli-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          sudo mv sqlx /usr/local/bin/
-          sqlx --version
-        else
-          echo "sqlx-cli already installed"
-        fi
+      uses: taiki-e/install-action@v2
+      with:
+        tool: sqlx-cli@0.8.2
         
     - name: Run database migrations
       env:
@@ -280,15 +268,9 @@ jobs:
         psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
     - name: Install sqlx-cli
-      run: |
-        if ! command -v sqlx &> /dev/null; then
-          echo "Installing sqlx-cli from binary release..."
-          curl -L https://github.com/launchbadge/sqlx/releases/download/v0.8.2/sqlx-cli-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          sudo mv sqlx /usr/local/bin/
-          sqlx --version
-        else
-          echo "sqlx-cli already installed"
-        fi
+      uses: taiki-e/install-action@v2
+      with:
+        tool: sqlx-cli@0.8.2
         
     - name: Run database migrations
       env:
@@ -386,15 +368,9 @@ jobs:
         psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
     - name: Install sqlx-cli
-      run: |
-        if ! command -v sqlx &> /dev/null; then
-          echo "Installing sqlx-cli from binary release..."
-          curl -L https://github.com/launchbadge/sqlx/releases/download/v0.8.2/sqlx-cli-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          sudo mv sqlx /usr/local/bin/
-          sqlx --version
-        else
-          echo "sqlx-cli already installed"
-        fi
+      uses: taiki-e/install-action@v2
+      with:
+        tool: sqlx-cli@0.8.2
         
     - name: Run database migrations
       env:

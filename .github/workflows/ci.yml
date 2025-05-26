@@ -11,10 +11,27 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  # 先運行格式檢查，這個最快
+  fmt:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt
+
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+
   test:
     name: Test Suite
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: fmt  # 等待格式檢查完成
     
     services:
       postgres:
@@ -67,7 +84,8 @@ jobs:
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
       with:
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        shared-key: "ci-cache"
+        workspaces: ". -> target"
 
     - name: Install system dependencies
       run: |
@@ -83,11 +101,14 @@ jobs:
         echo "TimescaleDB extension created successfully"
         psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
-    - name: Install sqlx-cli from cache
-      uses: baptiste0928/cargo-install@v2
-      with:
-        crate: sqlx-cli
-        args: --no-default-features --features postgres
+    - name: Install sqlx-cli
+      run: |
+        if ! command -v sqlx &> /dev/null; then
+          echo "Installing sqlx-cli..."
+          cargo install sqlx-cli --no-default-features --features postgres --locked
+        else
+          echo "sqlx-cli already installed"
+        fi
         
     - name: Run database migrations
       env:
@@ -111,25 +132,11 @@ jobs:
     - name: Run doc tests
       run: cargo test --doc
 
-  fmt:
-    name: Format Check
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        components: rustfmt
-
-    - name: Check formatting
-      run: cargo fmt --all -- --check
-
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: fmt  # 等待格式檢查完成
     
     services:
       postgres:
@@ -158,7 +165,8 @@ jobs:
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
       with:
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        shared-key: "ci-cache"
+        workspaces: ". -> target"
 
     - name: Install system dependencies
       run: |
@@ -174,11 +182,14 @@ jobs:
         echo "TimescaleDB extension created successfully"
         psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
-    - name: Install sqlx-cli from cache
-      uses: baptiste0928/cargo-install@v2
-      with:
-        crate: sqlx-cli
-        args: --no-default-features --features postgres
+    - name: Install sqlx-cli
+      run: |
+        if ! command -v sqlx &> /dev/null; then
+          echo "Installing sqlx-cli..."
+          cargo install sqlx-cli --no-default-features --features postgres --locked
+        else
+          echo "sqlx-cli already installed"
+        fi
         
     - name: Run database migrations
       env:
@@ -200,6 +211,7 @@ jobs:
     name: Build Check
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    needs: [fmt, clippy]  # 等待格式和 clippy 檢查完成
     strategy:
       matrix:
         mode: [debug, release]
@@ -229,7 +241,8 @@ jobs:
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
       with:
-        key: ${{ runner.os }}-cargo-${{ matrix.mode }}-${{ hashFiles('**/Cargo.lock') }}
+        shared-key: "ci-cache-${{ matrix.mode }}"
+        workspaces: ". -> target"
 
     - name: Install system dependencies
       run: |
@@ -245,11 +258,14 @@ jobs:
         echo "TimescaleDB extension created successfully"
         psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
-    - name: Install sqlx-cli from cache
-      uses: baptiste0928/cargo-install@v2
-      with:
-        crate: sqlx-cli
-        args: --no-default-features --features postgres
+    - name: Install sqlx-cli
+      run: |
+        if ! command -v sqlx &> /dev/null; then
+          echo "Installing sqlx-cli..."
+          cargo install sqlx-cli --no-default-features --features postgres --locked
+        else
+          echo "sqlx-cli already installed"
+        fi
         
     - name: Run database migrations
       env:
@@ -278,6 +294,7 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: test  # 等待單元測試完成
     
     services:
       postgres:
@@ -328,7 +345,8 @@ jobs:
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
       with:
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        shared-key: "ci-cache"
+        workspaces: ". -> target"
 
     - name: Install system dependencies
       run: |
@@ -344,11 +362,14 @@ jobs:
         echo "TimescaleDB extension created successfully"
         psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
-    - name: Install sqlx-cli from cache
-      uses: baptiste0928/cargo-install@v2
-      with:
-        crate: sqlx-cli
-        args: --no-default-features --features postgres
+    - name: Install sqlx-cli
+      run: |
+        if ! command -v sqlx &> /dev/null; then
+          echo "Installing sqlx-cli..."
+          cargo install sqlx-cli --no-default-features --features postgres --locked
+        else
+          echo "sqlx-cli already installed"
+        fi
         
     - name: Run database migrations
       env:

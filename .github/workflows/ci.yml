@@ -14,6 +14,7 @@ jobs:
   test:
     name: Test Suite
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     
     services:
       postgres:
@@ -82,17 +83,22 @@ jobs:
         echo "TimescaleDB extension created successfully"
         psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
+    - name: Install sqlx-cli from cache
+      uses: baptiste0928/cargo-install@v2
+      with:
+        crate: sqlx-cli
+        args: --no-default-features --features postgres
+        
     - name: Run database migrations
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
         RUST_LOG: sqlx=debug,backtest_server=debug
+        PGPASSWORD: postgres
       run: |
-        echo "Installing sqlx-cli..."
-        cargo install sqlx-cli --no-default-features --features postgres
         echo "Running migrations..."
         sqlx migrate run || (echo "Migration failed!" && exit 1)
         echo "Verifying continuous aggregates..."
-        PGPASSWORD=postgres psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
+        psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
 
     - name: Run tests
       env:
@@ -123,6 +129,7 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     
     services:
       postgres:
@@ -167,17 +174,22 @@ jobs:
         echo "TimescaleDB extension created successfully"
         psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
+    - name: Install sqlx-cli from cache
+      uses: baptiste0928/cargo-install@v2
+      with:
+        crate: sqlx-cli
+        args: --no-default-features --features postgres
+        
     - name: Run database migrations
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
         RUST_LOG: sqlx=debug,backtest_server=debug
+        PGPASSWORD: postgres
       run: |
-        echo "Installing sqlx-cli..."
-        cargo install sqlx-cli --no-default-features --features postgres
         echo "Running migrations..."
         sqlx migrate run || (echo "Migration failed!" && exit 1)
         echo "Verifying continuous aggregates..."
-        PGPASSWORD=postgres psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
+        psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
 
     - name: Run clippy
       env:
@@ -187,6 +199,7 @@ jobs:
   build:
     name: Build Check
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       matrix:
         mode: [debug, release]
@@ -232,17 +245,22 @@ jobs:
         echo "TimescaleDB extension created successfully"
         psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
+    - name: Install sqlx-cli from cache
+      uses: baptiste0928/cargo-install@v2
+      with:
+        crate: sqlx-cli
+        args: --no-default-features --features postgres
+        
     - name: Run database migrations
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
         RUST_LOG: sqlx=debug,backtest_server=debug
+        PGPASSWORD: postgres
       run: |
-        echo "Installing sqlx-cli..."
-        cargo install sqlx-cli --no-default-features --features postgres
         echo "Running migrations..."
         sqlx migrate run || (echo "Migration failed!" && exit 1)
         echo "Verifying continuous aggregates..."
-        PGPASSWORD=postgres psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
+        psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
 
     - name: Build (debug)
       if: matrix.mode == 'debug'
@@ -259,6 +277,7 @@ jobs:
   integration:
     name: Integration Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     
     services:
       postgres:
@@ -325,17 +344,22 @@ jobs:
         echo "TimescaleDB extension created successfully"
         psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
+    - name: Install sqlx-cli from cache
+      uses: baptiste0928/cargo-install@v2
+      with:
+        crate: sqlx-cli
+        args: --no-default-features --features postgres
+        
     - name: Run database migrations
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
         RUST_LOG: sqlx=debug,backtest_server=debug
+        PGPASSWORD: postgres
       run: |
-        echo "Installing sqlx-cli..."
-        cargo install sqlx-cli --no-default-features --features postgres
         echo "Running migrations..."
         sqlx migrate run || (echo "Migration failed!" && exit 1)
         echo "Verifying continuous aggregates..."
-        PGPASSWORD=postgres psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
+        psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
 
     - name: Run integration tests
       env:

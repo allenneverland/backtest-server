@@ -2,6 +2,8 @@ Commend use Traditional Chinese with correct UTF-8 format
 
 Always use sequentialthinking mcp
 
+github repo: https://github.com/allenneverland/backtest-server
+
 ## Common Development Commands
 
 ### Building and Running

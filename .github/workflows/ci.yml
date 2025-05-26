@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -229,6 +233,7 @@ jobs:
     timeout-minutes: 30
     needs: [fmt, clippy]  # 等待格式和 clippy 檢查完成
     strategy:
+      max-parallel: 1  # 限制並行構建避免 API 速率限制
       matrix:
         mode: [debug, release]
     

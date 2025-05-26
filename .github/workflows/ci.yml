@@ -33,8 +33,8 @@ jobs:
     - name: Check formatting
       run: cargo fmt --all -- --check
 
-  test:
-    name: Test Suite
+  test-and-clippy:
+    name: Test Suite and Clippy
     runs-on: ubuntu-latest
     timeout-minutes: 40  # 增加到 40 分鐘
     needs: fmt  # 等待格式檢查完成
@@ -147,171 +147,18 @@ jobs:
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
       run: cargo test --doc
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: fmt  # 等待格式檢查完成
     
-    services:
-      postgres:
-        image: timescale/timescaledb:latest-pg16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: backtest_server_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4.1.1
-
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        components: clippy
-
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        shared-key: "ci-cache"
-        workspaces: ". -> target"
-
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev postgresql-client
-
-    - name: Setup database
-      env:
-        PGPASSWORD: postgres
-      run: |
-        echo "Creating TimescaleDB extension..."
-        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
-        echo "TimescaleDB extension created successfully"
-        psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
-    
-    - name: Install sqlx-cli
-      uses: taiki-e/install-action@v2
-      with:
-        tool: sqlx-cli@0.8.2
-        
-    - name: Run database migrations
-      env:
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
-        RUST_LOG: sqlx=debug,backtest_server=debug
-        PGPASSWORD: postgres
-      run: |
-        echo "Running migrations..."
-        sqlx migrate run || (echo "Migration failed!" && exit 1)
-        echo "Verifying continuous aggregates..."
-        psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
-
     - name: Run clippy
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
       run: cargo clippy --all-targets --all-features -- -D warnings
 
-  build:
-    name: Build Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 45  # 增加超時時間
-    needs: [fmt, clippy]  # 等待格式和 clippy 檢查完成
-    strategy:
-      max-parallel: 1  # 限制並行構建避免 API 速率限制
-      matrix:
-        mode: [debug, release]
-    
-    services:
-      postgres:
-        image: timescale/timescaledb:latest-pg16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: backtest_server_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4.1.1
-
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        shared-key: "ci-cache-${{ matrix.mode }}"
-        workspaces: ". -> target"
-
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev postgresql-client
-
-    - name: Setup database
-      env:
-        PGPASSWORD: postgres
-      run: |
-        echo "Creating TimescaleDB extension..."
-        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
-        echo "TimescaleDB extension created successfully"
-        psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
-    
-    - name: Install sqlx-cli
-      uses: taiki-e/install-action@v2
-      with:
-        tool: sqlx-cli@0.8.2
-        
-    - name: Run database migrations
-      env:
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
-        RUST_LOG: sqlx=debug,backtest_server=debug
-        PGPASSWORD: postgres
-      run: |
-        echo "Running migrations..."
-        sqlx migrate run || (echo "Migration failed!" && exit 1)
-        echo "Verifying continuous aggregates..."
-        psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
-
-    - name: Build (debug)
-      if: matrix.mode == 'debug'
-      env:
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
-        CARGO_BUILD_JOBS: 2  # 限制並行編譯任務
-      run: |
-        echo "Building without test dependencies..."
-        cargo build --bins --examples
-        echo "Build completed at $(date)"
-
-    - name: Build (release)
-      if: matrix.mode == 'release'
-      env:
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
-        CARGO_BUILD_JOBS: 2  # 限制並行編譯任務
-      run: |
-        echo "Building without test dependencies..."
-        cargo build --release --bins --examples
-        echo "Build completed at $(date)"
 
   integration:
     name: Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: test  # 等待單元測試完成
+    needs: test-and-clippy  # 等待測試和 clippy 完成
     
     services:
       postgres:

@@ -71,8 +71,14 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev
+        sudo apt-get install -y pkg-config libssl-dev postgresql-client
 
+    - name: Setup database
+      env:
+        PGPASSWORD: postgres
+      run: |
+        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+    
     - name: Run database migrations
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
@@ -142,7 +148,20 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev
+        sudo apt-get install -y pkg-config libssl-dev postgresql-client
+
+    - name: Setup database
+      env:
+        PGPASSWORD: postgres
+      run: |
+        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+    
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+      run: |
+        cargo build --bin migrate
+        cargo run --bin migrate -- run
 
     - name: Run clippy
       env:
@@ -239,8 +258,14 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev
+        sudo apt-get install -y pkg-config libssl-dev postgresql-client
 
+    - name: Setup database
+      env:
+        PGPASSWORD: postgres
+      run: |
+        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+    
     - name: Run database migrations
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test

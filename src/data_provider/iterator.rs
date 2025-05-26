@@ -68,7 +68,7 @@ pub struct OhlcvIterator<R: MarketDataRepository> {
     config: IteratorConfig,
 }
 
-impl<R: MarketDataRepository> OhlcvIterator<R> {
+impl<R: MarketDataRepository + 'static> OhlcvIterator<R> {
     /// Create a new OHLCV iterator
     pub fn new(
         repository: R,
@@ -166,8 +166,10 @@ pub struct OhlcvStream<R> {
 impl<R> Stream for OhlcvStream<R> {
     type Item = Result<MinuteBar, IteratorError>;
     
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        Pin::new(&mut self.get_mut().receiver).poll_recv(cx)
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // SAFETY: we're not moving out of the pinned field
+        let receiver = unsafe { &mut self.as_mut().get_unchecked_mut().receiver };
+        Pin::new(receiver).poll_recv(cx)
     }
 }
 
@@ -194,7 +196,7 @@ pub struct TickIterator<R: MarketDataRepository> {
     config: IteratorConfig,
 }
 
-impl<R: MarketDataRepository> TickIterator<R> {
+impl<R: MarketDataRepository + 'static> TickIterator<R> {
     /// Create a new tick iterator
     pub fn new(
         repository: R,
@@ -292,8 +294,10 @@ pub struct TickStream<R> {
 impl<R> Stream for TickStream<R> {
     type Item = Result<Tick, IteratorError>;
     
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        Pin::new(&mut self.get_mut().receiver).poll_recv(cx)
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // SAFETY: we're not moving out of the pinned field
+        let receiver = unsafe { &mut self.as_mut().get_unchecked_mut().receiver };
+        Pin::new(receiver).poll_recv(cx)
     }
 }
 

@@ -47,7 +47,7 @@ regex = "1.11.1"
 rand = "0.9.1"
 
 # 資料庫
-sqlx = { version = "0.8.6", features = ["runtime-tokio-native-tls", "postgres", "chrono", "json", "uuid", "rust_decimal"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio-native-tls", "postgres", "chrono", "json", "uuid", "rust_decimal", "offline"] }
 deadpool-redis = "0.21.0"
 deadpool = "0.12.2"
 redis = { version = "0.31.0", features = ["tokio-comp", "connection-manager"] }

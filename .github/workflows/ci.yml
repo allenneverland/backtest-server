@@ -87,10 +87,10 @@ jobs:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
         RUST_LOG: sqlx=debug,backtest_server=debug
       run: |
-        echo "Building migration binary..."
-        cargo build --bin migrate
+        echo "Installing sqlx-cli..."
+        cargo install sqlx-cli --no-default-features --features postgres
         echo "Running migrations..."
-        cargo run --bin migrate -- run || (echo "Migration failed!" && exit 1)
+        sqlx migrate run || (echo "Migration failed!" && exit 1)
         echo "Verifying continuous aggregates..."
         PGPASSWORD=postgres psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
 
@@ -172,16 +172,17 @@ jobs:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
         RUST_LOG: sqlx=debug,backtest_server=debug
       run: |
-        echo "Building migration binary..."
-        cargo build --bin migrate
+        echo "Installing sqlx-cli..."
+        cargo install sqlx-cli --no-default-features --features postgres
         echo "Running migrations..."
-        cargo run --bin migrate -- run || (echo "Migration failed!" && exit 1)
+        sqlx migrate run || (echo "Migration failed!" && exit 1)
         echo "Verifying continuous aggregates..."
         PGPASSWORD=postgres psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
 
     - name: Run clippy
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        SQLX_OFFLINE: true
       run: cargo clippy --all-targets --all-features -- -D warnings
 
   build:
@@ -237,10 +238,10 @@ jobs:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
         RUST_LOG: sqlx=debug,backtest_server=debug
       run: |
-        echo "Building migration binary..."
-        cargo build --bin migrate
+        echo "Installing sqlx-cli..."
+        cargo install sqlx-cli --no-default-features --features postgres
         echo "Running migrations..."
-        cargo run --bin migrate -- run || (echo "Migration failed!" && exit 1)
+        sqlx migrate run || (echo "Migration failed!" && exit 1)
         echo "Verifying continuous aggregates..."
         PGPASSWORD=postgres psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
 
@@ -248,12 +249,14 @@ jobs:
       if: matrix.mode == 'debug'
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        SQLX_OFFLINE: true
       run: cargo build --all-targets
 
     - name: Build (release)
       if: matrix.mode == 'release'
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        SQLX_OFFLINE: true
       run: cargo build --release --all-targets
 
   integration:
@@ -330,10 +333,10 @@ jobs:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
         RUST_LOG: sqlx=debug,backtest_server=debug
       run: |
-        echo "Building migration binary..."
-        cargo build --bin migrate
+        echo "Installing sqlx-cli..."
+        cargo install sqlx-cli --no-default-features --features postgres
         echo "Running migrations..."
-        cargo run --bin migrate -- run || (echo "Migration failed!" && exit 1)
+        sqlx migrate run || (echo "Migration failed!" && exit 1)
         echo "Verifying continuous aggregates..."
         PGPASSWORD=postgres psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
 

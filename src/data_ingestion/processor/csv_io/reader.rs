@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn test_csv_reader_config_default() {
         let config = CsvReaderConfig::default();
-        assert_eq!(config.has_header, true);
+        assert!(config.has_header);
         assert_eq!(config.separator, b',');
         assert_eq!(config.skip_rows, 0);
         assert_eq!(config.n_rows, None);
@@ -179,7 +179,7 @@ mod tests {
             .with_datetime_format("%Y-%m-%d".to_string());
 
         assert_eq!(reader.config.separator, b';');
-        assert_eq!(reader.config.has_header, false);
+        assert!(!reader.config.has_header);
         assert_eq!(reader.config.skip_rows, 2);
         assert_eq!(reader.config.n_rows, Some(100));
         assert_eq!(reader.config.datetime_format, Some("%Y-%m-%d".to_string()));

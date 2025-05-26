@@ -602,7 +602,7 @@ mod tests {
         for i in 3..rsi_vals.len() {
             let val = rsi_vals.get(i).unwrap();
             if !val.is_nan() {
-                assert!(val >= 0.0 && val <= 100.0);
+                assert!((0.0..=100.0).contains(&val));
             }
         }
     }

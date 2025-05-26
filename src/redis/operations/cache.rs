@@ -326,7 +326,7 @@ mod tests {
             Self {
                 id,
                 name: name.to_string(),
-                data: vec![1.0, 2.5, 3.14],
+                data: vec![1.0, 2.5, 3.5],
             }
         }
     }

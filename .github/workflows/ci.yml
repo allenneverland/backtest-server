@@ -1,0 +1,251 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0  # 在 CI 中禁用增量編譯
+  RUSTFLAGS: "-C debuginfo=0"  # 減少調試信息大小
+
+jobs:
+  # 先運行格式檢查，這個最快
+  fmt:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4.1.1
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt
+
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+
+  test-and-clippy:
+    name: Test Suite and Clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 40  # 增加到 40 分鐘
+    needs: fmt  # 等待格式檢查完成
+    
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: backtest_server_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        ports:
+          - 5672:5672
+          - 15672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4.1.1
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: "ci-cache"
+        workspaces: ". -> target"
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev postgresql-client
+
+    - name: Setup database
+      env:
+        PGPASSWORD: postgres
+      run: |
+        echo "Creating TimescaleDB extension..."
+        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        echo "TimescaleDB extension created successfully"
+        psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
+    
+    - name: Install sqlx-cli
+      uses: taiki-e/install-action@v2
+      with:
+        tool: sqlx-cli@0.8.2
+        
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        RUST_LOG: sqlx=debug,backtest_server=debug
+        PGPASSWORD: postgres
+      run: |
+        echo "Running migrations..."
+        sqlx migrate run || (echo "Migration failed!" && exit 1)
+        echo "Verifying continuous aggregates..."
+        psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
+
+    - name: Build test binaries
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+      run: |
+        echo "Building test binaries at $(date)"
+        cargo test --no-run --all-features
+        echo "Build completed at $(date)"
+        
+    - name: Run tests
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        REDIS_URL: redis://localhost:6379
+        RABBITMQ_URL: amqp://guest:guest@localhost:5672
+        RUST_LOG: debug
+        RUST_TEST_THREADS: 2  # 限制並行測試數量
+      run: |
+        echo "Starting tests at $(date)"
+        cargo test --all-features -- --nocapture
+        echo "Tests completed at $(date)"
+
+    - name: Run doc tests
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+      run: cargo test --doc
+    
+    - name: Run clippy
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+      run: cargo clippy --all-targets --all-features -- -D warnings
+
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: test-and-clippy  # 等待測試和 clippy 完成
+    
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: backtest_server_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        ports:
+          - 5672:5672
+          - 15672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4.1.1
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: "ci-cache"
+        workspaces: ". -> target"
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev postgresql-client
+
+    - name: Setup database
+      env:
+        PGPASSWORD: postgres
+      run: |
+        echo "Creating TimescaleDB extension..."
+        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        echo "TimescaleDB extension created successfully"
+        psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
+    
+    - name: Install sqlx-cli
+      uses: taiki-e/install-action@v2
+      with:
+        tool: sqlx-cli@0.8.2
+        
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        RUST_LOG: sqlx=debug,backtest_server=debug
+        PGPASSWORD: postgres
+      run: |
+        echo "Running migrations..."
+        sqlx migrate run || (echo "Migration failed!" && exit 1)
+        echo "Verifying continuous aggregates..."
+        psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
+
+    - name: Run integration tests
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        REDIS_URL: redis://localhost:6379
+        RABBITMQ_URL: amqp://guest:guest@localhost:5672
+        RUST_LOG: debug
+      run: cargo test --test '*' -- --test-threads=1

@@ -17,8 +17,8 @@ mod tests {
     #[test]
     fn test_module_exports() {
         // 確保重要的導出可用
-        fn _ensure_redis_client_works(client: &super::client::Client) {
-            let _ = client.test_connection();
+        async fn _ensure_redis_client_works(client: &super::client::Client) {
+            let _ = client.test_connection().await;
         }
 
         async fn _ensure_redis_pool_works<P: RedisPool>(pool: &P) {

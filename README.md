@@ -111,6 +111,12 @@ cargo make build-release
 
 - [TimescaleDB結構設計](docs/timescaledb-schema.md) - 時序數據庫結構設計文檔
 
+### CI/CD 流程
+
+專案使用 GitHub Actions 進行持續整合，確保程式碼品質和測試覆蓋：
+
+- [CI/CD 文檔](docs/CI_CD.md) - 持續整合流程設定與使用指南
+
 ### Docker 與遷移
 
 數據庫容器在首次啟動時會自動執行所有遷移。這是通過自定義 Dockerfile.db 實現的：

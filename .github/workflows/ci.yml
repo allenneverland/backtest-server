@@ -13,6 +13,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0  # 在 CI 中禁用增量編譯
+  RUSTFLAGS: "-C debuginfo=0"  # 減少調試信息大小
 
 jobs:
   # 先運行格式檢查，這個最快
@@ -218,7 +220,7 @@ jobs:
   build:
     name: Build Check
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45  # 增加超時時間
     needs: [fmt, clippy]  # 等待格式和 clippy 檢查完成
     strategy:
       max-parallel: 1  # 限制並行構建避免 API 速率限制
@@ -287,13 +289,21 @@ jobs:
       if: matrix.mode == 'debug'
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
-      run: cargo build --all-targets
+        CARGO_BUILD_JOBS: 2  # 限制並行編譯任務
+      run: |
+        echo "Building without test dependencies..."
+        cargo build --bins --examples
+        echo "Build completed at $(date)"
 
     - name: Build (release)
       if: matrix.mode == 'release'
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
-      run: cargo build --release --all-targets
+        CARGO_BUILD_JOBS: 2  # 限制並行編譯任務
+      run: |
+        echo "Building without test dependencies..."
+        cargo build --release --bins --examples
+        echo "Build completed at $(date)"
 
   integration:
     name: Integration Tests

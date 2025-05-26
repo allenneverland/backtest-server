@@ -175,6 +175,21 @@ jobs:
       matrix:
         mode: [debug, release]
     
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: backtest_server_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -190,14 +205,31 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev
+        sudo apt-get install -y pkg-config libssl-dev postgresql-client
+
+    - name: Setup database
+      env:
+        PGPASSWORD: postgres
+      run: |
+        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+    
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+      run: |
+        cargo build --bin migrate
+        cargo run --bin migrate -- run
 
     - name: Build (debug)
       if: matrix.mode == 'debug'
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
       run: cargo build --all-targets
 
     - name: Build (release)
       if: matrix.mode == 'release'
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
       run: cargo build --release --all-targets
 
   integration:

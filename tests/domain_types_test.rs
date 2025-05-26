@@ -9,30 +9,13 @@ fn create_test_ohlcv_data() -> DataFrame {
         ColumnName::TIME,
         &[1000i64, 2000i64, 3000i64, 4000i64, 5000i64],
     );
-    let open = Series::new(
-        ColumnName::OPEN,
-        &[100.0, 101.0, 102.0, 103.0, 104.0],
-    );
-    let high = Series::new(
-        ColumnName::HIGH,
-        &[105.0, 106.0, 107.0, 108.0, 109.0],
-    );
+    let open = Series::new(ColumnName::OPEN, &[100.0, 101.0, 102.0, 103.0, 104.0]);
+    let high = Series::new(ColumnName::HIGH, &[105.0, 106.0, 107.0, 108.0, 109.0]);
     let low = Series::new(ColumnName::LOW, &[95.0, 96.0, 97.0, 98.0, 99.0]);
-    let close = Series::new(
-        ColumnName::CLOSE,
-        &[102.0, 103.0, 104.0, 105.0, 106.0],
-    );
+    let close = Series::new(ColumnName::CLOSE, &[102.0, 103.0, 104.0, 105.0, 106.0]);
     let volume = Series::new(ColumnName::VOLUME, &[1000, 2000, 3000, 4000, 5000]);
 
-    DataFrame::new(vec![
-        time,
-        open,
-        high,
-        low,
-        close,
-        volume,
-    ])
-    .unwrap()
+    DataFrame::new(vec![time, open, high, low, close, volume]).unwrap()
 }
 
 // Helper function to create test Tick data
@@ -41,10 +24,7 @@ fn create_test_tick_data() -> DataFrame {
         ColumnName::TIME,
         &[1000i64, 1001i64, 1002i64, 1003i64, 1004i64],
     );
-    let price = Series::new(
-        ColumnName::PRICE,
-        &[100.0, 101.0, 102.0, 103.0, 104.0],
-    );
+    let price = Series::new(ColumnName::PRICE, &[100.0, 101.0, 102.0, 103.0, 104.0]);
     let volume = Series::new(ColumnName::VOLUME, &[10, 20, 30, 40, 50]);
 
     DataFrame::new(vec![time, price, volume]).unwrap()

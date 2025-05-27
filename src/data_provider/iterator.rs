@@ -6,6 +6,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures::Stream;
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use thiserror::Error;
@@ -59,6 +61,24 @@ pub trait MarketDataIterator: Send + Sync {
 
     /// Create a stream of market data
     fn stream(&self) -> Pin<Box<dyn Stream<Item = Result<Self::Item, IteratorError>> + Send>>;
+}
+
+/// Trait for data types that have a timestamp
+pub trait Timestamped {
+    /// Get the timestamp of this data point
+    fn timestamp(&self) -> DateTime<Utc>;
+}
+
+impl Timestamped for MinuteBar {
+    fn timestamp(&self) -> DateTime<Utc> {
+        self.time
+    }
+}
+
+impl Timestamped for Tick {
+    fn timestamp(&self) -> DateTime<Utc> {
+        self.time
+    }
 }
 
 /// Iterator for OHLCV data
@@ -311,30 +331,172 @@ impl<R: MarketDataRepository + 'static> MarketDataIterator for TickIterator<R> {
     }
 }
 
-/// Synchronizes multiple data iterators
-pub struct MultiSourceIterator<T: Send + 'static> {
-    _iterators: Vec<Box<dyn MarketDataIterator<Item = T>>>,
+/// Helper struct for priority queue ordering
+struct TimestampedItem<T> {
+    item: T,
+    source_index: usize,
+    timestamp: DateTime<Utc>,
 }
 
-impl<T: Send + 'static> MultiSourceIterator<T> {
+impl<T> PartialEq for TimestampedItem<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.timestamp == other.timestamp && self.source_index == other.source_index
+    }
+}
+
+impl<T> Eq for TimestampedItem<T> {}
+
+impl<T> PartialOrd for TimestampedItem<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T> Ord for TimestampedItem<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Reverse order for min-heap behavior
+        other
+            .timestamp
+            .cmp(&self.timestamp)
+            .then_with(|| other.source_index.cmp(&self.source_index))
+    }
+}
+
+/// Synchronizes multiple data iterators by timestamp
+pub struct MultiSourceIterator<T: Send + Timestamped + Unpin + 'static> {
+    iterators: Vec<Box<dyn MarketDataIterator<Item = T>>>,
+}
+
+impl<T: Send + Timestamped + Unpin + 'static> MultiSourceIterator<T> {
     /// Create a new multi-source iterator
     pub fn new(iterators: Vec<Box<dyn MarketDataIterator<Item = T>>>) -> Self {
-        Self {
-            _iterators: iterators,
-        }
+        Self { iterators }
     }
 }
 
 #[async_trait]
-impl<T: Send + 'static> MarketDataIterator for MultiSourceIterator<T> {
+impl<T: Send + Timestamped + Unpin + 'static> MarketDataIterator for MultiSourceIterator<T> {
     type Item = Vec<T>;
 
     fn stream(&self) -> Pin<Box<dyn Stream<Item = Result<Self::Item, IteratorError>> + Send>> {
-        // For now, return a simple implementation
-        // In a real implementation, this would synchronize by timestamp from all iterators
-        Box::pin(futures::stream::once(async {
-            Err(IteratorError::NoData) // Placeholder implementation
-        }))
+        let streams: Vec<_> = self.iterators.iter().map(|iter| iter.stream()).collect();
+
+        Box::pin(MultiSourceStream::new(streams))
+    }
+}
+
+/// Type alias for a boxed stream of results
+type BoxedResultStream<T> = Pin<Box<dyn Stream<Item = Result<T, IteratorError>> + Send>>;
+
+/// Stream implementation for synchronized multi-source data
+pub struct MultiSourceStream<T: Send + Timestamped> {
+    /// Active streams with their indices
+    streams: Vec<(usize, BoxedResultStream<T>)>,
+    /// Priority queue of items ready to be yielded
+    heap: BinaryHeap<TimestampedItem<T>>,
+    /// Buffer for collecting items with the same timestamp
+    buffer: Vec<T>,
+    /// Current timestamp being processed
+    current_timestamp: Option<DateTime<Utc>>,
+}
+
+impl<T: Send + Timestamped> MultiSourceStream<T> {
+    fn new(streams: Vec<BoxedResultStream<T>>) -> Self {
+        let indexed_streams = streams.into_iter().enumerate().collect();
+
+        Self {
+            streams: indexed_streams,
+            heap: BinaryHeap::new(),
+            buffer: Vec::new(),
+            current_timestamp: None,
+        }
+    }
+}
+
+impl<T: Send + Timestamped + Unpin> Stream for MultiSourceStream<T> {
+    type Item = Result<Vec<T>, IteratorError>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // First, try to fill the heap from all streams
+        let mut i = 0;
+        while i < self.streams.len() {
+            let (source_index, stream) = &mut self.streams[i];
+            let source_idx = *source_index;
+
+            match stream.as_mut().poll_next(cx) {
+                Poll::Ready(Some(Ok(item))) => {
+                    let timestamp = item.timestamp();
+                    self.heap.push(TimestampedItem {
+                        item,
+                        source_index: source_idx,
+                        timestamp,
+                    });
+                }
+                Poll::Ready(Some(Err(e))) => {
+                    return Poll::Ready(Some(Err(e)));
+                }
+                Poll::Ready(None) => {
+                    // Stream exhausted, remove it
+                    let _ = self.streams.swap_remove(i);
+                    continue;
+                }
+                Poll::Pending => {
+                    // Stream not ready, continue
+                }
+            }
+            i += 1;
+        }
+
+        // Process items with the same timestamp
+        if let Some(current_ts) = self.current_timestamp {
+            // Continue collecting items with the same timestamp
+            while let Some(peeked) = self.heap.peek() {
+                if peeked.timestamp == current_ts {
+                    if let Some(timestamped_item) = self.heap.pop() {
+                        self.buffer.push(timestamped_item.item);
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            // If we have items in the buffer, return them
+            if !self.buffer.is_empty() {
+                let items = std::mem::take(&mut self.buffer);
+                self.current_timestamp = None;
+                return Poll::Ready(Some(Ok(items)));
+            }
+        }
+
+        // Try to get the next timestamp group
+        if let Some(timestamped_item) = self.heap.pop() {
+            self.current_timestamp = Some(timestamped_item.timestamp);
+            self.buffer.push(timestamped_item.item);
+
+            // Collect all items with the same timestamp
+            while let Some(peeked) = self.heap.peek() {
+                if peeked.timestamp == self.current_timestamp.unwrap() {
+                    if let Some(item) = self.heap.pop() {
+                        self.buffer.push(item.item);
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            let items = std::mem::take(&mut self.buffer);
+            self.current_timestamp = None;
+            return Poll::Ready(Some(Ok(items)));
+        }
+
+        // Check if all streams are exhausted
+        if self.streams.is_empty() && self.heap.is_empty() {
+            Poll::Ready(None)
+        } else {
+            // We need more data
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
     }
 }
 
@@ -372,7 +534,160 @@ mod tests {
 
     #[tokio::test]
     async fn test_multi_source_iterator() {
-        // Test for multi-source synchronization
-        // Will be implemented with actual iterator logic
+        use futures::{stream, StreamExt};
+        use rust_decimal::Decimal;
+
+        // Create mock data with different timestamps
+        let data1 = vec![
+            MinuteBar {
+                instrument_id: 1,
+                time: DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
+                    .unwrap()
+                    .with_timezone(&Utc),
+                open: Decimal::from(100),
+                high: Decimal::from(101),
+                low: Decimal::from(99),
+                close: Decimal::from(100),
+                volume: Decimal::from(1000),
+                amount: None,
+                open_interest: None,
+                created_at: Utc::now(),
+            },
+            MinuteBar {
+                instrument_id: 1,
+                time: DateTime::parse_from_rfc3339("2024-01-01T00:02:00Z")
+                    .unwrap()
+                    .with_timezone(&Utc),
+                open: Decimal::from(100),
+                high: Decimal::from(102),
+                low: Decimal::from(100),
+                close: Decimal::from(101),
+                volume: Decimal::from(1500),
+                amount: None,
+                open_interest: None,
+                created_at: Utc::now(),
+            },
+        ];
+
+        let data2 = vec![
+            MinuteBar {
+                instrument_id: 2,
+                time: DateTime::parse_from_rfc3339("2024-01-01T00:01:00Z")
+                    .unwrap()
+                    .with_timezone(&Utc),
+                open: Decimal::from(200),
+                high: Decimal::from(201),
+                low: Decimal::from(199),
+                close: Decimal::from(200),
+                volume: Decimal::from(2000),
+                amount: None,
+                open_interest: None,
+                created_at: Utc::now(),
+            },
+            MinuteBar {
+                instrument_id: 2,
+                time: DateTime::parse_from_rfc3339("2024-01-01T00:02:00Z")
+                    .unwrap()
+                    .with_timezone(&Utc),
+                open: Decimal::from(200),
+                high: Decimal::from(202),
+                low: Decimal::from(200),
+                close: Decimal::from(201),
+                volume: Decimal::from(2500),
+                amount: None,
+                open_interest: None,
+                created_at: Utc::now(),
+            },
+        ];
+
+        // Create mock iterators
+        struct MockIterator {
+            data: Vec<MinuteBar>,
+        }
+
+        #[async_trait]
+        impl MarketDataIterator for MockIterator {
+            type Item = MinuteBar;
+
+            fn stream(
+                &self,
+            ) -> Pin<Box<dyn Stream<Item = Result<Self::Item, IteratorError>> + Send>> {
+                let data = self.data.clone();
+                Box::pin(stream::iter(data.into_iter().map(Ok)))
+            }
+        }
+
+        let iter1 = Box::new(MockIterator { data: data1 });
+        let iter2 = Box::new(MockIterator { data: data2 });
+
+        let multi_iterator = MultiSourceIterator::new(vec![iter1, iter2]);
+        let mut stream = multi_iterator.stream();
+
+        // First batch should have the earliest timestamp (00:00:00)
+        let batch1 = stream.next().await.unwrap().unwrap();
+        assert_eq!(batch1.len(), 1);
+        assert_eq!(
+            batch1[0].time,
+            DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
+                .unwrap()
+                .with_timezone(&Utc)
+        );
+
+        // Second batch should have the next timestamp (00:01:00)
+        let batch2 = stream.next().await.unwrap().unwrap();
+        assert_eq!(batch2.len(), 1);
+        assert_eq!(
+            batch2[0].time,
+            DateTime::parse_from_rfc3339("2024-01-01T00:01:00Z")
+                .unwrap()
+                .with_timezone(&Utc)
+        );
+
+        // Third batch should have items from both sources with same timestamp (00:02:00)
+        let batch3 = stream.next().await.unwrap().unwrap();
+        assert_eq!(batch3.len(), 2);
+        assert!(batch3.iter().all(|bar| bar.time
+            == DateTime::parse_from_rfc3339("2024-01-01T00:02:00Z")
+                .unwrap()
+                .with_timezone(&Utc)));
+
+        // No more data
+        assert!(stream.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_multi_source_iterator_empty_streams() {
+        use futures::StreamExt;
+
+        // Test with empty streams
+        let multi_iterator: MultiSourceIterator<MinuteBar> = MultiSourceIterator::new(vec![]);
+        let mut stream = multi_iterator.stream();
+        assert!(stream.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_multi_source_iterator_with_errors() {
+        use futures::{stream, StreamExt};
+
+        struct ErrorIterator;
+
+        #[async_trait]
+        impl MarketDataIterator for ErrorIterator {
+            type Item = MinuteBar;
+
+            fn stream(
+                &self,
+            ) -> Pin<Box<dyn Stream<Item = Result<Self::Item, IteratorError>> + Send>> {
+                Box::pin(stream::once(async { Err(IteratorError::NoData) }))
+            }
+        }
+
+        let iter1 = Box::new(ErrorIterator);
+        let multi_iterator = MultiSourceIterator::new(vec![iter1]);
+        let mut stream = multi_iterator.stream();
+
+        // Should propagate the error
+        let result = stream.next().await.unwrap();
+        assert!(result.is_err());
     }
 }

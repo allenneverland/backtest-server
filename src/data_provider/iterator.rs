@@ -109,7 +109,7 @@ impl<R: MarketDataRepository + 'static> OhlcvIterator<R> {
             while current_time < end {
                 let time_range = TimeRange {
                     start: current_time,
-                    end: end,
+                    end,
                 };
 
                 match repository
@@ -234,7 +234,7 @@ impl<R: MarketDataRepository + 'static> TickIterator<R> {
             while current_time < end {
                 let time_range = TimeRange {
                     start: current_time,
-                    end: end,
+                    end,
                 };
 
                 match repository
@@ -313,13 +313,13 @@ impl<R: MarketDataRepository + 'static> MarketDataIterator for TickIterator<R> {
 
 /// Synchronizes multiple data iterators
 pub struct MultiSourceIterator<T: Send + 'static> {
-    iterators: Vec<Box<dyn MarketDataIterator<Item = T>>>,
+    _iterators: Vec<Box<dyn MarketDataIterator<Item = T>>>,
 }
 
 impl<T: Send + 'static> MultiSourceIterator<T> {
     /// Create a new multi-source iterator
     pub fn new(iterators: Vec<Box<dyn MarketDataIterator<Item = T>>>) -> Self {
-        Self { iterators }
+        Self { _iterators: iterators }
     }
 }
 

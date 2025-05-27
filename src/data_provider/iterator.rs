@@ -319,7 +319,9 @@ pub struct MultiSourceIterator<T: Send + 'static> {
 impl<T: Send + 'static> MultiSourceIterator<T> {
     /// Create a new multi-source iterator
     pub fn new(iterators: Vec<Box<dyn MarketDataIterator<Item = T>>>) -> Self {
-        Self { _iterators: iterators }
+        Self {
+            _iterators: iterators,
+        }
     }
 }
 

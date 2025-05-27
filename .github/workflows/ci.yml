@@ -41,11 +41,11 @@ jobs:
     
     services:
       postgres:
-        image: timescale/timescaledb:latest-pg16
+        image: timescale/timescaledb:latest-pg14
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: backtest_server_test
+          POSTGRES_USER: backtest_server
+          POSTGRES_PASSWORD: backtest_server
+          POSTGRES_DB: backtest_server
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -100,12 +100,12 @@ jobs:
 
     - name: Setup database
       env:
-        PGPASSWORD: postgres
+        PGPASSWORD: backtest_server
       run: |
         echo "Creating TimescaleDB extension..."
-        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        psql -h localhost -U backtest_server -d backtest_server -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
         echo "TimescaleDB extension created successfully"
-        psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
+        psql -h localhost -U backtest_server -d backtest_server -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
     - name: Install sqlx-cli
       uses: taiki-e/install-action@v2
@@ -114,18 +114,18 @@ jobs:
         
     - name: Run database migrations
       env:
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
         RUST_LOG: sqlx=debug,backtest_server=debug
-        PGPASSWORD: postgres
+        PGPASSWORD: backtest_server
       run: |
         echo "Running migrations..."
         sqlx migrate run || (echo "Migration failed!" && exit 1)
         echo "Verifying continuous aggregates..."
-        psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
+        psql -h localhost -U backtest_server -d backtest_server -c "\dv" || true
 
     - name: Build test binaries
       env:
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
       run: |
         echo "Building test binaries at $(date)"
         cargo test --no-run --all-features
@@ -133,7 +133,8 @@ jobs:
         
     - name: Run tests
       env:
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
+        TEST_DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
         REDIS_URL: redis://localhost:6379
         RABBITMQ_URL: amqp://guest:guest@localhost:5672
         RUST_LOG: debug
@@ -145,12 +146,12 @@ jobs:
 
     - name: Run doc tests
       env:
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
       run: cargo test --doc
     
     - name: Run clippy
       env:
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
       run: cargo clippy --all-targets --all-features -- -D warnings
 
 
@@ -162,11 +163,11 @@ jobs:
     
     services:
       postgres:
-        image: timescale/timescaledb:latest-pg16
+        image: timescale/timescaledb:latest-pg14
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: backtest_server_test
+          POSTGRES_USER: backtest_server
+          POSTGRES_PASSWORD: backtest_server
+          POSTGRES_DB: backtest_server
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -219,12 +220,12 @@ jobs:
 
     - name: Setup database
       env:
-        PGPASSWORD: postgres
+        PGPASSWORD: backtest_server
       run: |
         echo "Creating TimescaleDB extension..."
-        psql -h localhost -U postgres -d backtest_server_test -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        psql -h localhost -U backtest_server -d backtest_server -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
         echo "TimescaleDB extension created successfully"
-        psql -h localhost -U postgres -d backtest_server_test -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
+        psql -h localhost -U backtest_server -d backtest_server -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
     
     - name: Install sqlx-cli
       uses: taiki-e/install-action@v2
@@ -233,18 +234,19 @@ jobs:
         
     - name: Run database migrations
       env:
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
         RUST_LOG: sqlx=debug,backtest_server=debug
-        PGPASSWORD: postgres
+        PGPASSWORD: backtest_server
       run: |
         echo "Running migrations..."
         sqlx migrate run || (echo "Migration failed!" && exit 1)
         echo "Verifying continuous aggregates..."
-        psql -h localhost -U postgres -d backtest_server_test -c "\dv" || true
+        psql -h localhost -U backtest_server -d backtest_server -c "\dv" || true
 
     - name: Run integration tests
       env:
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/backtest_server_test
+        DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
+        TEST_DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
         REDIS_URL: redis://localhost:6379
         RABBITMQ_URL: amqp://guest:guest@localhost:5672
         RUST_LOG: debug

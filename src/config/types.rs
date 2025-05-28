@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 /// 應用程序配置結構
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApplicationConfig {
-    pub database: DatabaseConfig,
+    pub market_database: MarketDatabaseConfig,
+    pub backtest_database: BacktestDatabaseConfig,
     pub log: LogConfig,
     pub app: AppConfig,
     pub strategy: StrategyConfig,
@@ -16,7 +17,8 @@ pub struct ApplicationConfig {
 impl Validator for ApplicationConfig {
     fn validate(&self) -> Result<(), ValidationError> {
         // 驗證各個部分的配置
-        self.database.validate()?;
+        self.market_database.validate()?;
+        self.backtest_database.validate()?;
         self.log.validate()?;
         self.app.validate()?;
         self.strategy.validate()?;
@@ -74,6 +76,98 @@ impl DatabaseConfig {
     }
 
     /// 獲取閒置超時持續時間
+    pub fn idle_timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.idle_timeout_secs)
+    }
+}
+
+/// 市場數據資料庫配置（唯讀）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketDatabaseConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub password: String,
+    pub database: String,
+    pub connection_pool_size: u32,
+    pub max_connections: u32,
+    pub min_connections: u32,
+    pub max_lifetime_secs: u64,
+    pub acquire_timeout_secs: u64,
+    pub idle_timeout_secs: u64,
+}
+
+impl Validator for MarketDatabaseConfig {
+    fn validate(&self) -> Result<(), ValidationError> {
+        ValidationUtils::not_empty(&self.host, "market_database.host")?;
+        ValidationUtils::not_empty(&self.username, "market_database.username")?;
+        ValidationUtils::not_empty(&self.database, "market_database.database")?;
+        ValidationUtils::in_range(self.port, 1, 65535, "market_database.port")?;
+        ValidationUtils::in_range(
+            self.max_connections,
+            self.min_connections,
+            1000,
+            "market_database.max_connections",
+        )?;
+        Ok(())
+    }
+}
+
+impl MarketDatabaseConfig {
+    pub fn max_lifetime(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.max_lifetime_secs)
+    }
+
+    pub fn acquire_timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.acquire_timeout_secs)
+    }
+
+    pub fn idle_timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.idle_timeout_secs)
+    }
+}
+
+/// 回測資料庫配置（讀寫）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BacktestDatabaseConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub password: String,
+    pub database: String,
+    pub connection_pool_size: u32,
+    pub max_connections: u32,
+    pub min_connections: u32,
+    pub max_lifetime_secs: u64,
+    pub acquire_timeout_secs: u64,
+    pub idle_timeout_secs: u64,
+}
+
+impl Validator for BacktestDatabaseConfig {
+    fn validate(&self) -> Result<(), ValidationError> {
+        ValidationUtils::not_empty(&self.host, "backtest_database.host")?;
+        ValidationUtils::not_empty(&self.username, "backtest_database.username")?;
+        ValidationUtils::not_empty(&self.database, "backtest_database.database")?;
+        ValidationUtils::in_range(self.port, 1, 65535, "backtest_database.port")?;
+        ValidationUtils::in_range(
+            self.max_connections,
+            self.min_connections,
+            1000,
+            "backtest_database.max_connections",
+        )?;
+        Ok(())
+    }
+}
+
+impl BacktestDatabaseConfig {
+    pub fn max_lifetime(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.max_lifetime_secs)
+    }
+
+    pub fn acquire_timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.acquire_timeout_secs)
+    }
+
     pub fn idle_timeout(&self) -> std::time::Duration {
         std::time::Duration::from_secs(self.idle_timeout_secs)
     }

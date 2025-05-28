@@ -23,6 +23,10 @@ pub use instrument::InstrumentRepository;
 pub use market_data::MarketDataRepository;
 pub use strategy::StrategyRepository;
 pub use strategy_version::StrategyVersionRepository;
+
+// 重新導出具體實現
+pub use self::MarketDataRepositoryImpl as MarketDataRepo;
+pub use self::BacktestRepositoryImpl as BacktestRepo;
 /// 分頁結果
 #[derive(Debug, Clone)]
 pub struct Page<T> {
@@ -122,4 +126,38 @@ impl Default for TimeRange {
 /// 通用的數據庫操作特性
 pub trait DbExecutor {
     fn get_pool(&self) -> &PgPool;
+}
+
+/// 市場數據 Repository 實現
+pub struct MarketDataRepositoryImpl {
+    pool: PgPool,
+}
+
+impl MarketDataRepositoryImpl {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+impl DbExecutor for MarketDataRepositoryImpl {
+    fn get_pool(&self) -> &PgPool {
+        &self.pool
+    }
+}
+
+/// 回測 Repository 實現
+pub struct BacktestRepositoryImpl {
+    pool: PgPool,
+}
+
+impl BacktestRepositoryImpl {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+impl DbExecutor for BacktestRepositoryImpl {
+    fn get_pool(&self) -> &PgPool {
+        &self.pool
+    }
 }

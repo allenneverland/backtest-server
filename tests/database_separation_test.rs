@@ -1,6 +1,6 @@
-use backtest_server::config::types::{ApplicationConfig, DatabaseConfig};
+use backtest_server::config::{MarketDatabaseConfig, BacktestDatabaseConfig};
 use backtest_server::storage::database::{
-    DatabasePool, MarketDataDatabase, BacktestDatabase, init_market_data_pool, init_backtest_pool
+    MarketDataDatabase, BacktestDatabase, init_market_data_pool, init_backtest_pool
 };
 use anyhow::Result;
 
@@ -8,7 +8,7 @@ use anyhow::Result;
 #[tokio::test]
 async fn test_dual_database_initialization() -> Result<()> {
     // 創建市場數據資料庫配置
-    let market_data_config = DatabaseConfig {
+    let market_data_config = MarketDatabaseConfig {
         host: "localhost".to_string(),
         port: 5432,
         username: "market_user".to_string(),
@@ -23,7 +23,7 @@ async fn test_dual_database_initialization() -> Result<()> {
     };
 
     // 創建回測資料庫配置
-    let backtest_config = DatabaseConfig {
+    let backtest_config = BacktestDatabaseConfig {
         host: "localhost".to_string(),
         port: 5432,
         username: "backtest_user".to_string(),
@@ -50,7 +50,7 @@ async fn test_dual_database_initialization() -> Result<()> {
 /// 測試市場數據資料庫唯讀存取
 #[tokio::test]
 async fn test_market_data_read_only_access() -> Result<()> {
-    let config = DatabaseConfig {
+    let config = MarketDatabaseConfig {
         host: "localhost".to_string(),
         port: 5432,
         username: "market_user".to_string(),
@@ -81,7 +81,7 @@ async fn test_market_data_read_only_access() -> Result<()> {
 /// 測試回測資料庫讀寫存取
 #[tokio::test]
 async fn test_backtest_read_write_access() -> Result<()> {
-    let config = DatabaseConfig {
+    let config = BacktestDatabaseConfig {
         host: "localhost".to_string(),
         port: 5432,
         username: "backtest_user".to_string(),
@@ -114,7 +114,7 @@ async fn test_backtest_read_write_access() -> Result<()> {
 async fn test_database_pool_manager() -> Result<()> {
     use backtest_server::storage::database::DatabasePoolManager;
 
-    let market_config = DatabaseConfig {
+    let market_config = MarketDatabaseConfig {
         host: "localhost".to_string(),
         port: 5432,
         username: "market_user".to_string(),
@@ -128,7 +128,7 @@ async fn test_database_pool_manager() -> Result<()> {
         idle_timeout_secs: 600,
     };
 
-    let backtest_config = DatabaseConfig {
+    let backtest_config = BacktestDatabaseConfig {
         host: "localhost".to_string(),
         port: 5432,
         username: "backtest_user".to_string(),
@@ -164,77 +164,80 @@ async fn test_database_pool_manager() -> Result<()> {
 /// 測試配置驗證
 #[cfg(test)]
 mod config_tests {
-    use super::*;
-    use backtest_server::config::types::DualDatabaseConfig;
+    use backtest_server::config::{MarketDatabaseConfig, BacktestDatabaseConfig};
     use backtest_server::config::validation::Validator;
 
     #[test]
     fn test_dual_database_config_validation() {
-        let config = DualDatabaseConfig {
-            market_data: DatabaseConfig {
-                host: "localhost".to_string(),
-                port: 5432,
-                username: "market_user".to_string(),
-                password: "market_pass".to_string(),
-                database: "marketdata".to_string(),
-                connection_pool_size: 10,
-                max_connections: 10,
-                min_connections: 1,
-                max_lifetime_secs: 3600,
-                acquire_timeout_secs: 10,
-                idle_timeout_secs: 600,
-            },
-            backtest: DatabaseConfig {
-                host: "localhost".to_string(),
-                port: 5432,
-                username: "backtest_user".to_string(),
-                password: "backtest_pass".to_string(),
-                database: "backtest".to_string(),
-                connection_pool_size: 10,
-                max_connections: 10,
-                min_connections: 1,
-                max_lifetime_secs: 3600,
-                acquire_timeout_secs: 10,
-                idle_timeout_secs: 600,
-            },
+        // 測試市場數據配置
+        let market_config = MarketDatabaseConfig {
+            host: "localhost".to_string(),
+            port: 5432,
+            username: "market_user".to_string(),
+            password: "market_pass".to_string(),
+            database: "marketdata".to_string(),
+            connection_pool_size: 10,
+            max_connections: 10,
+            min_connections: 1,
+            max_lifetime_secs: 3600,
+            acquire_timeout_secs: 10,
+            idle_timeout_secs: 600,
+        };
+
+        // 測試回測配置
+        let backtest_config = BacktestDatabaseConfig {
+            host: "localhost".to_string(),
+            port: 5432,
+            username: "backtest_user".to_string(),
+            password: "backtest_pass".to_string(),
+            database: "backtest".to_string(),
+            connection_pool_size: 10,
+            max_connections: 10,
+            min_connections: 1,
+            max_lifetime_secs: 3600,
+            acquire_timeout_secs: 10,
+            idle_timeout_secs: 600,
         };
 
         // 驗證配置應該通過
-        assert!(config.validate().is_ok(), "Valid dual database config should pass validation");
+        assert!(market_config.validate().is_ok(), "Valid market database config should pass validation");
+        assert!(backtest_config.validate().is_ok(), "Valid backtest database config should pass validation");
     }
 
     #[test]
     fn test_dual_database_config_invalid() {
-        let config = DualDatabaseConfig {
-            market_data: DatabaseConfig {
-                host: "".to_string(), // 空主機名
-                port: 5432,
-                username: "market_user".to_string(),
-                password: "market_pass".to_string(),
-                database: "marketdata".to_string(),
-                connection_pool_size: 10,
-                max_connections: 10,
-                min_connections: 1,
-                max_lifetime_secs: 3600,
-                acquire_timeout_secs: 10,
-                idle_timeout_secs: 600,
-            },
-            backtest: DatabaseConfig {
-                host: "localhost".to_string(),
-                port: 0, // 無效端口
-                username: "backtest_user".to_string(),
-                password: "backtest_pass".to_string(),
-                database: "backtest".to_string(),
-                connection_pool_size: 10,
-                max_connections: 10,
-                min_connections: 1,
-                max_lifetime_secs: 3600,
-                acquire_timeout_secs: 10,
-                idle_timeout_secs: 600,
-            },
+        // 測試無效的市場數據配置
+        let market_config = MarketDatabaseConfig {
+            host: "".to_string(), // 空主機名
+            port: 5432,
+            username: "market_user".to_string(),
+            password: "market_pass".to_string(),
+            database: "marketdata".to_string(),
+            connection_pool_size: 10,
+            max_connections: 10,
+            min_connections: 1,
+            max_lifetime_secs: 3600,
+            acquire_timeout_secs: 10,
+            idle_timeout_secs: 600,
+        };
+
+        // 測試無效的回測配置
+        let backtest_config = BacktestDatabaseConfig {
+            host: "localhost".to_string(),
+            port: 0, // 無效端口
+            username: "backtest_user".to_string(),
+            password: "backtest_pass".to_string(),
+            database: "backtest".to_string(),
+            connection_pool_size: 10,
+            max_connections: 10,
+            min_connections: 1,
+            max_lifetime_secs: 3600,
+            acquire_timeout_secs: 10,
+            idle_timeout_secs: 600,
         };
 
         // 驗證配置應該失敗
-        assert!(config.validate().is_err(), "Invalid dual database config should fail validation");
+        assert!(market_config.validate().is_err(), "Invalid market database config should fail validation");
+        assert!(backtest_config.validate().is_err(), "Invalid backtest database config should fail validation");
     }
 }

@@ -1,8 +1,8 @@
-use backtest_server::config::{MarketDatabaseConfig, BacktestDatabaseConfig};
-use backtest_server::storage::database::{
-    MarketDataDatabase, BacktestDatabase, init_market_data_pool, init_backtest_pool
-};
 use anyhow::Result;
+use backtest_server::config::{BacktestDatabaseConfig, MarketDatabaseConfig};
+use backtest_server::storage::database::{
+    init_backtest_pool, init_market_data_pool, BacktestDatabase, MarketDataDatabase,
+};
 
 /// 測試雙資料庫配置初始化
 #[tokio::test]
@@ -39,10 +39,16 @@ async fn test_dual_database_initialization() -> Result<()> {
 
     // 測試資料庫池創建（會失敗因為尚未實作）
     let market_pool_result = init_market_data_pool(&market_data_config).await;
-    assert!(market_pool_result.is_ok(), "Market data pool initialization should succeed");
+    assert!(
+        market_pool_result.is_ok(),
+        "Market data pool initialization should succeed"
+    );
 
     let backtest_pool_result = init_backtest_pool(&backtest_config).await;
-    assert!(backtest_pool_result.is_ok(), "Backtest pool initialization should succeed");
+    assert!(
+        backtest_pool_result.is_ok(),
+        "Backtest pool initialization should succeed"
+    );
 
     Ok(())
 }
@@ -72,8 +78,13 @@ async fn test_market_data_read_only_access() -> Result<()> {
     assert!(read_result.is_ok(), "Read query should succeed");
 
     // 測試寫入操作應該失敗
-    let write_result = db.execute_write_query("INSERT INTO test_table VALUES (1)").await;
-    assert!(write_result.is_err(), "Write query should fail on read-only database");
+    let write_result = db
+        .execute_write_query("INSERT INTO test_table VALUES (1)")
+        .await;
+    assert!(
+        write_result.is_err(),
+        "Write query should fail on read-only database"
+    );
 
     Ok(())
 }
@@ -103,8 +114,13 @@ async fn test_backtest_read_write_access() -> Result<()> {
     assert!(read_result.is_ok(), "Read query should succeed");
 
     // 測試寫入操作應該成功
-    let write_result = db.execute_write_query("CREATE TEMP TABLE test_table (id INT)").await;
-    assert!(write_result.is_ok(), "Write query should succeed on backtest database");
+    let write_result = db
+        .execute_write_query("CREATE TEMP TABLE test_table (id INT)")
+        .await;
+    assert!(
+        write_result.is_ok(),
+        "Write query should succeed on backtest database"
+    );
 
     Ok(())
 }
@@ -155,8 +171,14 @@ async fn test_database_pool_manager() -> Result<()> {
 
     // 測試健康檢查
     let health = manager.health_check().await?;
-    assert!(health.market_data_healthy, "Market data database should be healthy");
-    assert!(health.backtest_healthy, "Backtest database should be healthy");
+    assert!(
+        health.market_data_healthy,
+        "Market data database should be healthy"
+    );
+    assert!(
+        health.backtest_healthy,
+        "Backtest database should be healthy"
+    );
 
     Ok(())
 }
@@ -164,8 +186,8 @@ async fn test_database_pool_manager() -> Result<()> {
 /// 測試配置驗證
 #[cfg(test)]
 mod config_tests {
-    use backtest_server::config::{MarketDatabaseConfig, BacktestDatabaseConfig};
     use backtest_server::config::validation::Validator;
+    use backtest_server::config::{BacktestDatabaseConfig, MarketDatabaseConfig};
 
     #[test]
     fn test_dual_database_config_validation() {
@@ -200,8 +222,14 @@ mod config_tests {
         };
 
         // 驗證配置應該通過
-        assert!(market_config.validate().is_ok(), "Valid market database config should pass validation");
-        assert!(backtest_config.validate().is_ok(), "Valid backtest database config should pass validation");
+        assert!(
+            market_config.validate().is_ok(),
+            "Valid market database config should pass validation"
+        );
+        assert!(
+            backtest_config.validate().is_ok(),
+            "Valid backtest database config should pass validation"
+        );
     }
 
     #[test]
@@ -237,7 +265,13 @@ mod config_tests {
         };
 
         // 驗證配置應該失敗
-        assert!(market_config.validate().is_err(), "Invalid market database config should fail validation");
-        assert!(backtest_config.validate().is_err(), "Invalid backtest database config should fail validation");
+        assert!(
+            market_config.validate().is_err(),
+            "Invalid market database config should fail validation"
+        );
+        assert!(
+            backtest_config.validate().is_err(),
+            "Invalid backtest database config should fail validation"
+        );
     }
 }

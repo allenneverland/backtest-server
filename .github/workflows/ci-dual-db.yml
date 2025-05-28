@@ -1,0 +1,374 @@
+name: CI - Dual Database
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: "-C debuginfo=0"
+
+jobs:
+  fmt:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4.1.1
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt
+
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+
+  test-and-clippy:
+    name: Test Suite and Clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: fmt
+    
+    services:
+      # 市場數據資料庫 (唯讀)
+      postgres-market:
+        image: timescale/timescaledb:latest-pg14
+        env:
+          POSTGRES_USER: market_user
+          POSTGRES_PASSWORD: market_pass
+          POSTGRES_DB: marketdata
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5431:5432
+      
+      # 回測資料庫 (讀寫)
+      postgres-backtest:
+        image: timescale/timescaledb:latest-pg14
+        env:
+          POSTGRES_USER: backtest_user
+          POSTGRES_PASSWORD: backtest_pass
+          POSTGRES_DB: backtest
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        ports:
+          - 5672:5672
+          - 15672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4.1.1
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: "ci-cache"
+        workspaces: ". -> target"
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev postgresql-client
+
+    - name: Setup market database
+      env:
+        PGPASSWORD: market_pass
+      run: |
+        echo "Creating TimescaleDB extension in market database..."
+        psql -h localhost -p 5431 -U market_user -d marketdata -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        echo "Market database TimescaleDB extension created successfully"
+        psql -h localhost -p 5431 -U market_user -d marketdata -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
+
+    - name: Setup backtest database
+      env:
+        PGPASSWORD: backtest_pass
+      run: |
+        echo "Creating TimescaleDB extension in backtest database..."
+        psql -h localhost -p 5432 -U backtest_user -d backtest -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        echo "Backtest database TimescaleDB extension created successfully"
+        psql -h localhost -p 5432 -U backtest_user -d backtest -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
+    
+    - name: Install sqlx-cli
+      uses: taiki-e/install-action@v2
+      with:
+        tool: sqlx-cli@0.8.2
+
+    - name: Setup test data in market database
+      env:
+        PGPASSWORD: market_pass
+      run: |
+        echo "Setting up test market data..."
+        # 創建基本的市場數據表結構（僅用於測試）
+        psql -h localhost -p 5431 -U market_user -d marketdata << 'EOF'
+        -- 基本市場數據表（測試用）
+        CREATE TABLE IF NOT EXISTS market_data (
+          id BIGSERIAL PRIMARY KEY,
+          timestamp TIMESTAMPTZ NOT NULL,
+          symbol VARCHAR(32) NOT NULL,
+          open_price DECIMAL(20,8) NOT NULL,
+          high_price DECIMAL(20,8) NOT NULL,
+          low_price DECIMAL(20,8) NOT NULL,
+          close_price DECIMAL(20,8) NOT NULL,
+          volume DECIMAL(20,8) NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- 創建時間序列超表
+        SELECT create_hypertable('market_data', 'timestamp', if_not_exists => TRUE);
+        
+        -- 插入一些測試數據
+        INSERT INTO market_data (timestamp, symbol, open_price, high_price, low_price, close_price, volume) VALUES
+        ('2024-01-01 00:00:00+00', 'BTCUSD', 45000.0, 45100.0, 44900.0, 45050.0, 100.5),
+        ('2024-01-01 01:00:00+00', 'BTCUSD', 45050.0, 45200.0, 45000.0, 45150.0, 120.3),
+        ('2024-01-01 02:00:00+00', 'BTCUSD', 45150.0, 45300.0, 45100.0, 45250.0, 95.7);
+        
+        -- 創建只讀用戶權限（模擬真實環境）
+        GRANT CONNECT ON DATABASE marketdata TO market_user;
+        GRANT USAGE ON SCHEMA public TO market_user;
+        GRANT SELECT ON ALL TABLES IN SCHEMA public TO market_user;
+        GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO market_user;
+        EOF
+        echo "Market test data setup completed"
+        
+    - name: Run database migrations for backtest database
+      env:
+        MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
+        BACKTEST_DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
+        RUST_LOG: sqlx=debug,backtest_server=debug
+        PGPASSWORD: backtest_pass
+      run: |
+        echo "Running backtest database migrations..."
+        # 使用我們的新遷移二進制文件，僅對回測資料庫運行遷移
+        cargo build --bin migrate
+        ./target/debug/migrate run --target backtest || (echo "Backtest migration failed!" && exit 1)
+        echo "Verifying backtest database structure..."
+        psql -h localhost -p 5432 -U backtest_user -d backtest -c "\dt" || true
+
+    - name: Build test binaries
+      env:
+        MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
+        BACKTEST_DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
+      run: |
+        echo "Building test binaries at $(date)"
+        cargo test --no-run --all-features
+        echo "Build completed at $(date)"
+        
+    - name: Run tests
+      env:
+        MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
+        BACKTEST_DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
+        REDIS_URL: redis://localhost:6379
+        RABBITMQ_URL: amqp://guest:guest@localhost:5672
+        RUST_LOG: debug
+        RUST_TEST_THREADS: 2
+      run: |
+        echo "Starting dual database tests at $(date)"
+        cargo test --all-features -- --nocapture
+        echo "Tests completed at $(date)"
+
+    - name: Run doc tests
+      env:
+        MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
+        BACKTEST_DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
+      run: cargo test --doc
+    
+    - name: Run clippy
+      env:
+        MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
+        BACKTEST_DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
+      run: cargo clippy --all-targets --all-features -- -D warnings
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: test-and-clippy
+    
+    services:
+      # 市場數據資料庫 (唯讀)
+      postgres-market:
+        image: timescale/timescaledb:latest-pg14
+        env:
+          POSTGRES_USER: market_user
+          POSTGRES_PASSWORD: market_pass
+          POSTGRES_DB: marketdata
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5431:5432
+      
+      # 回測資料庫 (讀寫)
+      postgres-backtest:
+        image: timescale/timescaledb:latest-pg14
+        env:
+          POSTGRES_USER: backtest_user
+          POSTGRES_PASSWORD: backtest_pass
+          POSTGRES_DB: backtest
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        ports:
+          - 5672:5672
+          - 15672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4.1.1
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: "ci-cache"
+        workspaces: ". -> target"
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev postgresql-client
+
+    - name: Setup market database
+      env:
+        PGPASSWORD: market_pass
+      run: |
+        echo "Creating TimescaleDB extension in market database..."
+        psql -h localhost -p 5431 -U market_user -d marketdata -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+
+    - name: Setup backtest database
+      env:
+        PGPASSWORD: backtest_pass
+      run: |
+        echo "Creating TimescaleDB extension in backtest database..."
+        psql -h localhost -p 5432 -U backtest_user -d backtest -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+    
+    - name: Install sqlx-cli
+      uses: taiki-e/install-action@v2
+      with:
+        tool: sqlx-cli@0.8.2
+
+    - name: Setup test data in market database
+      env:
+        PGPASSWORD: market_pass
+      run: |
+        echo "Setting up test market data for integration..."
+        psql -h localhost -p 5431 -U market_user -d marketdata << 'EOF'
+        CREATE TABLE IF NOT EXISTS market_data (
+          id BIGSERIAL PRIMARY KEY,
+          timestamp TIMESTAMPTZ NOT NULL,
+          symbol VARCHAR(32) NOT NULL,
+          open_price DECIMAL(20,8) NOT NULL,
+          high_price DECIMAL(20,8) NOT NULL,
+          low_price DECIMAL(20,8) NOT NULL,
+          close_price DECIMAL(20,8) NOT NULL,
+          volume DECIMAL(20,8) NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        SELECT create_hypertable('market_data', 'timestamp', if_not_exists => TRUE);
+        
+        -- 插入更多測試數據用於集成測試
+        INSERT INTO market_data (timestamp, symbol, open_price, high_price, low_price, close_price, volume) VALUES
+        ('2024-01-01 00:00:00+00', 'BTCUSD', 45000.0, 45100.0, 44900.0, 45050.0, 100.5),
+        ('2024-01-01 01:00:00+00', 'BTCUSD', 45050.0, 45200.0, 45000.0, 45150.0, 120.3),
+        ('2024-01-01 02:00:00+00', 'BTCUSD', 45150.0, 45300.0, 45100.0, 45250.0, 95.7),
+        ('2024-01-01 03:00:00+00', 'ETHUSD', 3500.0, 3520.0, 3480.0, 3510.0, 200.1),
+        ('2024-01-01 04:00:00+00', 'ETHUSD', 3510.0, 3540.0, 3500.0, 3535.0, 180.5);
+        
+        GRANT CONNECT ON DATABASE marketdata TO market_user;
+        GRANT USAGE ON SCHEMA public TO market_user;
+        GRANT SELECT ON ALL TABLES IN SCHEMA public TO market_user;
+        GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO market_user;
+        EOF
+        
+    - name: Run database migrations for backtest database
+      env:
+        MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
+        BACKTEST_DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
+        RUST_LOG: sqlx=debug,backtest_server=debug
+        PGPASSWORD: backtest_pass
+      run: |
+        echo "Running backtest database migrations for integration..."
+        cargo build --bin migrate
+        ./target/debug/migrate run --target backtest || (echo "Backtest migration failed!" && exit 1)
+
+    - name: Run integration tests
+      env:
+        MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
+        BACKTEST_DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
+        REDIS_URL: redis://localhost:6379
+        RABBITMQ_URL: amqp://guest:guest@localhost:5672
+        RUST_LOG: debug
+      run: cargo test --test '*' -- --test-threads=1

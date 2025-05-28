@@ -25,8 +25,8 @@ pub use strategy::StrategyRepository;
 pub use strategy_version::StrategyVersionRepository;
 
 // 重新導出具體實現
-pub use self::MarketDataRepositoryImpl as MarketDataRepo;
 pub use self::BacktestRepositoryImpl as BacktestRepo;
+pub use self::MarketDataRepositoryImpl as MarketDataRepo;
 /// 分頁結果
 #[derive(Debug, Clone)]
 pub struct Page<T> {

@@ -1,9 +1,7 @@
-use crate::config::{self, MarketDatabaseConfig, BacktestDatabaseConfig};
+use crate::config::{self, BacktestDatabaseConfig, MarketDatabaseConfig};
 use anyhow::Result;
+use sqlx::postgres::{PgConnectOptions, PgPool, PgPoolOptions};
 use sqlx::ConnectOptions;
-use sqlx::{
-    postgres::{PgConnectOptions, PgPool, PgPoolOptions},
-};
 use tokio::sync::OnceCell;
 
 /// 全局市場數據資料庫連接池

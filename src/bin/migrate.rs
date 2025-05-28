@@ -85,7 +85,10 @@ async fn main() -> Result<()> {
                     info!("回測資料庫遷移完成！");
                 }
                 _ => {
-                    anyhow::bail!("無效的目標資料庫：{}。請使用 'market'、'backtest' 或 'both'", target);
+                    anyhow::bail!(
+                        "無效的目標資料庫：{}。請使用 'market'、'backtest' 或 'both'",
+                        target
+                    );
                 }
             }
         }
@@ -104,7 +107,10 @@ async fn main() -> Result<()> {
                     // TODO: 實作狀態檢查
                 }
                 _ => {
-                    anyhow::bail!("無效的目標資料庫：{}。請使用 'market'、'backtest' 或 'both'", target);
+                    anyhow::bail!(
+                        "無效的目標資料庫：{}。請使用 'market'、'backtest' 或 'both'",
+                        target
+                    );
                 }
             }
         }

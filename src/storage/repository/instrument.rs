@@ -43,7 +43,7 @@ impl InstrumentRepository {
             )
             RETURNING 
                 instrument_id
-            "#
+            "#,
         )
         .bind(&instrument.symbol)
         .bind(&instrument.exchange_id)
@@ -151,7 +151,7 @@ impl InstrumentRepository {
                 attributes, created_at, updated_at
             FROM instrument
             WHERE instrument_id = $1
-            "#
+            "#,
         )
         .bind(instrument_id)
         .fetch_optional(&self.pool)
@@ -175,7 +175,7 @@ impl InstrumentRepository {
                 attributes, created_at, updated_at
             FROM instrument
             WHERE symbol = $1 AND exchange_id = $2
-            "#
+            "#,
         )
         .bind(symbol)
         .bind(exchange_id)
@@ -201,7 +201,7 @@ impl InstrumentRepository {
                 attributes, created_at, updated_at
             FROM instrument
             WHERE symbol = $1 AND exchange_id = $2 AND instrument_type = $3
-            "#
+            "#,
         )
         .bind(symbol)
         .bind(exchange_id)
@@ -224,7 +224,7 @@ impl InstrumentRepository {
             FROM instrument
             WHERE exchange_id = $1
             ORDER BY symbol
-            "#
+            "#,
         )
         .bind(exchange_id)
         .fetch_all(&self.pool)
@@ -245,7 +245,7 @@ impl InstrumentRepository {
             FROM instrument
             WHERE instrument_type = $1
             ORDER BY symbol
-            "#
+            "#,
         )
         .bind(instrument_type)
         .fetch_all(&self.pool)
@@ -266,7 +266,7 @@ impl InstrumentRepository {
             FROM instrument
             WHERE is_active = true
             ORDER BY symbol
-            "#
+            "#,
         )
         .fetch_all(&self.pool)
         .await?;
@@ -298,7 +298,7 @@ impl InstrumentRepository {
             FROM instrument
             ORDER BY symbol
             LIMIT $1 OFFSET $2
-            "#
+            "#,
         )
         .bind(page_query.page_size)
         .bind(offset)
@@ -328,7 +328,7 @@ impl InstrumentRepository {
             WHERE symbol ILIKE $1 OR name ILIKE $1
             ORDER BY symbol
             LIMIT 100
-            "#
+            "#,
         )
         .bind(search_term)
         .fetch_all(&self.pool)
@@ -363,7 +363,7 @@ impl InstrumentRepository {
                 attributes = $12,
                 updated_at = $13
             WHERE instrument_id = $14
-            "#
+            "#,
         )
         .bind(&instrument.symbol)
         .bind(&instrument.exchange_id)
@@ -415,7 +415,7 @@ impl InstrumentRepository {
             UPDATE instrument
             SET attributes = $1, updated_at = $2
             WHERE instrument_id = $3
-            "#
+            "#,
         )
         .bind(instrument.attributes.as_ref().map(|attr| &attr.0))
         .bind(&now)
@@ -456,7 +456,7 @@ impl InstrumentRepository {
             UPDATE instrument
             SET attributes = $1, updated_at = $2
             WHERE instrument_id = $3
-            "#
+            "#,
         )
         .bind(instrument.attributes.as_ref().map(|attr| &attr.0))
         .bind(&now)
@@ -477,7 +477,7 @@ impl InstrumentRepository {
             r#"
             DELETE FROM instrument
             WHERE instrument_id = $1
-            "#
+            "#,
         )
         .bind(instrument_id)
         .execute(&self.pool)
@@ -503,7 +503,7 @@ impl InstrumentRepository {
             FROM instrument i
             JOIN exchange e ON i.exchange_id = e.exchange_id
             WHERE i.instrument_id = $1
-            "#
+            "#,
         )
         .bind(instrument_id)
         .fetch_optional(&self.pool)
@@ -535,7 +535,7 @@ impl InstrumentRepository {
                 description, currency, tick_size, lot_size, is_active, 
                 trading_start_date, trading_end_date, attributes,
                 created_at, updated_at
-            "#
+            "#,
         )
         .bind(&instrument.symbol)
         .bind(&instrument.exchange_id)
@@ -680,7 +680,6 @@ mod tests {
     use chrono::NaiveDate;
     use rust_decimal_macros::dec;
     use std::str::FromStr;
-
 
     #[test]
     fn test_domain_model_conversion() -> Result<()> {

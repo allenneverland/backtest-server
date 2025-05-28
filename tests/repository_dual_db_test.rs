@@ -40,7 +40,7 @@ async fn test_cross_database_query_scenario() -> Result<()> {
     // 創建兩個 repository
     let market_pool = sqlx::PgPool::connect(&market_db_url).await?;
     let backtest_pool = sqlx::PgPool::connect(&backtest_db_url).await?;
-    
+
     let market_repo = MarketDataRepo::new(market_pool);
     let backtest_repo = BacktestRepo::new(backtest_pool);
 
@@ -107,7 +107,7 @@ mod config_tests {
         // 測試無效配置檢測
         let invalid_config = MarketDatabaseConfig {
             host: "".to_string(), // 空主機名應該被檢測為無效
-            port: 0, // 無效端口
+            port: 0,              // 無效端口
             username: "".to_string(),
             password: "".to_string(),
             database: "".to_string(),

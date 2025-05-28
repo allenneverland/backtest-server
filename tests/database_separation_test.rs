@@ -22,7 +22,8 @@ fn get_market_db_config() -> MarketDatabaseConfig {
                 .parse()
                 .unwrap_or(5431),
             username: std::env::var("MARKET_DB_USER").unwrap_or_else(|_| "market_user".to_string()),
-            password: std::env::var("MARKET_DB_PASSWORD").unwrap_or_else(|_| "market_pass".to_string()),
+            password: std::env::var("MARKET_DB_PASSWORD")
+                .unwrap_or_else(|_| "market_pass".to_string()),
             database: std::env::var("MARKET_DB_NAME").unwrap_or_else(|_| "marketdata".to_string()),
             connection_pool_size: 10,
             max_connections: 10,
@@ -58,7 +59,8 @@ fn get_backtest_db_config() -> BacktestDatabaseConfig {
             .parse()
             .unwrap_or(5432),
         username: std::env::var("BACKTEST_DB_USER").unwrap_or_else(|_| "backtest_user".to_string()),
-        password: std::env::var("BACKTEST_DB_PASSWORD").unwrap_or_else(|_| "backtest_pass".to_string()),
+        password: std::env::var("BACKTEST_DB_PASSWORD")
+            .unwrap_or_else(|_| "backtest_pass".to_string()),
         database: std::env::var("BACKTEST_DB_NAME").unwrap_or_else(|_| "backtest".to_string()),
         connection_pool_size: 10,
         max_connections: 10,

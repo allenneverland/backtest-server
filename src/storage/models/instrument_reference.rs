@@ -32,7 +32,7 @@ impl InstrumentReference {
         currency: String,
     ) -> Self {
         let now = Utc::now();
-        
+
         Self {
             instrument_id,
             symbol,
@@ -126,34 +126,54 @@ mod tests {
     #[test]
     fn test_instrument_type_checks() {
         let stock = InstrumentReference::new(
-            1, "AAPL".to_string(), "NASDAQ".to_string(), 
-            "STOCK".to_string(), "Apple".to_string(), "USD".to_string()
+            1,
+            "AAPL".to_string(),
+            "NASDAQ".to_string(),
+            "STOCK".to_string(),
+            "Apple".to_string(),
+            "USD".to_string(),
         );
         assert!(stock.is_stock());
         assert!(!stock.is_future());
 
         let future = InstrumentReference::new(
-            2, "ES".to_string(), "CME".to_string(), 
-            "FUTURE".to_string(), "E-mini S&P 500".to_string(), "USD".to_string()
+            2,
+            "ES".to_string(),
+            "CME".to_string(),
+            "FUTURE".to_string(),
+            "E-mini S&P 500".to_string(),
+            "USD".to_string(),
         );
         assert!(future.is_future());
         assert!(!future.is_stock());
 
         let option = InstrumentReference::new(
-            3, "AAPL240315C00150000".to_string(), "NASDAQ".to_string(), 
-            "OPTIONCONTRACT".to_string(), "AAPL Call".to_string(), "USD".to_string()
+            3,
+            "AAPL240315C00150000".to_string(),
+            "NASDAQ".to_string(),
+            "OPTIONCONTRACT".to_string(),
+            "AAPL Call".to_string(),
+            "USD".to_string(),
         );
         assert!(option.is_option());
 
         let forex = InstrumentReference::new(
-            4, "EURUSD".to_string(), "FOREX".to_string(), 
-            "FOREX".to_string(), "Euro/US Dollar".to_string(), "USD".to_string()
+            4,
+            "EURUSD".to_string(),
+            "FOREX".to_string(),
+            "FOREX".to_string(),
+            "Euro/US Dollar".to_string(),
+            "USD".to_string(),
         );
         assert!(forex.is_forex());
 
         let crypto = InstrumentReference::new(
-            5, "BTCUSD".to_string(), "BINANCE".to_string(), 
-            "CRYPTO".to_string(), "Bitcoin".to_string(), "USD".to_string()
+            5,
+            "BTCUSD".to_string(),
+            "BINANCE".to_string(),
+            "CRYPTO".to_string(),
+            "Bitcoin".to_string(),
+            "USD".to_string(),
         );
         assert!(crypto.is_crypto());
     }
@@ -161,8 +181,12 @@ mod tests {
     #[test]
     fn test_market_identifier() {
         let instrument = InstrumentReference::new(
-            1, "AAPL".to_string(), "NASDAQ".to_string(), 
-            "STOCK".to_string(), "Apple".to_string(), "USD".to_string()
+            1,
+            "AAPL".to_string(),
+            "NASDAQ".to_string(),
+            "STOCK".to_string(),
+            "Apple".to_string(),
+            "USD".to_string(),
         );
         assert_eq!(instrument.market_identifier(), "NASDAQ:AAPL");
     }
@@ -170,18 +194,22 @@ mod tests {
     #[test]
     fn test_sync_update() {
         let mut instrument = InstrumentReference::new(
-            1, "AAPL".to_string(), "NASDAQ".to_string(), 
-            "STOCK".to_string(), "Apple".to_string(), "USD".to_string()
+            1,
+            "AAPL".to_string(),
+            "NASDAQ".to_string(),
+            "STOCK".to_string(),
+            "Apple".to_string(),
+            "USD".to_string(),
         );
-        
+
         let original_sync_time = instrument.last_sync_at;
         let original_update_time = instrument.updated_at;
-        
+
         // 模擬時間流逝
         std::thread::sleep(std::time::Duration::from_millis(1));
-        
+
         instrument.update_sync(2);
-        
+
         assert_eq!(instrument.sync_version, 2);
         assert!(instrument.last_sync_at > original_sync_time);
         assert!(instrument.updated_at > original_update_time);
@@ -190,22 +218,26 @@ mod tests {
     #[test]
     fn test_activation_deactivation() {
         let mut instrument = InstrumentReference::new(
-            1, "AAPL".to_string(), "NASDAQ".to_string(), 
-            "STOCK".to_string(), "Apple".to_string(), "USD".to_string()
+            1,
+            "AAPL".to_string(),
+            "NASDAQ".to_string(),
+            "STOCK".to_string(),
+            "Apple".to_string(),
+            "USD".to_string(),
         );
-        
+
         assert!(instrument.is_active);
-        
+
         let original_update_time = instrument.updated_at;
         std::thread::sleep(std::time::Duration::from_millis(1));
-        
+
         instrument.deactivate();
         assert!(!instrument.is_active);
         assert!(instrument.updated_at > original_update_time);
-        
+
         let deactivate_time = instrument.updated_at;
         std::thread::sleep(std::time::Duration::from_millis(1));
-        
+
         instrument.activate();
         assert!(instrument.is_active);
         assert!(instrument.updated_at > deactivate_time);

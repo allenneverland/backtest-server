@@ -31,7 +31,7 @@ impl ExchangeRepository {
             )
             RETURNING 
                 exchange_id
-            "#
+            "#,
         )
         .bind(&exchange.code)
         .bind(&exchange.name)
@@ -60,7 +60,7 @@ impl ExchangeRepository {
                 operating_hours, created_at, updated_at
             FROM exchange
             WHERE exchange_id = $1
-            "#
+            "#,
         )
         .bind(exchange_id)
         .fetch_optional(&self.pool)
@@ -78,7 +78,7 @@ impl ExchangeRepository {
                 operating_hours, created_at, updated_at
             FROM exchange
             WHERE code = $1
-            "#
+            "#,
         )
         .bind(code)
         .fetch_optional(&self.pool)
@@ -96,7 +96,7 @@ impl ExchangeRepository {
                 operating_hours, created_at, updated_at
             FROM exchange
             ORDER BY code
-            "#
+            "#,
         )
         .fetch_all(&self.pool)
         .await?;
@@ -119,7 +119,7 @@ impl ExchangeRepository {
                 operating_hours = $5,
                 updated_at = $6
             WHERE exchange_id = $7
-            "#
+            "#,
         )
         .bind(&exchange.code)
         .bind(&exchange.name)
@@ -143,7 +143,7 @@ impl ExchangeRepository {
             r#"
             DELETE FROM exchange
             WHERE exchange_id = $1
-            "#
+            "#,
         )
         .bind(exchange_id)
         .execute(&self.pool)
@@ -171,7 +171,7 @@ impl ExchangeRepository {
             RETURNING 
                 exchange_id, code, name, country, timezone,
                 operating_hours, created_at, updated_at
-            "#
+            "#,
         )
         .bind(&exchange.code)
         .bind(&exchange.name)

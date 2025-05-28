@@ -85,7 +85,7 @@ impl IndicatorRepository for PgIndicatorRepository {
             RETURNING 
                 indicator_id, code, name, description, 
                 parameters, created_at, updated_at
-            "#
+            "#,
         )
         .bind(indicator.code)
         .bind(indicator.name)
@@ -108,7 +108,7 @@ impl IndicatorRepository for PgIndicatorRepository {
                 parameters, created_at, updated_at
             FROM technical_indicator
             WHERE indicator_id = $1
-            "#
+            "#,
         )
         .bind(indicator_id)
         .fetch_optional(DbExecutor::get_pool(self))
@@ -128,7 +128,7 @@ impl IndicatorRepository for PgIndicatorRepository {
                 parameters, created_at, updated_at
             FROM technical_indicator
             WHERE code = $1
-            "#
+            "#,
         )
         .bind(code)
         .fetch_optional(DbExecutor::get_pool(self))
@@ -145,7 +145,7 @@ impl IndicatorRepository for PgIndicatorRepository {
                 parameters, created_at, updated_at
             FROM technical_indicator
             ORDER BY code
-            "#
+            "#,
         )
         .fetch_all(DbExecutor::get_pool(self))
         .await?;
@@ -164,7 +164,7 @@ impl IndicatorRepository for PgIndicatorRepository {
             ) VALUES (
                 $1, $2, $3, $4, $5
             )
-            "#
+            "#,
         )
         .bind(indicator.time)
         .bind(indicator.instrument_id)
@@ -191,7 +191,7 @@ impl IndicatorRepository for PgIndicatorRepository {
                 ) VALUES (
                     $1, $2, $3, $4, $5
                 )
-                "#
+                "#,
             )
             .bind(indicator.time)
             .bind(indicator.instrument_id)
@@ -226,7 +226,7 @@ impl IndicatorRepository for PgIndicatorRepository {
             AND time BETWEEN $3 AND $4
             ORDER BY time DESC
             LIMIT $5 OFFSET $6
-            "#
+            "#,
         )
         .bind(instrument_id)
         .bind(indicator_id)

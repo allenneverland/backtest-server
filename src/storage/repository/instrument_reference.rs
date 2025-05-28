@@ -27,7 +27,10 @@ impl InstrumentReferenceRepository {
     }
 
     /// 創建金融商品參考
-    pub async fn create(&self, instrument: InstrumentReferenceInsert) -> Result<InstrumentReference> {
+    pub async fn create(
+        &self,
+        instrument: InstrumentReferenceInsert,
+    ) -> Result<InstrumentReference> {
         let now = Utc::now();
 
         let result = sqlx::query!(
@@ -111,7 +114,11 @@ impl InstrumentReferenceRepository {
     }
 
     /// 獲取活躍的金融商品參考列表
-    pub async fn list_active(&self, limit: Option<i64>, offset: Option<i64>) -> Result<Vec<InstrumentReference>> {
+    pub async fn list_active(
+        &self,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<InstrumentReference>> {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
 
@@ -137,7 +144,11 @@ impl InstrumentReferenceRepository {
     }
 
     /// 更新金融商品參考
-    pub async fn update(&self, instrument_id: i32, updates: InstrumentReferenceInsert) -> Result<InstrumentReference> {
+    pub async fn update(
+        &self,
+        instrument_id: i32,
+        updates: InstrumentReferenceInsert,
+    ) -> Result<InstrumentReference> {
         let now = Utc::now();
 
         sqlx::query!(
@@ -322,10 +333,11 @@ mod tests {
 
         // 獲取活躍商品列表
         let active_list = repo.list_active(Some(10), Some(0)).await?;
-        
+
         // 應該只有2個活躍商品
         assert!(active_list.len() >= 2);
-        let our_instruments: Vec<_> = active_list.iter()
+        let our_instruments: Vec<_> = active_list
+            .iter()
             .filter(|inst| created_ids.contains(&inst.instrument_id))
             .collect();
         assert_eq!(our_instruments.len(), 2);

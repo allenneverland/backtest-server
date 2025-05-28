@@ -78,7 +78,7 @@ impl AggregateRepository for PgAggregateRepository {
             WHERE instrument_id = $1
             AND bucket BETWEEN $2 AND $3
             ORDER BY bucket
-            "#
+            "#,
         )
         .bind(instrument_id)
         .bind(time_range.start)
@@ -110,7 +110,7 @@ impl AggregateRepository for PgAggregateRepository {
             WHERE instrument_id = ANY($1)
             AND bucket BETWEEN $2 AND $3
             ORDER BY instrument_id, bucket
-            "#
+            "#,
         )
         .bind(instrument_ids)
         .bind(time_range.start)

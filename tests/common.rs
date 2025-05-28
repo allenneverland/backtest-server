@@ -9,8 +9,7 @@ pub async fn setup_test_db() -> PgPool {
             "postgresql://backtest_user:backtest_pass@backtest-db:5432/backtest".to_string()
         } else {
             // In CI or local testing, use localhost
-            "postgresql://backtest_user:backtest_pass@localhost:5432/backtest"
-                .to_string()
+            "postgresql://backtest_user:backtest_pass@localhost:5432/backtest".to_string()
         }
     });
 

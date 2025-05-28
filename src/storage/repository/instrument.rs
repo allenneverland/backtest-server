@@ -718,8 +718,8 @@ mod tests {
     use std::str::FromStr;
 
     async fn setup_test_db() -> PgPool {
-        let database_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/testdb".to_string());
+        let database_url = std::env::var("BACKTEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://backtest_user:backtest_pass@localhost:5432/backtest".to_string());
 
         PgPoolOptions::new()
             .max_connections(5)

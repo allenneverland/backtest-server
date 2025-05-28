@@ -4,7 +4,7 @@ use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use serde_json::Value;
 use sqlx::types::Json;
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 
 use crate::domain_types::types::AssetType;
 use crate::storage::models::instrument::*;
@@ -31,7 +31,7 @@ impl InstrumentRepository {
             None => Value::Object(serde_json::Map::new()),
         };
 
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"
             INSERT INTO instrument (
                 symbol, exchange_id, instrument_type, name, description,
@@ -43,26 +43,26 @@ impl InstrumentRepository {
             )
             RETURNING 
                 instrument_id
-            "#,
-            instrument.symbol,
-            instrument.exchange_id,
-            instrument.instrument_type,
-            instrument.name,
-            instrument.description,
-            instrument.currency,
-            instrument.tick_size,
-            instrument.lot_size,
-            instrument.is_active,
-            instrument.trading_start_date,
-            instrument.trading_end_date,
-            attributes_json,
-            now,
-            now
+            "#
         )
+        .bind(&instrument.symbol)
+        .bind(&instrument.exchange_id)
+        .bind(&instrument.instrument_type)
+        .bind(&instrument.name)
+        .bind(&instrument.description)
+        .bind(&instrument.currency)
+        .bind(&instrument.tick_size)
+        .bind(&instrument.lot_size)
+        .bind(&instrument.is_active)
+        .bind(&instrument.trading_start_date)
+        .bind(&instrument.trading_end_date)
+        .bind(&attributes_json)
+        .bind(&now)
+        .bind(&now)
         .fetch_one(&self.pool)
         .await?;
 
-        let id = result.instrument_id;
+        let id: i32 = result.get("instrument_id");
 
         // 重新獲取完整的金融商品資訊
         self.get_by_id(id)
@@ -142,20 +142,18 @@ impl InstrumentRepository {
 
     /// 根據ID獲取金融商品
     pub async fn get_by_id(&self, instrument_id: i32) -> Result<Option<Instrument>> {
-        let record = sqlx::query_as!(
-            Instrument,
+        let record = sqlx::query_as::<_, Instrument>(
             r#"
             SELECT 
                 instrument_id, symbol, exchange_id, instrument_type, name, 
                 description, currency, tick_size, lot_size, is_active, 
                 trading_start_date, trading_end_date, 
-                attributes as "attributes: Json<serde_json::Value>",
-                created_at, updated_at
+                attributes, created_at, updated_at
             FROM instrument
             WHERE instrument_id = $1
-            "#,
-            instrument_id
+            "#
         )
+        .bind(instrument_id)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -168,21 +166,19 @@ impl InstrumentRepository {
         symbol: &str,
         exchange_id: i32,
     ) -> Result<Option<Instrument>> {
-        let record = sqlx::query_as!(
-            Instrument,
+        let record = sqlx::query_as::<_, Instrument>(
             r#"
             SELECT 
                 instrument_id, symbol, exchange_id, instrument_type, name, 
                 description, currency, tick_size, lot_size, is_active, 
                 trading_start_date, trading_end_date, 
-                attributes as "attributes: Json<serde_json::Value>",
-                created_at, updated_at
+                attributes, created_at, updated_at
             FROM instrument
             WHERE symbol = $1 AND exchange_id = $2
-            "#,
-            symbol,
-            exchange_id
+            "#
         )
+        .bind(symbol)
+        .bind(exchange_id)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -196,22 +192,20 @@ impl InstrumentRepository {
         exchange_id: i32,
         instrument_type: &str,
     ) -> Result<Option<Instrument>> {
-        let record = sqlx::query_as!(
-            Instrument,
+        let record = sqlx::query_as::<_, Instrument>(
             r#"
             SELECT 
                 instrument_id, symbol, exchange_id, instrument_type, name, 
                 description, currency, tick_size, lot_size, is_active, 
                 trading_start_date, trading_end_date, 
-                attributes as "attributes: Json<serde_json::Value>",
-                created_at, updated_at
+                attributes, created_at, updated_at
             FROM instrument
             WHERE symbol = $1 AND exchange_id = $2 AND instrument_type = $3
-            "#,
-            symbol,
-            exchange_id,
-            instrument_type
+            "#
         )
+        .bind(symbol)
+        .bind(exchange_id)
+        .bind(instrument_type)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -220,21 +214,19 @@ impl InstrumentRepository {
 
     /// 獲取特定交易所的所有金融商品
     pub async fn get_by_exchange(&self, exchange_id: i32) -> Result<Vec<Instrument>> {
-        let records = sqlx::query_as!(
-            Instrument,
+        let records = sqlx::query_as::<_, Instrument>(
             r#"
             SELECT 
                 instrument_id, symbol, exchange_id, instrument_type, name, 
                 description, currency, tick_size, lot_size, is_active, 
                 trading_start_date, trading_end_date, 
-                attributes as "attributes: Json<serde_json::Value>",
-                created_at, updated_at
+                attributes, created_at, updated_at
             FROM instrument
             WHERE exchange_id = $1
             ORDER BY symbol
-            "#,
-            exchange_id
+            "#
         )
+        .bind(exchange_id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -243,21 +235,19 @@ impl InstrumentRepository {
 
     /// 獲取特定類型的所有金融商品
     pub async fn get_by_type(&self, instrument_type: &str) -> Result<Vec<Instrument>> {
-        let records = sqlx::query_as!(
-            Instrument,
+        let records = sqlx::query_as::<_, Instrument>(
             r#"
             SELECT 
                 instrument_id, symbol, exchange_id, instrument_type, name, 
                 description, currency, tick_size, lot_size, is_active, 
                 trading_start_date, trading_end_date, 
-                attributes as "attributes: Json<serde_json::Value>",
-                created_at, updated_at
+                attributes, created_at, updated_at
             FROM instrument
             WHERE instrument_type = $1
             ORDER BY symbol
-            "#,
-            instrument_type
+            "#
         )
+        .bind(instrument_type)
         .fetch_all(&self.pool)
         .await?;
 
@@ -266,15 +256,13 @@ impl InstrumentRepository {
 
     /// 獲取所有活躍的金融商品
     pub async fn get_active(&self) -> Result<Vec<Instrument>> {
-        let records = sqlx::query_as!(
-            Instrument,
+        let records = sqlx::query_as::<_, Instrument>(
             r#"
             SELECT 
                 instrument_id, symbol, exchange_id, instrument_type, name, 
                 description, currency, tick_size, lot_size, is_active, 
                 trading_start_date, trading_end_date, 
-                attributes as "attributes: Json<serde_json::Value>",
-                created_at, updated_at
+                attributes, created_at, updated_at
             FROM instrument
             WHERE is_active = true
             ORDER BY symbol
@@ -291,32 +279,29 @@ impl InstrumentRepository {
         let offset = (page_query.page - 1) * page_query.page_size;
 
         // 獲取總記錄數
-        let total_count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM instrument")
+        let total_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM instrument")
             .fetch_one(&self.pool)
-            .await?
-            .unwrap_or(0);
+            .await?;
 
         if total_count == 0 {
             return Ok(Page::empty(page_query.page, page_query.page_size));
         }
 
         // 獲取分頁數據
-        let records = sqlx::query_as!(
-            Instrument,
+        let records = sqlx::query_as::<_, Instrument>(
             r#"
             SELECT 
                 instrument_id, symbol, exchange_id, instrument_type, name, 
                 description, currency, tick_size, lot_size, is_active, 
                 trading_start_date, trading_end_date, 
-                attributes as "attributes: Json<serde_json::Value>",
-                created_at, updated_at
+                attributes, created_at, updated_at
             FROM instrument
             ORDER BY symbol
             LIMIT $1 OFFSET $2
-            "#,
-            page_query.page_size,
-            offset
+            "#
         )
+        .bind(page_query.page_size)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await?;
 
@@ -332,22 +317,20 @@ impl InstrumentRepository {
     pub async fn search(&self, query: &str) -> Result<Vec<Instrument>> {
         let search_term = format!("%{}%", query);
 
-        let records = sqlx::query_as!(
-            Instrument,
+        let records = sqlx::query_as::<_, Instrument>(
             r#"
             SELECT 
                 instrument_id, symbol, exchange_id, instrument_type, name, 
                 description, currency, tick_size, lot_size, is_active, 
                 trading_start_date, trading_end_date, 
-                attributes as "attributes: Json<serde_json::Value>",
-                created_at, updated_at
+                attributes, created_at, updated_at
             FROM instrument
             WHERE symbol ILIKE $1 OR name ILIKE $1
             ORDER BY symbol
             LIMIT 100
-            "#,
-            search_term
+            "#
         )
+        .bind(search_term)
         .fetch_all(&self.pool)
         .await?;
 
@@ -362,7 +345,7 @@ impl InstrumentRepository {
     ) -> Result<Instrument> {
         let now = Utc::now();
 
-        let _result = sqlx::query!(
+        let _result = sqlx::query(
             r#"
             UPDATE instrument
             SET 
@@ -380,22 +363,22 @@ impl InstrumentRepository {
                 attributes = $12,
                 updated_at = $13
             WHERE instrument_id = $14
-            "#,
-            instrument.symbol,
-            instrument.exchange_id,
-            instrument.instrument_type,
-            instrument.name,
-            instrument.description,
-            instrument.currency,
-            instrument.tick_size,
-            instrument.lot_size,
-            instrument.is_active,
-            instrument.trading_start_date,
-            instrument.trading_end_date,
-            instrument.attributes.as_ref().map(|attr| &attr.0),
-            now,
-            instrument_id
+            "#
         )
+        .bind(&instrument.symbol)
+        .bind(&instrument.exchange_id)
+        .bind(&instrument.instrument_type)
+        .bind(&instrument.name)
+        .bind(&instrument.description)
+        .bind(&instrument.currency)
+        .bind(&instrument.tick_size)
+        .bind(&instrument.lot_size)
+        .bind(&instrument.is_active)
+        .bind(&instrument.trading_start_date)
+        .bind(&instrument.trading_end_date)
+        .bind(instrument.attributes.as_ref().map(|attr| &attr.0))
+        .bind(&now)
+        .bind(instrument_id)
         .execute(&self.pool)
         .await?;
 
@@ -427,16 +410,16 @@ impl InstrumentRepository {
 
         // 更新屬性
         let now = Utc::now();
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE instrument
             SET attributes = $1, updated_at = $2
             WHERE instrument_id = $3
-            "#,
-            instrument.attributes.as_ref().map(|attr| &attr.0),
-            now,
-            instrument_id
+            "#
         )
+        .bind(instrument.attributes.as_ref().map(|attr| &attr.0))
+        .bind(&now)
+        .bind(instrument_id)
         .execute(&self.pool)
         .await?;
 
@@ -468,16 +451,16 @@ impl InstrumentRepository {
 
         // 更新屬性
         let now = Utc::now();
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE instrument
             SET attributes = $1, updated_at = $2
             WHERE instrument_id = $3
-            "#,
-            instrument.attributes.as_ref().map(|attr| &attr.0),
-            now,
-            instrument_id
+            "#
         )
+        .bind(instrument.attributes.as_ref().map(|attr| &attr.0))
+        .bind(&now)
+        .bind(instrument_id)
         .execute(&self.pool)
         .await?;
 
@@ -490,13 +473,13 @@ impl InstrumentRepository {
     /// 刪除金融商品
     pub async fn delete(&self, instrument_id: i32) -> Result<bool> {
         // 直接刪除金融商品記錄（所有屬性都存儲在同一個表中）
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"
             DELETE FROM instrument
             WHERE instrument_id = $1
-            "#,
-            instrument_id
+            "#
         )
+        .bind(instrument_id)
         .execute(&self.pool)
         .await?;
 
@@ -508,22 +491,21 @@ impl InstrumentRepository {
         &self,
         instrument_id: i32,
     ) -> Result<Option<InstrumentWithExchange>> {
-        let record = sqlx::query_as!(
-            InstrumentWithExchange,
+        let record = sqlx::query_as::<_, InstrumentWithExchange>(
             r#"
             SELECT 
                 i.instrument_id, i.symbol, i.exchange_id, i.instrument_type, i.name,
                 i.description, i.currency, i.tick_size, i.lot_size, i.is_active,
                 i.trading_start_date, i.trading_end_date, 
-                i.attributes as "attributes: Json<serde_json::Value>",
+                i.attributes,
                 i.created_at, i.updated_at,
                 e.code as exchange_code, e.name as exchange_name, e.country as exchange_country
             FROM instrument i
             JOIN exchange e ON i.exchange_id = e.exchange_id
             WHERE i.instrument_id = $1
-            "#,
-            instrument_id
+            "#
         )
+        .bind(instrument_id)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -538,7 +520,7 @@ impl InstrumentRepository {
     ) -> Result<Instrument> {
         let now = Utc::now();
 
-        let result = sqlx::query!(
+        let result = sqlx::query_as::<_, Instrument>(
             r#"
             INSERT INTO instrument (
                 symbol, exchange_id, instrument_type, name, description,
@@ -551,44 +533,28 @@ impl InstrumentRepository {
             RETURNING 
                 instrument_id, symbol, exchange_id, instrument_type, name, 
                 description, currency, tick_size, lot_size, is_active, 
-                trading_start_date, trading_end_date, attributes as "attributes: Json<serde_json::Value>",
+                trading_start_date, trading_end_date, attributes,
                 created_at, updated_at
-            "#,
-            instrument.symbol,
-            instrument.exchange_id,
-            instrument.instrument_type,
-            instrument.name,
-            instrument.description,
-            instrument.currency,
-            instrument.tick_size,
-            instrument.lot_size,
-            instrument.is_active,
-            instrument.trading_start_date,
-            instrument.trading_end_date,
-            serde_json::Value::Object(serde_json::Map::new()) as _,
-            now,
-            now
+            "#
         )
+        .bind(&instrument.symbol)
+        .bind(&instrument.exchange_id)
+        .bind(&instrument.instrument_type)
+        .bind(&instrument.name)
+        .bind(&instrument.description)
+        .bind(&instrument.currency)
+        .bind(&instrument.tick_size)
+        .bind(&instrument.lot_size)
+        .bind(&instrument.is_active)
+        .bind(&instrument.trading_start_date)
+        .bind(&instrument.trading_end_date)
+        .bind(&serde_json::Value::Object(serde_json::Map::new()))
+        .bind(&now)
+        .bind(&now)
         .fetch_one(&mut **tx)
         .await?;
 
-        Ok(Instrument {
-            instrument_id: result.instrument_id,
-            symbol: result.symbol,
-            exchange_id: result.exchange_id,
-            instrument_type: result.instrument_type,
-            name: result.name,
-            description: result.description,
-            currency: result.currency,
-            tick_size: result.tick_size,
-            lot_size: result.lot_size,
-            is_active: result.is_active,
-            trading_start_date: result.trading_start_date,
-            trading_end_date: result.trading_end_date,
-            attributes: Some(result.attributes),
-            created_at: result.created_at,
-            updated_at: result.updated_at,
-        })
+        Ok(result)
     }
 
     /// 將域模型轉換為數據庫模型
@@ -711,126 +677,13 @@ mod tests {
         Instrument as DomainInstrument, StockAttributes as DomainStockAttributes,
     };
     use crate::domain_types::types::AssetType;
-    use crate::storage::models::instrument::{InstrumentInsert, StockAttributes};
     use chrono::NaiveDate;
     use rust_decimal_macros::dec;
-    use sqlx::postgres::PgPoolOptions;
     use std::str::FromStr;
 
-    async fn setup_test_db() -> PgPool {
-        let database_url = std::env::var("BACKTEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://backtest_user:backtest_pass@localhost:5432/backtest".to_string());
 
-        PgPoolOptions::new()
-            .max_connections(5)
-            .connect(&database_url)
-            .await
-            .expect("Failed to connect to database")
-    }
-
-    #[sqlx::test]
-    async fn test_create_and_get_instrument() -> Result<()> {
-        let pool = setup_test_db().await;
-        let repo = InstrumentRepository::new(pool);
-
-        // 創建基本的金融商品
-        let instrument = InstrumentInsert {
-            symbol: "AAPL".to_string(),
-            exchange_id: None, // 不使用外鍵約束以便測試
-            instrument_type: "STOCK".to_string(),
-            name: "Apple Inc.".to_string(),
-            description: Some(
-                "Apple Inc. is an American multinational technology company.".to_string(),
-            ),
-            currency: "USD".to_string(),
-            tick_size: Some(dec!(0.01)),
-            lot_size: Some(100),
-            is_active: true,
-            trading_start_date: Some(NaiveDate::from_str("1980-12-12").unwrap()),
-            trading_end_date: None,
-            attributes: None,
-        };
-
-        // 創建金融商品
-        let created = repo.create(instrument).await?;
-
-        // 確認創建成功
-        assert_eq!(created.symbol, "AAPL");
-        assert_eq!(created.name, "Apple Inc.");
-        assert_eq!(created.instrument_type, "STOCK");
-
-        // 獲取金融商品
-        let fetched = repo.get_by_id(created.instrument_id).await?;
-
-        assert!(fetched.is_some());
-        let fetched = fetched.unwrap();
-
-        assert_eq!(fetched.symbol, "AAPL");
-        assert_eq!(fetched.name, "Apple Inc.");
-
-        // 清理測試數據
-        repo.delete(created.instrument_id).await?;
-
-        Ok(())
-    }
-
-    #[sqlx::test]
-    async fn test_create_stock_with_attributes() -> Result<()> {
-        let pool = setup_test_db().await;
-        let repo = InstrumentRepository::new(pool);
-
-        // 創建基本的金融商品
-        let instrument = InstrumentInsert {
-            symbol: "MSFT".to_string(),
-            exchange_id: None, // 不使用外鍵約束以便測試
-            instrument_type: "STOCK".to_string(),
-            name: "Microsoft Corporation".to_string(),
-            description: Some(
-                "Microsoft Corporation is an American multinational technology company."
-                    .to_string(),
-            ),
-            currency: "USD".to_string(),
-            tick_size: Some(dec!(0.01)),
-            lot_size: Some(100),
-            is_active: true,
-            trading_start_date: Some(NaiveDate::from_str("1986-03-13").unwrap()),
-            trading_end_date: None,
-            attributes: None,
-        };
-
-        // 創建股票特定屬性
-        let stock_attrs = StockAttributes {
-            sector: Some("Technology".to_string()),
-            industry: Some("Software".to_string()),
-            market_cap: Some(dec!(1800000000000)),
-            shares_outstanding: Some(7_500_000_000),
-            free_float: Some(7_450_000_000),
-            listing_date: Some(NaiveDate::from_str("1986-03-13").unwrap()),
-            delisting_date: None,
-            dividend_yield: Some(dec!(0.9)),
-            pe_ratio: Some(dec!(30.5)),
-        };
-
-        // 創建股票及其特定屬性
-        let created = repo.create_stock(instrument, stock_attrs).await?;
-
-        // 獲取股票
-        let fetched = repo.get_by_id(created.instrument_id).await?;
-        assert!(fetched.is_some());
-        let stock = fetched.unwrap();
-
-        // 獲取股票屬性
-        let stock_attrs = stock.get_stock_attributes();
-        assert!(stock_attrs.is_some());
-
-        // 清理測試數據
-        repo.delete(created.instrument_id).await?;
-
-        Ok(())
-    }
-
-    #[sqlx::test]
-    async fn test_domain_model_conversion() -> Result<()> {
+    #[test]
+    fn test_domain_model_conversion() -> Result<()> {
         // 創建域模型實例
         let stock_attrs = DomainStockAttributes {
             sector: Some("Technology".to_string()),

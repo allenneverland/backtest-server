@@ -49,7 +49,7 @@ CREATE INDEX idx_backtest_result_metrics ON backtest_result USING GIN (metrics);
 CREATE TABLE backtest_trade (
     time TIMESTAMPTZ NOT NULL,
     result_id INTEGER NOT NULL REFERENCES backtest_result(result_id),
-    instrument_id INTEGER NOT NULL REFERENCES instrument(instrument_id),
+    instrument_id INTEGER NOT NULL REFERENCES instrument_reference(instrument_id),
     direction VARCHAR(10) NOT NULL, -- 'BUY', 'SELL'
     price NUMERIC(18,8) NOT NULL,
     quantity NUMERIC(24,8) NOT NULL,
@@ -85,7 +85,7 @@ SELECT add_compression_policy('backtest_trade', INTERVAL '60 days');
 CREATE TABLE backtest_position_snapshot (
     time TIMESTAMPTZ NOT NULL,
     result_id INTEGER NOT NULL REFERENCES backtest_result(result_id),
-    instrument_id INTEGER NOT NULL REFERENCES instrument(instrument_id),
+    instrument_id INTEGER NOT NULL REFERENCES instrument_reference(instrument_id),
     quantity NUMERIC(24,8) NOT NULL,
     avg_cost NUMERIC(18,8) NOT NULL,
     market_value NUMERIC(18,8) NOT NULL,

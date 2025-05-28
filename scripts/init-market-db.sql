@@ -1,123 +1,223 @@
 -- 市場數據資料庫初始化腳本
--- 模擬其他系統維護的市場數據結構
+-- 基於 docs/MARKET_DATABASE_SCHEMA.md 的規範
+-- 注意：確保連接到正確的數據庫 "marketdata"，而不是 "market_user"
 
--- 創建 TimescaleDB 擴展
-CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
+-- 啟用TimescaleDB擴展
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 
--- 基本市場數據表
-CREATE TABLE IF NOT EXISTS market_data (
-    id BIGSERIAL PRIMARY KEY,
-    timestamp TIMESTAMPTZ NOT NULL,
-    symbol VARCHAR(32) NOT NULL,
-    open_price DECIMAL(20,8) NOT NULL,
-    high_price DECIMAL(20,8) NOT NULL,
-    low_price DECIMAL(20,8) NOT NULL,
-    close_price DECIMAL(20,8) NOT NULL,
-    volume DECIMAL(20,8) NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+-- 交易所表
+CREATE TABLE IF NOT EXISTS exchange (
+    exchange_id SERIAL PRIMARY KEY,
+    code VARCHAR(10) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    country VARCHAR(50) NOT NULL,
+    timezone VARCHAR(50) NOT NULL,
+    operating_hours JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 創建時間序列超表
-SELECT create_hypertable('market_data', 'timestamp', if_not_exists => TRUE);
-
--- 創建索引以提高查詢性能
-CREATE INDEX IF NOT EXISTS idx_market_data_symbol_timestamp ON market_data (symbol, timestamp DESC);
-
--- 交易所信息表
-CREATE TABLE IF NOT EXISTS exchanges (
-    id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(64) NOT NULL UNIQUE,
-    code VARCHAR(16) NOT NULL UNIQUE,
-    timezone VARCHAR(32) NOT NULL DEFAULT 'UTC',
-    created_at TIMESTAMPTZ DEFAULT NOW()
+-- 金融商品表（整合所有商品類型）
+CREATE TABLE IF NOT EXISTS instrument (
+    instrument_id SERIAL PRIMARY KEY,
+    symbol VARCHAR(50) NOT NULL,
+    exchange_id INTEGER REFERENCES exchange(exchange_id),
+    instrument_type VARCHAR(20) NOT NULL CHECK (instrument_type IN ('STOCK', 'FUTURE', 'OPTIONCONTRACT', 'FOREX', 'CRYPTO')),
+    name VARCHAR(200) NOT NULL,
+    description TEXT,
+    currency VARCHAR(10) NOT NULL,
+    tick_size NUMERIC(18,6),
+    lot_size INTEGER,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    trading_start_date DATE,
+    trading_end_date DATE,
+    -- 使用JSONB存儲不同資產類型的特定屬性
+    attributes JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(symbol, exchange_id, instrument_type)
 );
 
--- 交易品種表
-CREATE TABLE IF NOT EXISTS instruments (
-    id BIGSERIAL PRIMARY KEY,
-    symbol VARCHAR(32) NOT NULL,
-    name VARCHAR(128),
-    exchange_id BIGINT REFERENCES exchanges(id),
-    instrument_type VARCHAR(32) NOT NULL,
-    base_currency VARCHAR(8),
-    quote_currency VARCHAR(8),
-    tick_size DECIMAL(20,8),
-    lot_size DECIMAL(20,8),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(symbol, exchange_id)
+-- 創建索引
+CREATE INDEX IF NOT EXISTS idx_instruments_symbol ON instrument(symbol);
+CREATE INDEX IF NOT EXISTS idx_instruments_type ON instrument(instrument_type);
+CREATE INDEX IF NOT EXISTS idx_instruments_exchange ON instrument(exchange_id);
+CREATE INDEX IF NOT EXISTS idx_instruments_attributes ON instrument USING GIN (attributes);
+
+-- 分鐘K線數據表
+CREATE TABLE IF NOT EXISTS minute_bar (
+    time TIMESTAMPTZ NOT NULL,
+    instrument_id INTEGER NOT NULL REFERENCES instrument(instrument_id),
+    open NUMERIC(18,8) NOT NULL,
+    high NUMERIC(18,8) NOT NULL,
+    low NUMERIC(18,8) NOT NULL,
+    close NUMERIC(18,8) NOT NULL,
+    volume NUMERIC(24,8) NOT NULL,
+    amount NUMERIC(24,8),
+    open_interest NUMERIC(24,8), -- 期貨/選擇權的未平倉量
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 插入一些測試數據
-INSERT INTO exchanges (name, code, timezone) VALUES
-('Binance', 'BINANCE', 'UTC'),
-('Coinbase Pro', 'COINBASE', 'UTC'),
-('NYSE', 'NYSE', 'America/New_York')
+-- 轉換為超表
+SELECT create_hypertable('minute_bar', 'time', 
+                         chunk_time_interval => INTERVAL '1 day',
+                         if_not_exists => TRUE);
+
+-- 創建索引
+CREATE INDEX IF NOT EXISTS idx_minute_bars_instrument_id ON minute_bar(instrument_id);
+CREATE INDEX IF NOT EXISTS idx_minute_bars_instrument_time ON minute_bar(instrument_id, time DESC);
+
+-- 設置數據壓縮策略
+ALTER TABLE minute_bar SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'instrument_id'
+);
+
+-- 分鐘K線數據將永久保存，設置較長時間的壓縮策略
+SELECT add_compression_policy('minute_bar', INTERVAL '90 days');
+
+-- Tick級別行情數據表
+CREATE TABLE IF NOT EXISTS tick (
+    time TIMESTAMPTZ NOT NULL,
+    instrument_id INTEGER NOT NULL REFERENCES instrument(instrument_id),
+    price NUMERIC(18,8) NOT NULL,
+    volume NUMERIC(24,8) NOT NULL,
+    trade_type SMALLINT,
+    -- 買賣盤口數據（適用於股票、期貨等）
+    bid_price_1 NUMERIC(18,8),
+    bid_volume_1 NUMERIC(24,8),
+    ask_price_1 NUMERIC(18,8),
+    ask_volume_1 NUMERIC(24,8),
+    -- 擴展盤口數據（使用數組存儲多檔）
+    bid_prices NUMERIC(18,8)[],
+    bid_volumes NUMERIC(24,8)[],
+    ask_prices NUMERIC(18,8)[],
+    ask_volumes NUMERIC(24,8)[],
+    -- 期貨/選擇權特有
+    open_interest NUMERIC(24,8),
+    -- 擴展信息
+    metadata JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 轉換為超表
+SELECT create_hypertable('tick', 'time', 
+                         chunk_time_interval => INTERVAL '1 hour',
+                         if_not_exists => TRUE);
+
+-- 創建索引
+CREATE INDEX IF NOT EXISTS idx_ticks_instrument_id ON tick(instrument_id);
+CREATE INDEX IF NOT EXISTS idx_ticks_instrument_time ON tick(instrument_id, time DESC);
+CREATE INDEX IF NOT EXISTS idx_ticks_trade_type ON tick(trade_type);
+
+-- 設置數據壓縮策略
+ALTER TABLE tick SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'instrument_id, trade_type'
+);
+
+-- 添加壓縮策略（7天前的數據自動壓縮）
+SELECT add_compression_policy('tick', INTERVAL '7 days');
+
+-- 建立每日交易量聚合視圖
+CREATE MATERIALIZED VIEW IF NOT EXISTS daily_volume_by_instrument
+WITH (timescaledb.continuous) AS
+SELECT
+    time_bucket('1 day', time) AS bucket,
+    instrument_id,
+    first(open, time) AS open,
+    max(high) AS high,
+    min(low) AS low,
+    last(close, time) AS close,
+    sum(volume) AS total_volume,
+    sum(amount) AS total_amount,
+    max(open_interest) AS max_open_interest
+FROM minute_bar
+GROUP BY bucket, instrument_id;
+
+-- 添加自動刷新策略（每日刷新）
+SELECT add_continuous_aggregate_policy('daily_volume_by_instrument',
+    start_offset => INTERVAL '1 month',
+    end_offset => INTERVAL '1 day',
+    schedule_interval => INTERVAL '1 day');
+
+-- 技術指標定義表
+CREATE TABLE IF NOT EXISTS technical_indicator (
+    indicator_id SERIAL PRIMARY KEY,
+    code VARCHAR(20) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    parameters JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 插入常用指標
+INSERT INTO technical_indicator (code, name, description, parameters) VALUES
+('SMA', 'Simple Moving Average', '簡單移動平均線', '{"periods": [5, 10, 20, 60, 120, 250]}'),
+('EMA', 'Exponential Moving Average', '指數移動平均線', '{"periods": [5, 10, 20, 60, 120, 250]}'),
+('RSI', 'Relative Strength Index', '相對強弱指標', '{"periods": [6, 14, 24]}'),
+('MACD', 'Moving Average Convergence Divergence', '移動平均匯聚背馳', '{"fast": 12, "slow": 26, "signal": 9}'),
+('BOLL', 'Bollinger Bands', '布林帶', '{"period": 20, "std_dev": 2}')
 ON CONFLICT (code) DO NOTHING;
 
-INSERT INTO instruments (symbol, name, exchange_id, instrument_type, base_currency, quote_currency, tick_size, lot_size) VALUES
-('BTCUSD', 'Bitcoin USD', (SELECT id FROM exchanges WHERE code = 'BINANCE'), 'CRYPTO', 'BTC', 'USD', 0.01, 0.0001),
-('ETHUSD', 'Ethereum USD', (SELECT id FROM exchanges WHERE code = 'BINANCE'), 'CRYPTO', 'ETH', 'USD', 0.01, 0.001),
-('AAPL', 'Apple Inc.', (SELECT id FROM exchanges WHERE code = 'NYSE'), 'STOCK', NULL, 'USD', 0.01, 1)
-ON CONFLICT (symbol, exchange_id) DO NOTHING;
+-- 商品日級指標數據表
+CREATE TABLE IF NOT EXISTS instrument_daily_indicator (
+    time TIMESTAMPTZ NOT NULL,
+    instrument_id INTEGER NOT NULL REFERENCES instrument(instrument_id),
+    indicator_id INTEGER NOT NULL REFERENCES technical_indicator(indicator_id),
+    parameters JSONB NOT NULL,
+    values JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
--- 插入測試市場數據
-INSERT INTO market_data (timestamp, symbol, open_price, high_price, low_price, close_price, volume) VALUES
--- Bitcoin 數據
-('2024-01-01 00:00:00+00', 'BTCUSD', 45000.0, 45100.0, 44900.0, 45050.0, 100.5),
-('2024-01-01 01:00:00+00', 'BTCUSD', 45050.0, 45200.0, 45000.0, 45150.0, 120.3),
-('2024-01-01 02:00:00+00', 'BTCUSD', 45150.0, 45300.0, 45100.0, 45250.0, 95.7),
-('2024-01-01 03:00:00+00', 'BTCUSD', 45250.0, 45400.0, 45200.0, 45350.0, 87.2),
-('2024-01-01 04:00:00+00', 'BTCUSD', 45350.0, 45500.0, 45300.0, 45450.0, 92.8),
+-- 轉換為超表
+SELECT create_hypertable('instrument_daily_indicator', 'time',
+                         chunk_time_interval => INTERVAL '1 month',
+                         if_not_exists => TRUE);
 
--- Ethereum 數據
-('2024-01-01 00:00:00+00', 'ETHUSD', 3500.0, 3520.0, 3480.0, 3510.0, 200.1),
-('2024-01-01 01:00:00+00', 'ETHUSD', 3510.0, 3540.0, 3500.0, 3535.0, 180.5),
-('2024-01-01 02:00:00+00', 'ETHUSD', 3535.0, 3560.0, 3525.0, 3550.0, 165.8),
-('2024-01-01 03:00:00+00', 'ETHUSD', 3550.0, 3580.0, 3540.0, 3570.0, 172.3),
-('2024-01-01 04:00:00+00', 'ETHUSD', 3570.0, 3600.0, 3560.0, 3590.0, 155.9),
+-- 創建索引
+CREATE INDEX IF NOT EXISTS idx_daily_indicators_instrument_time ON instrument_daily_indicator(instrument_id, time DESC);
+CREATE INDEX IF NOT EXISTS idx_daily_indicators_indicator ON instrument_daily_indicator(indicator_id);
 
--- Apple 股票數據
-('2024-01-01 09:30:00-05', 'AAPL', 185.50, 186.20, 185.10, 185.80, 1000000),
-('2024-01-01 10:30:00-05', 'AAPL', 185.80, 187.00, 185.60, 186.50, 850000),
-('2024-01-01 11:30:00-05', 'AAPL', 186.50, 187.20, 186.20, 186.90, 750000),
-('2024-01-01 12:30:00-05', 'AAPL', 186.90, 188.00, 186.70, 187.60, 920000),
-('2024-01-01 13:30:00-05', 'AAPL', 187.60, 188.50, 187.30, 188.20, 680000)
+-- 創建市場數據只讀角色（用於回測服務）
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'market_reader') THEN
+        CREATE ROLE market_reader WITH LOGIN PASSWORD 'market_reader_password';
+    END IF;
+END
+$$;
 
-ON CONFLICT DO NOTHING;
+-- 創建市場數據管理員角色（用於數據導入）
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'market_admin') THEN
+        CREATE ROLE market_admin WITH LOGIN PASSWORD 'market_admin_password';
+    END IF;
+END
+$$;
 
--- 創建權限（模擬唯讀環境）
--- 注意：在實際環境中，市場數據用戶應該只有讀取權限
-GRANT CONNECT ON DATABASE marketdata TO market_user;
-GRANT USAGE ON SCHEMA public TO market_user;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO market_user;
-GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO market_user;
+-- 創建數據導入角色
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'market_importer') THEN
+        CREATE ROLE market_importer WITH LOGIN PASSWORD 'market_importer_password';
+    END IF;
+END
+$$;
 
--- 設置默認權限以確保新表也只能讀取
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO market_user;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO market_user;
+-- 設置權限
+-- 只讀角色：只能查詢數據
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO market_reader;
+GRANT USAGE ON SCHEMA public TO market_reader;
 
--- 創建視圖以提供常用查詢
-CREATE OR REPLACE VIEW latest_prices AS
-SELECT DISTINCT ON (symbol) 
-    symbol,
-    timestamp,
-    close_price as price,
-    volume
-FROM market_data 
-ORDER BY symbol, timestamp DESC;
+-- 管理員角色：完全權限
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO market_admin;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO market_admin;
+GRANT USAGE ON SCHEMA public TO market_admin;
 
-CREATE OR REPLACE VIEW daily_ohlcv AS
-SELECT 
-    symbol,
-    date_trunc('day', timestamp) as date,
-    first(open_price, timestamp) as open,
-    max(high_price) as high,
-    min(low_price) as low,
-    last(close_price, timestamp) as close,
-    sum(volume) as volume
-FROM market_data
-GROUP BY symbol, date_trunc('day', timestamp)
-ORDER BY symbol, date DESC;
-
-GRANT SELECT ON latest_prices TO market_user;
-GRANT SELECT ON daily_ohlcv TO market_user;
+-- 導入角色：可插入市場數據
+GRANT SELECT, INSERT ON minute_bar, tick, instrument_daily_indicator TO market_importer;
+GRANT SELECT ON instrument, exchange, technical_indicator TO market_importer;
+GRANT USAGE ON SCHEMA public TO market_importer;

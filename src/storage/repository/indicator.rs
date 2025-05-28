@@ -75,8 +75,7 @@ impl IndicatorRepository for PgIndicatorRepository {
         &self,
         indicator: TechnicalIndicatorInsert,
     ) -> Result<TechnicalIndicator> {
-        let result = sqlx::query_as!(
-            TechnicalIndicator,
+        let result = sqlx::query_as::<_, TechnicalIndicator>(
             r#"
             INSERT INTO technical_indicator (
                 code, name, description, parameters
@@ -85,13 +84,13 @@ impl IndicatorRepository for PgIndicatorRepository {
             )
             RETURNING 
                 indicator_id, code, name, description, 
-                parameters as "parameters!: _", created_at, updated_at
-            "#,
-            indicator.code,
-            indicator.name,
-            indicator.description,
-            indicator.parameters as _
+                parameters, created_at, updated_at
+            "#
         )
+        .bind(indicator.code)
+        .bind(indicator.name)
+        .bind(indicator.description)
+        .bind(indicator.parameters)
         .fetch_one(DbExecutor::get_pool(self))
         .await?;
 
@@ -102,17 +101,16 @@ impl IndicatorRepository for PgIndicatorRepository {
         &self,
         indicator_id: i32,
     ) -> Result<Option<TechnicalIndicator>> {
-        let result = sqlx::query_as!(
-            TechnicalIndicator,
+        let result = sqlx::query_as::<_, TechnicalIndicator>(
             r#"
             SELECT 
                 indicator_id, code, name, description, 
-                parameters as "parameters!: _", created_at, updated_at
+                parameters, created_at, updated_at
             FROM technical_indicator
             WHERE indicator_id = $1
-            "#,
-            indicator_id
+            "#
         )
+        .bind(indicator_id)
         .fetch_optional(DbExecutor::get_pool(self))
         .await?;
 
@@ -123,17 +121,16 @@ impl IndicatorRepository for PgIndicatorRepository {
         &self,
         code: &str,
     ) -> Result<Option<TechnicalIndicator>> {
-        let result = sqlx::query_as!(
-            TechnicalIndicator,
+        let result = sqlx::query_as::<_, TechnicalIndicator>(
             r#"
             SELECT 
                 indicator_id, code, name, description, 
-                parameters as "parameters!: _", created_at, updated_at
+                parameters, created_at, updated_at
             FROM technical_indicator
             WHERE code = $1
-            "#,
-            code
+            "#
         )
+        .bind(code)
         .fetch_optional(DbExecutor::get_pool(self))
         .await?;
 
@@ -141,12 +138,11 @@ impl IndicatorRepository for PgIndicatorRepository {
     }
 
     async fn list_technical_indicators(&self) -> Result<Vec<TechnicalIndicator>> {
-        let results = sqlx::query_as!(
-            TechnicalIndicator,
+        let results = sqlx::query_as::<_, TechnicalIndicator>(
             r#"
             SELECT 
                 indicator_id, code, name, description, 
-                parameters as "parameters!: _", created_at, updated_at
+                parameters, created_at, updated_at
             FROM technical_indicator
             ORDER BY code
             "#
@@ -161,20 +157,20 @@ impl IndicatorRepository for PgIndicatorRepository {
         &self,
         indicator: InstrumentDailyIndicatorInsert,
     ) -> Result<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO instrument_daily_indicator (
                 time, instrument_id, indicator_id, parameters, values
             ) VALUES (
                 $1, $2, $3, $4, $5
             )
-            "#,
-            indicator.time,
-            indicator.instrument_id,
-            indicator.indicator_id,
-            indicator.parameters as _,
-            indicator.values as _
+            "#
         )
+        .bind(indicator.time)
+        .bind(indicator.instrument_id)
+        .bind(indicator.indicator_id)
+        .bind(indicator.parameters)
+        .bind(indicator.values)
         .execute(DbExecutor::get_pool(self))
         .await?;
 
@@ -188,20 +184,20 @@ impl IndicatorRepository for PgIndicatorRepository {
         let mut tx = DbExecutor::get_pool(self).begin().await?;
 
         for indicator in indicators {
-            sqlx::query!(
+            sqlx::query(
                 r#"
                 INSERT INTO instrument_daily_indicator (
                     time, instrument_id, indicator_id, parameters, values
                 ) VALUES (
                     $1, $2, $3, $4, $5
                 )
-                "#,
-                indicator.time,
-                indicator.instrument_id,
-                indicator.indicator_id,
-                indicator.parameters as _,
-                indicator.values as _
+                "#
             )
+            .bind(indicator.time)
+            .bind(indicator.instrument_id)
+            .bind(indicator.indicator_id)
+            .bind(indicator.parameters)
+            .bind(indicator.values)
             .execute(&mut *tx)
             .await?;
         }
@@ -219,26 +215,25 @@ impl IndicatorRepository for PgIndicatorRepository {
     ) -> Result<Page<InstrumentDailyIndicator>> {
         let offset = (page.page - 1) * page.page_size;
 
-        let indicators = sqlx::query_as!(
-            InstrumentDailyIndicator,
+        let indicators = sqlx::query_as::<_, InstrumentDailyIndicator>(
             r#"
             SELECT 
                 time, instrument_id, indicator_id, 
-                parameters as "parameters!: _", values as "values!: _", created_at
+                parameters, values, created_at
             FROM instrument_daily_indicator
             WHERE instrument_id = $1
             AND indicator_id = $2
             AND time BETWEEN $3 AND $4
             ORDER BY time DESC
             LIMIT $5 OFFSET $6
-            "#,
-            instrument_id,
-            indicator_id,
-            time_range.start,
-            time_range.end,
-            page.page_size,
-            offset
+            "#
         )
+        .bind(instrument_id)
+        .bind(indicator_id)
+        .bind(time_range.start)
+        .bind(time_range.end)
+        .bind(page.page_size)
+        .bind(offset)
         .fetch_all(DbExecutor::get_pool(self))
         .await?;
 

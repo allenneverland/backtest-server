@@ -62,28 +62,27 @@ impl AggregateRepository for PgAggregateRepository {
         instrument_id: i32,
         time_range: TimeRange,
     ) -> Result<Vec<DailyVolumeByInstrument>> {
-        let results = sqlx::query_as!(
-            DailyVolumeByInstrument,
+        let results = sqlx::query_as::<_, DailyVolumeByInstrument>(
             r#"
             SELECT
-                bucket as "bucket!", 
-                instrument_id as "instrument_id!", 
-                open as "open!: _",
-                high as "high!: _",
-                low as "low!: _",
-                close as "close!: _",
-                total_volume as "total_volume!: _",
-                total_amount as "total_amount: _",
-                max_open_interest as "max_open_interest: _"
+                bucket, 
+                instrument_id, 
+                open,
+                high,
+                low,
+                close,
+                total_volume,
+                total_amount,
+                max_open_interest
             FROM daily_volume_by_instrument
             WHERE instrument_id = $1
             AND bucket BETWEEN $2 AND $3
             ORDER BY bucket
-            "#,
-            instrument_id,
-            time_range.start,
-            time_range.end
+            "#
         )
+        .bind(instrument_id)
+        .bind(time_range.start)
+        .bind(time_range.end)
         .fetch_all(DbExecutor::get_pool(self))
         .await?;
 
@@ -95,28 +94,27 @@ impl AggregateRepository for PgAggregateRepository {
         instrument_ids: &[i32],
         time_range: TimeRange,
     ) -> Result<Vec<DailyVolumeByInstrument>> {
-        let results = sqlx::query_as!(
-            DailyVolumeByInstrument,
+        let results = sqlx::query_as::<_, DailyVolumeByInstrument>(
             r#"
             SELECT
-                bucket as "bucket!",
-                instrument_id as "instrument_id!", 
-                open as "open!: _",
-                high as "high!: _",
-                low as "low!: _",
-                close as "close!: _",
-                total_volume as "total_volume!: _",
-                total_amount as "total_amount: _",
-                max_open_interest as "max_open_interest: _"
+                bucket,
+                instrument_id,
+                open,
+                high,
+                low,
+                close,
+                total_volume,
+                total_amount,
+                max_open_interest
             FROM daily_volume_by_instrument
             WHERE instrument_id = ANY($1)
             AND bucket BETWEEN $2 AND $3
             ORDER BY instrument_id, bucket
-            "#,
-            instrument_ids,
-            time_range.start,
-            time_range.end
+            "#
         )
+        .bind(instrument_ids)
+        .bind(time_range.start)
+        .bind(time_range.end)
         .fetch_all(DbExecutor::get_pool(self))
         .await?;
 

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 
 use crate::storage::{
     models::market_data::{
@@ -183,18 +183,21 @@ impl PgMarketDataRepository {
         &self,
         instrument_id: i32,
     ) -> Result<Option<TimeRange>> {
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"
             SELECT MIN(time) as min_time, MAX(time) as max_time
             FROM minute_bar
             WHERE instrument_id = $1
-            "#,
-            instrument_id
+            "#
         )
+        .bind(instrument_id)
         .fetch_one(&self.pool)
         .await?;
 
-        match (result.min_time, result.max_time) {
+        let min_time = result.get::<Option<chrono::DateTime<chrono::Utc>>, _>("min_time");
+        let max_time = result.get::<Option<chrono::DateTime<chrono::Utc>>, _>("max_time");
+        
+        match (min_time, max_time) {
             (Some(min_time), Some(max_time)) => Ok(Some(TimeRange::new(min_time, max_time))),
             _ => Ok(None),
         }
@@ -281,18 +284,21 @@ impl PgMarketDataRepository {
         &self,
         instrument_id: i32,
     ) -> Result<Option<TimeRange>> {
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"
             SELECT MIN(time) as min_time, MAX(time) as max_time
             FROM tick
             WHERE instrument_id = $1
-            "#,
-            instrument_id
+            "#
         )
+        .bind(instrument_id)
         .fetch_one(&self.pool)
         .await?;
 
-        match (result.min_time, result.max_time) {
+        let min_time = result.get::<Option<chrono::DateTime<chrono::Utc>>, _>("min_time");
+        let max_time = result.get::<Option<chrono::DateTime<chrono::Utc>>, _>("max_time");
+        
+        match (min_time, max_time) {
             (Some(min_time), Some(max_time)) => Ok(Some(TimeRange::new(min_time, max_time))),
             _ => Ok(None),
         }

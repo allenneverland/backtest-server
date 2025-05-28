@@ -20,7 +20,7 @@ jobs:
   # 先運行格式檢查，這個最快
   fmt:
     name: Format Check
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
     - name: Checkout code
       uses: actions/checkout@v4.1.1
@@ -35,7 +35,7 @@ jobs:
 
   test-and-clippy:
     name: Test Suite and Clippy
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 40  # 增加到 40 分鐘
     needs: fmt  # 等待格式檢查完成
     
@@ -168,8 +168,8 @@ jobs:
         
     - name: Run database migrations for backtest database
       env:
+        DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
         MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
-        BACKTEST_DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
         RUST_LOG: sqlx=debug,backtest_server=debug
         PGPASSWORD: backtest_pass
       run: |
@@ -183,7 +183,7 @@ jobs:
       env:
         SQLX_OFFLINE: true
         MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
-        BACKTEST_DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
+        DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
       run: |
         echo "Building test binaries at $(date)"
         cargo test --no-run --all-features
@@ -193,7 +193,7 @@ jobs:
       env:
         SQLX_OFFLINE: true
         MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
-        BACKTEST_DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
+        DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
         REDIS_URL: redis://localhost:6379
         RABBITMQ_URL: amqp://guest:guest@localhost:5672
         RUST_LOG: debug
@@ -207,20 +207,20 @@ jobs:
       env:
         SQLX_OFFLINE: true
         MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
-        BACKTEST_DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
+        DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
       run: cargo test --doc
     
     - name: Run clippy
       env:
         SQLX_OFFLINE: true
         MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
-        BACKTEST_DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
+        DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
       run: cargo clippy --all-targets --all-features -- -D warnings
 
 
   integration:
     name: Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 20
     needs: test-and-clippy  # 等待測試和 clippy 完成
     
@@ -352,7 +352,7 @@ jobs:
     - name: Run database migrations for backtest database
       env:
         MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
-        BACKTEST_DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
+        DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
         RUST_LOG: sqlx=debug,backtest_server=debug
         PGPASSWORD: backtest_pass
       run: |
@@ -366,7 +366,7 @@ jobs:
       env:
         SQLX_OFFLINE: true
         MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
-        BACKTEST_DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
+        DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
         REDIS_URL: redis://localhost:6379
         RABBITMQ_URL: amqp://guest:guest@localhost:5672
         RUST_LOG: debug

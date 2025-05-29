@@ -50,8 +50,3 @@ strategy_timeout_secs = 30
 max_memory_mb = 128
 sandbox_enabled = true
 
-[data_ingestion]
-batch_size = 1000
-validation_enabled = true
-parallel_processing = true
-max_file_size_mb = 100

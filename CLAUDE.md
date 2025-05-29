@@ -117,7 +117,6 @@ The project uses Rust's modern module system with clear separation of concerns:
 ```
 src/
 ├── domain_types/     # Core data structures shared across the system
-├── data_ingestion/   # Raw data loading and validation
 ├── data_provider/    # Unified data access layer
 ├── strategy/         # Strategy management and lifecycle
 ├── dsl/             # Domain-specific language for strategies

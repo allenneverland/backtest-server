@@ -173,9 +173,8 @@ jobs:
         RUST_LOG: sqlx=debug,backtest_server=debug
         PGPASSWORD: backtest_pass
       run: |
-        echo "Running backtest database migrations..."
-        cargo build --bin migrate
-        ./target/debug/migrate run --target backtest || (echo "Backtest migration failed!" && exit 1)
+        echo "Running backtest database migrations with sqlx-cli..."
+        sqlx migrate run --database-url postgresql://backtest_user:backtest_pass@localhost:5432/backtest || (echo "Backtest migration failed!" && exit 1)
         echo "Verifying backtest database structure..."
         psql -h localhost -p 5432 -U backtest_user -d backtest -c "\dt" || true
 
@@ -352,9 +351,8 @@ jobs:
         RUST_LOG: sqlx=debug,backtest_server=debug
         PGPASSWORD: backtest_pass
       run: |
-        echo "Running backtest database migrations..."
-        cargo build --bin migrate
-        ./target/debug/migrate run --target backtest || (echo "Backtest migration failed!" && exit 1)
+        echo "Running backtest database migrations with sqlx-cli..."
+        sqlx migrate run --database-url postgresql://backtest_user:backtest_pass@localhost:5432/backtest || (echo "Backtest migration failed!" && exit 1)
         echo "Verifying backtest database structure..."
         psql -h localhost -p 5432 -U backtest_user -d backtest -c "\dt" || true
 

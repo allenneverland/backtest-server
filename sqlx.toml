@@ -1,0 +1,18 @@
+# SQLx 配置檔案
+# 用於 sqlx-cli 工具的設定
+
+[sqlx]
+# 遷移目錄
+migrations = "migrations"
+
+# 資料庫 URL（主要用於開發環境）
+database_url = "postgresql://backtest_user:backtest_pass@localhost:5432/backtest"
+
+# 連接資料庫的超時時間（秒）
+connect_timeout = 30
+
+# 查詢超時時間（秒）
+query_timeout = 60
+
+# 是否啟用離線模式（用於編譯時檢查）
+offline = false

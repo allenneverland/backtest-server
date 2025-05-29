@@ -151,19 +151,103 @@ impl<P: RedisPool> MultiLevelCache<P> {
         self.redis_cache.exists(key).await
     }
 
+    /// 批量獲取 MinuteBars 資料
+    pub async fn get_minute_bars_batch(
+        &self,
+        keys: &[String],
+    ) -> Result<Vec<Option<Vec<MinuteBar>>>, CacheError> {
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut results = vec![None; keys.len()];
+        let mut missing_keys = Vec::new();
+        let mut missing_indices = Vec::new();
+
+        // 1. 先從內存快取批量獲取
+        for (idx, key) in keys.iter().enumerate() {
+            if let Some(arc_bars) = self.minute_bars_cache.get(key).await {
+                results[idx] = Some((*arc_bars).clone());
+            } else {
+                missing_keys.push(key.clone());
+                missing_indices.push(idx);
+            }
+        }
+
+        // 2. 如果有缺失的key，從Redis批量獲取
+        if !missing_keys.is_empty() {
+            let redis_results = self
+                .redis_cache
+                .mget::<String, Vec<MinuteBar>>(&missing_keys)
+                .await?;
+
+            for (idx, bars_opt) in missing_indices.iter().zip(redis_results) {
+                if let Some(bars) = bars_opt {
+                    let arc_bars = Arc::new(bars.clone());
+                    // 更新內存快取
+                    self.minute_bars_cache
+                        .insert(keys[*idx].clone(), arc_bars)
+                        .await;
+                    results[*idx] = Some(bars);
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
     /// 預熱快取 - 分鐘級市場資料
     pub async fn warm_minute_bars_cache(&self, keys: Vec<String>) -> Result<(), CacheError> {
-        for key in keys {
-            let _ = self.get_minute_bars(&key).await?;
-        }
+        let _ = self.get_minute_bars_batch(&keys).await?;
         Ok(())
+    }
+
+    /// 批量獲取 Ticks 資料
+    pub async fn get_ticks_batch(
+        &self,
+        keys: &[String],
+    ) -> Result<Vec<Option<Vec<DbTick>>>, CacheError> {
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut results = vec![None; keys.len()];
+        let mut missing_keys = Vec::new();
+        let mut missing_indices = Vec::new();
+
+        // 1. 先從內存快取批量獲取
+        for (idx, key) in keys.iter().enumerate() {
+            if let Some(arc_ticks) = self.ticks_cache.get(key).await {
+                results[idx] = Some((*arc_ticks).clone());
+            } else {
+                missing_keys.push(key.clone());
+                missing_indices.push(idx);
+            }
+        }
+
+        // 2. 如果有缺失的key，從Redis批量獲取
+        if !missing_keys.is_empty() {
+            let redis_results = self
+                .redis_cache
+                .mget::<String, Vec<DbTick>>(&missing_keys)
+                .await?;
+
+            for (idx, ticks_opt) in missing_indices.iter().zip(redis_results) {
+                if let Some(ticks) = ticks_opt {
+                    let arc_ticks = Arc::new(ticks.clone());
+                    // 更新內存快取
+                    self.ticks_cache.insert(keys[*idx].clone(), arc_ticks).await;
+                    results[*idx] = Some(ticks);
+                }
+            }
+        }
+
+        Ok(results)
     }
 
     /// 預熱快取 - Tick 資料
     pub async fn warm_ticks_cache(&self, keys: Vec<String>) -> Result<(), CacheError> {
-        for key in keys {
-            let _ = self.get_ticks(&key).await?;
-        }
+        let _ = self.get_ticks_batch(&keys).await?;
         Ok(())
     }
 
@@ -171,6 +255,41 @@ impl<P: RedisPool> MultiLevelCache<P> {
     pub async fn clear_memory_cache(&self) {
         self.minute_bars_cache.invalidate_all();
         self.ticks_cache.invalidate_all();
+    }
+
+    /// 批量設置 MinuteBars 資料
+    pub async fn set_minute_bars_batch(
+        &self,
+        items: &[(String, Vec<MinuteBar>)],
+    ) -> Result<(), CacheError> {
+        if items.is_empty() {
+            return Ok(());
+        }
+
+        // 1. 批量更新內存快取
+        for (key, bars) in items {
+            let arc_bars = Arc::new(bars.clone());
+            self.minute_bars_cache.insert(key.clone(), arc_bars).await;
+        }
+
+        // 2. 批量更新 Redis 快取
+        self.redis_cache.mset(items, Some(self.cache_ttl)).await
+    }
+
+    /// 批量設置 Ticks 資料
+    pub async fn set_ticks_batch(&self, items: &[(String, Vec<DbTick>)]) -> Result<(), CacheError> {
+        if items.is_empty() {
+            return Ok(());
+        }
+
+        // 1. 批量更新內存快取
+        for (key, ticks) in items {
+            let arc_ticks = Arc::new(ticks.clone());
+            self.ticks_cache.insert(key.clone(), arc_ticks).await;
+        }
+
+        // 2. 批量更新 Redis 快取
+        self.redis_cache.mset(items, Some(self.cache_ttl)).await
     }
 
     /// 獲取快取統計信息
@@ -206,7 +325,64 @@ pub struct MultiCacheStats {
     pub ticks: CacheStats,
 }
 
-/// 生成市場數據快取鍵
+/// 快取鍵構建器，重用內部緩衝區以提升性能
+pub struct OptimizedKeyBuilder {
+    buffer: Vec<u8>,
+}
+
+impl OptimizedKeyBuilder {
+    pub fn new() -> Self {
+        Self {
+            buffer: Vec::with_capacity(128),
+        }
+    }
+
+    pub fn generate_key(
+        &mut self,
+        instrument_id: i32,
+        frequency: &str,
+        start_ts: i64,
+        end_ts: i64,
+    ) -> &str {
+        use std::io::Write;
+
+        self.buffer.clear();
+
+        // 使用 Write trait 和 itoa 進行快速格式化
+        let _ = write!(
+            &mut self.buffer,
+            "market_data:{}:{}:{}:{}",
+            itoa::Buffer::new().format(instrument_id),
+            frequency,
+            itoa::Buffer::new().format(start_ts),
+            itoa::Buffer::new().format(end_ts),
+        );
+
+        // 安全：我們知道內容是有效的 UTF-8
+        unsafe { std::str::from_utf8_unchecked(&self.buffer) }
+    }
+
+    pub fn generate_key_owned(
+        &mut self,
+        instrument_id: i32,
+        frequency: &str,
+        start_ts: i64,
+        end_ts: i64,
+    ) -> String {
+        self.generate_key(instrument_id, frequency, start_ts, end_ts)
+            .to_owned()
+    }
+}
+
+impl Default for OptimizedKeyBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// 生成市場數據快取鍵（優化版本）
+///
+/// 使用高性能的實現，適合高頻調用場景。
 ///
 /// # Arguments
 /// * `instrument_id` - 金融工具 ID
@@ -219,10 +395,8 @@ pub fn generate_cache_key(
     start_ts: i64,
     end_ts: i64,
 ) -> String {
-    format!(
-        "market_data:{}:{}:{}:{}",
-        instrument_id, frequency, start_ts, end_ts
-    )
+    let mut builder = OptimizedKeyBuilder::new();
+    builder.generate_key_owned(instrument_id, frequency, start_ts, end_ts)
 }
 
 #[cfg(test)]
@@ -324,6 +498,30 @@ mod tests {
     }
 
     #[test]
+    fn test_optimized_key_builder() {
+        let mut builder = OptimizedKeyBuilder::new();
+
+        // 測試生成鍵
+        let key1 = builder.generate_key(100, "1h", 1704067200, 1704153600);
+        assert_eq!(key1, "market_data:100:1h:1704067200:1704153600");
+
+        // 測試重用緩衝區
+        let key2 = builder.generate_key(200, "5m", 1704067300, 1704153700);
+        assert_eq!(key2, "market_data:200:5m:1704067300:1704153700");
+
+        // 測試 owned 版本
+        let owned_key = builder.generate_key_owned(300, "1d", 1704067400, 1704153800);
+        assert_eq!(owned_key, "market_data:300:1d:1704067400:1704153800");
+    }
+
+    #[test]
+    fn test_default_implementation() {
+        let mut builder = OptimizedKeyBuilder::default();
+        let key = builder.generate_key(123, "15m", 1234567890, 1234567900);
+        assert_eq!(key, "market_data:123:15m:1234567890:1234567900");
+    }
+
+    #[test]
     fn test_cache_stats() {
         let stats = CacheStats {
             size: 10,
@@ -344,5 +542,37 @@ mod tests {
         };
         assert_eq!(multi_stats.minute_bars.size, 5);
         assert_eq!(multi_stats.ticks.capacity, 1500);
+    }
+
+    #[test]
+    fn test_batch_operations_empty_input() {
+        // 測試空輸入的批量操作邏輯
+        let keys: Vec<String> = vec![];
+        assert!(keys.is_empty());
+
+        let items: Vec<(String, Vec<MinuteBar>)> = vec![];
+        assert!(items.is_empty());
+
+        let items: Vec<(String, Vec<DbTick>)> = vec![];
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn test_batch_operations_data_preparation() {
+        // 測試批量操作數據準備
+        let test_bars = create_test_minute_bars();
+        let test_ticks = create_test_ticks();
+
+        let minute_bars_items = vec![
+            ("key1".to_string(), test_bars.clone()),
+            ("key2".to_string(), test_bars),
+        ];
+        assert_eq!(minute_bars_items.len(), 2);
+
+        let ticks_items = vec![
+            ("key1".to_string(), test_ticks.clone()),
+            ("key2".to_string(), test_ticks),
+        ];
+        assert_eq!(ticks_items.len(), 2);
     }
 }

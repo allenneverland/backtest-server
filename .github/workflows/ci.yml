@@ -181,7 +181,6 @@ jobs:
 
     - name: Build test binaries
       env:
-        SQLX_OFFLINE: true
         MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
         DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
       run: |
@@ -191,7 +190,6 @@ jobs:
         
     - name: Run tests
       env:
-        SQLX_OFFLINE: true
         MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
         DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
         REDIS_URL: redis://localhost:6379
@@ -205,14 +203,12 @@ jobs:
 
     - name: Run doc tests
       env:
-        SQLX_OFFLINE: true
         MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
         DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
       run: cargo test --doc
     
     - name: Run clippy
       env:
-        SQLX_OFFLINE: true
         MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
         DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
       run: cargo clippy --all-targets --all-features -- -D warnings
@@ -364,7 +360,6 @@ jobs:
 
     - name: Run integration tests
       env:
-        SQLX_OFFLINE: true
         MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
         DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
         REDIS_URL: redis://localhost:6379

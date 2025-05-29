@@ -147,18 +147,12 @@ src/data_provider/                  # 數據提供模組目錄
 └── iterator.rs                     # 市場數據迭代器實現
 
 # 策略與執行相關模組
-src/strategy/                       # 策略管理模組目錄
-├── loader.rs                       # 策略加載器
-├── lifecycle.rs                    # 策略生命週期管理
-├── registry.rs                     # 策略註冊表
+src/strategy/                       # 策略管理模組目錄（不再存儲策略，只處理執行）
+├── parser.rs                       # 策略 DSL 解析器（從 RabbitMQ 接收）
+├── executor.rs                     # 策略執行器
 ├── context.rs                      # 策略執行上下文
-├── snapshot.rs                     # 策略快照管理
-├── types.rs                        # 策略基本類型定義
-├── config_watcher.rs               # 配置文件監控
-└── version/                        # 策略版本管理子模組目錄
-    ├── manager.rs                  # 版本管理器
-    ├── storage.rs                  # 版本存儲實現
-    └── metadata.rs                 # 版本元數據結構
+├── runtime.rs                      # 策略運行時狀態管理
+└── types.rs                        # 策略執行相關類型
 
 src/execution/                      # 執行模擬器模組目錄
 ├── simulator.rs                    # 訂單執行模擬器
@@ -283,6 +277,8 @@ examples/                           # 示例代碼目錄
 ## 3.1 領域類型模組 (domain_types)
 
 此模組定義了整個應用程序中使用的核心金融數據結構和類型，基於 Polars 提供高效的數據處理能力。
+
+**注意**：此模組不包含策略定義相關類型，策略由外部 StratPlat 系統管理。
 
 **主要功能**:
 - 提供標準化的金融市場數據表示

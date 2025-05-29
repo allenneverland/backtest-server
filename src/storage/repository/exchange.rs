@@ -38,8 +38,8 @@ impl ExchangeRepository {
         .bind(&exchange.country)
         .bind(&exchange.timezone)
         .bind(&exchange.operating_hours)
-        .bind(&now)
-        .bind(&now)
+        .bind(now)
+        .bind(now)
         .fetch_one(&self.pool)
         .await?;
 
@@ -126,7 +126,7 @@ impl ExchangeRepository {
         .bind(&exchange.country)
         .bind(&exchange.timezone)
         .bind(&exchange.operating_hours)
-        .bind(&now)
+        .bind(now)
         .bind(exchange_id)
         .execute(&self.pool)
         .await?;
@@ -178,8 +178,8 @@ impl ExchangeRepository {
         .bind(&exchange.country)
         .bind(&exchange.timezone)
         .bind(&exchange.operating_hours)
-        .bind(&now)
-        .bind(&now)
+        .bind(now)
+        .bind(now)
         .fetch_one(&mut **tx)
         .await?;
 

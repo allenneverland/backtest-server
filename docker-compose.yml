@@ -12,12 +12,13 @@ services:
     environment:
       - RUST_BACKTRACE=${RUST_BACKTRACE}
       - RUST_LOG=${RUST_LOG}
-      - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+      - DATABASE_URL=postgres://${BACKTEST_DB_USER}:${BACKTEST_DB_PASSWORD}@${BACKTEST_DB_HOST}:${BACKTEST_DB_PORT}/${BACKTEST_DB_NAME}
+      - MARKET_DATABASE_URL=postgres://${MARKET_DB_USER}:${MARKET_DB_PASSWORD}@${MARKET_DB_HOST}:${MARKET_DB_PORT}/${MARKET_DB_NAME}
       - REDIS_URL=redis://${REDIS_HOST}:${REDIS_PORT}
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@${RABBITMQ_HOST}:${RABBITMQ_PORT}
     depends_on:
       - rabbitmq
-      - db
+      - backtest-db
       - redis
     command: >
       bash -c "
@@ -28,6 +29,7 @@ services:
       "
     networks:
       - backtest_server-network
+      - market_data-network
 
   rabbitmq:
     image: rabbitmq:3.11-management
@@ -46,18 +48,19 @@ services:
       retries: 5
 
   # TimescaleDB 數據庫
-  db:
+    # 回測資料庫 (讀寫)
+  backtest-db:
     image: timescale/timescaledb:latest-pg14
     environment:
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${BACKTEST_DB_USER}
+      - POSTGRES_PASSWORD=${BACKTEST_DB_PASSWORD}
+      - POSTGRES_DB=${BACKTEST_DB_NAME}
     volumes:
-      - db-data:/var/lib/postgresql/data
-      # 掛載遷移目錄到容器中
+      - backtest-db-data:/var/lib/postgresql/data
+      # 掛載回測遷移目錄到容器中
       - ./migrations:/app/migrations
     ports:
-      - "${DB_PORT}:5432"
+      - "${BACKTEST_DB_PORT}:5432"
     networks:
       - backtest_server-network
     command: >
@@ -67,7 +70,7 @@ services:
       -c timescaledb.max_background_workers=${TIMESCALEDB_MAX_BACKGROUND_WORKERS}
       -c timescaledb.telemetry_level=off
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${BACKTEST_DB_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -107,10 +110,13 @@ services:
 volumes:
   cargo-cache:
   target-cache:
-  db-data:
+  backtest-db-data:
   redis-data:
   rabbitmq_data:
 
 networks:
   backtest_server-network:
     driver: bridge
+  market_data-network:
+    external: true
+    name: marketdata-center_market_data-network

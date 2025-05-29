@@ -24,7 +24,8 @@ mod tests {
 
         // 類型檢查
         fn _ensure_config_works(cfg: &super::ApplicationConfig) {
-            let _ = &cfg.database;
+            let _ = &cfg.market_database;
+            let _ = &cfg.backtest_database;
             let _ = &cfg.log;
             let _ = &cfg.server;
         }

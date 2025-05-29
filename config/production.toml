@@ -1,8 +1,23 @@
 ## 生產環境配置
 
-[database]
-# 使用生產環境數據庫
-host = "db.production"
+[market_database]
+# 市場數據資料庫（唯讀）
+host = "marketdb.production"
+port = 5432
+username = "market_reader"
+password = "market_reader_prod"
+database = "marketdata_prod"
+connection_pool_size = 30
+max_connections = 60
+min_connections = 15
+# 優化連接生命週期
+max_lifetime_secs = 1800  # 秒, 30分鐘
+acquire_timeout_secs = 5  # 秒
+idle_timeout_secs = 600   # 秒, 10分鐘
+
+[backtest_database]
+# 回測資料庫（讀寫）
+host = "backtestdb.production"
 port = 5432
 username = "backtest_server"
 password = "production_password"

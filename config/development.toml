@@ -1,7 +1,21 @@
 ## 開發環境配置
 
-[database]
-# 使用開發環境數據庫
+[market_database]
+# 市場數據資料庫（唯讀）
+host = "db"  # 在Docker環境中使用服務名稱而非localhost
+port = 5432
+username = "market_reader"
+password = "market_reader_pass"
+database = "marketdata"
+connection_pool_size = 10
+max_connections = 10
+min_connections = 2
+max_lifetime_secs = 1800  # 秒, 30分鐘
+acquire_timeout_secs = 15  # 秒，增加超時時間
+idle_timeout_secs = 600   # 秒, 10分鐘
+
+[backtest_database]
+# 回測資料庫（讀寫）
 host = "db"  # 在Docker環境中使用服務名稱而非localhost
 port = 5432
 username = "backtest_server"

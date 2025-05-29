@@ -40,12 +40,28 @@ jobs:
     needs: fmt  # 等待格式檢查完成
     
     services:
-      postgres:
+      # 市場數據資料庫 (唯讀，由其他系統維護)
+      postgres-market:
         image: timescale/timescaledb:latest-pg14
         env:
-          POSTGRES_USER: backtest_server
-          POSTGRES_PASSWORD: backtest_server
-          POSTGRES_DB: backtest_server
+          POSTGRES_USER: market_reader
+          POSTGRES_PASSWORD: market_reader_password
+          POSTGRES_DB: marketdata
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5431:5432
+      
+      # 回測資料庫 (讀寫)
+      postgres-backtest:
+        image: timescale/timescaledb:latest-pg14
+        env:
+          POSTGRES_USER: backtest_user
+          POSTGRES_PASSWORD: backtest_pass
+          POSTGRES_DB: backtest
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -98,34 +114,117 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y pkg-config libssl-dev postgresql-client
 
-    - name: Setup database
+    - name: Setup market database
       env:
-        PGPASSWORD: backtest_server
+        PGPASSWORD: market_reader_password
       run: |
-        echo "Creating TimescaleDB extension..."
-        psql -h localhost -U backtest_server -d backtest_server -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
-        echo "TimescaleDB extension created successfully"
-        psql -h localhost -U backtest_server -d backtest_server -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
+        echo "Creating TimescaleDB extension in market database..."
+        psql -h localhost -p 5431 -U market_reader -d marketdata -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        echo "Market database TimescaleDB extension created successfully"
+
+    - name: Setup backtest database
+      env:
+        PGPASSWORD: backtest_pass
+      run: |
+        echo "Creating TimescaleDB extension in backtest database..."
+        psql -h localhost -p 5432 -U backtest_user -d backtest -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        echo "Backtest database TimescaleDB extension created successfully"
+
+    - name: Setup market database schema and test data
+      env:
+        PGPASSWORD: market_reader_password
+      run: |
+        echo "Initializing market database with proper schema..."
+        psql -h localhost -p 5431 -U market_reader -d marketdata -f scripts/init-market-db.sql
+        
+        echo "Adding test data for CI tests..."
+        psql -h localhost -p 5431 -U market_reader -d marketdata << 'EOF'
+        -- Insert test exchange
+        INSERT INTO exchange (code, name, country, timezone) VALUES 
+        ('TEST', 'Test Exchange', 'US', 'America/New_York')
+        ON CONFLICT (code) DO NOTHING;
+        
+        -- Insert test instruments
+        INSERT INTO instrument (symbol, exchange_id, instrument_type, name, currency, tick_size, lot_size) 
+        SELECT 'BTCUSD', exchange_id, 'CRYPTO', 'Bitcoin USD', 'USD', 0.01, 1
+        FROM exchange WHERE code = 'TEST'
+        ON CONFLICT (symbol, exchange_id, instrument_type) DO NOTHING;
+        
+        INSERT INTO instrument (symbol, exchange_id, instrument_type, name, currency, tick_size, lot_size) 
+        SELECT 'ETHUSD', exchange_id, 'CRYPTO', 'Ethereum USD', 'USD', 0.01, 1
+        FROM exchange WHERE code = 'TEST'
+        ON CONFLICT (symbol, exchange_id, instrument_type) DO NOTHING;
+        
+        -- Insert test minute_bar data
+        INSERT INTO minute_bar (time, instrument_id, open, high, low, close, volume, amount) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' minutes')::interval,
+          1,
+          45000.0 + random() * 100,
+          45100.0 + random() * 100,
+          44900.0 + random() * 100,
+          45050.0 + random() * 100,
+          100.5 + random() * 50,
+          (45000.0 + random() * 100) * (100.5 + random() * 50)
+        FROM generate_series(0, 1439) i  -- 24 hours of minute data
+        ON CONFLICT (time, instrument_id) DO NOTHING;
+        
+        INSERT INTO minute_bar (time, instrument_id, open, high, low, close, volume, amount) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' minutes')::interval,
+          2,
+          3000.0 + random() * 50,
+          3050.0 + random() * 50,
+          2950.0 + random() * 50,
+          3025.0 + random() * 50,
+          200.5 + random() * 100,
+          (3000.0 + random() * 50) * (200.5 + random() * 100)
+        FROM generate_series(0, 1439) i  -- 24 hours of minute data  
+        ON CONFLICT (time, instrument_id) DO NOTHING;
+        
+        -- Insert test tick data
+        INSERT INTO tick (time, instrument_id, price, volume, trade_type) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' seconds')::interval,
+          1,
+          45000.0 + random() * 100,
+          1.0 + random() * 10,
+          (random() * 3)::smallint
+        FROM generate_series(0, 3599) i  -- 1 hour of tick data
+        ON CONFLICT (time, instrument_id) DO NOTHING;
+        
+        INSERT INTO tick (time, instrument_id, price, volume, trade_type) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' seconds')::interval,
+          2,
+          3000.0 + random() * 50,
+          2.0 + random() * 20,
+          (random() * 3)::smallint
+        FROM generate_series(0, 3599) i  -- 1 hour of tick data
+        ON CONFLICT (time, instrument_id) DO NOTHING;
+        EOF
     
     - name: Install sqlx-cli
       uses: taiki-e/install-action@v2
       with:
         tool: sqlx-cli@0.8.2
         
-    - name: Run database migrations
+    - name: Run database migrations for backtest database
       env:
-        DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
+        DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
+        MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
         RUST_LOG: sqlx=debug,backtest_server=debug
-        PGPASSWORD: backtest_server
+        PGPASSWORD: backtest_pass
       run: |
-        echo "Running migrations..."
-        sqlx migrate run || (echo "Migration failed!" && exit 1)
-        echo "Verifying continuous aggregates..."
-        psql -h localhost -U backtest_server -d backtest_server -c "\dv" || true
+        echo "Running backtest database migrations with sqlx-cli..."
+        sqlx migrate run --database-url postgresql://backtest_user:backtest_pass@localhost:5432/backtest || (echo "Backtest migration failed!" && exit 1)
+        echo "Verifying backtest database structure..."
+        psql -h localhost -p 5432 -U backtest_user -d backtest -c "\dt" || true
 
     - name: Build test binaries
       env:
-        DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
+        MARKET_DATABASE_URL: postgresql://market_reader:market_reader_password@localhost:5431/marketdata
+        DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
       run: |
         echo "Building test binaries at $(date)"
         cargo test --no-run --all-features
@@ -133,25 +232,27 @@ jobs:
         
     - name: Run tests
       env:
-        DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
-        TEST_DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
+        MARKET_DATABASE_URL: postgresql://market_reader:market_reader_password@localhost:5431/marketdata
+        DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
         REDIS_URL: redis://localhost:6379
         RABBITMQ_URL: amqp://guest:guest@localhost:5672
         RUST_LOG: debug
-        RUST_TEST_THREADS: 2  # 限制並行測試數量
+        RUST_TEST_THREADS: 2
       run: |
-        echo "Starting tests at $(date)"
+        echo "Starting dual database tests at $(date)"
         cargo test --all-features -- --nocapture
         echo "Tests completed at $(date)"
 
     - name: Run doc tests
       env:
-        DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
+        MARKET_DATABASE_URL: postgresql://market_reader:market_reader_password@localhost:5431/marketdata
+        DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
       run: cargo test --doc
     
     - name: Run clippy
       env:
-        DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
+        MARKET_DATABASE_URL: postgresql://market_reader:market_reader_password@localhost:5431/marketdata
+        DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
       run: cargo clippy --all-targets --all-features -- -D warnings
 
 
@@ -162,12 +263,28 @@ jobs:
     needs: test-and-clippy  # 等待測試和 clippy 完成
     
     services:
-      postgres:
+      # 市場數據資料庫 (唯讀，由其他系統維護)
+      postgres-market:
         image: timescale/timescaledb:latest-pg14
         env:
-          POSTGRES_USER: backtest_server
-          POSTGRES_PASSWORD: backtest_server
-          POSTGRES_DB: backtest_server
+          POSTGRES_USER: market_reader
+          POSTGRES_PASSWORD: market_reader_password
+          POSTGRES_DB: marketdata
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5431:5432
+      
+      # 回測資料庫 (讀寫)
+      postgres-backtest:
+        image: timescale/timescaledb:latest-pg14
+        env:
+          POSTGRES_USER: backtest_user
+          POSTGRES_PASSWORD: backtest_pass
+          POSTGRES_DB: backtest
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -218,35 +335,117 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y pkg-config libssl-dev postgresql-client
 
-    - name: Setup database
+    - name: Setup market database
       env:
-        PGPASSWORD: backtest_server
+        PGPASSWORD: market_reader_password
       run: |
-        echo "Creating TimescaleDB extension..."
-        psql -h localhost -U backtest_server -d backtest_server -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
-        echo "TimescaleDB extension created successfully"
-        psql -h localhost -U backtest_server -d backtest_server -c "SELECT * FROM pg_extension WHERE extname = 'timescaledb';"
+        echo "Creating TimescaleDB extension in market database..."
+        psql -h localhost -p 5431 -U market_reader -d marketdata -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        echo "Market database TimescaleDB extension created successfully"
+
+    - name: Setup backtest database
+      env:
+        PGPASSWORD: backtest_pass
+      run: |
+        echo "Creating TimescaleDB extension in backtest database..."
+        psql -h localhost -p 5432 -U backtest_user -d backtest -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        echo "Backtest database TimescaleDB extension created successfully"
+
+    - name: Setup market database schema and test data
+      env:
+        PGPASSWORD: market_reader_password
+      run: |
+        echo "Initializing market database with proper schema..."
+        psql -h localhost -p 5431 -U market_reader -d marketdata -f scripts/init-market-db.sql
+        
+        echo "Adding test data for CI tests..."
+        psql -h localhost -p 5431 -U market_reader -d marketdata << 'EOF'
+        -- Insert test exchange
+        INSERT INTO exchange (code, name, country, timezone) VALUES 
+        ('TEST', 'Test Exchange', 'US', 'America/New_York')
+        ON CONFLICT (code) DO NOTHING;
+        
+        -- Insert test instruments
+        INSERT INTO instrument (symbol, exchange_id, instrument_type, name, currency, tick_size, lot_size) 
+        SELECT 'BTCUSD', exchange_id, 'CRYPTO', 'Bitcoin USD', 'USD', 0.01, 1
+        FROM exchange WHERE code = 'TEST'
+        ON CONFLICT (symbol, exchange_id, instrument_type) DO NOTHING;
+        
+        INSERT INTO instrument (symbol, exchange_id, instrument_type, name, currency, tick_size, lot_size) 
+        SELECT 'ETHUSD', exchange_id, 'CRYPTO', 'Ethereum USD', 'USD', 0.01, 1
+        FROM exchange WHERE code = 'TEST'
+        ON CONFLICT (symbol, exchange_id, instrument_type) DO NOTHING;
+        
+        -- Insert test minute_bar data
+        INSERT INTO minute_bar (time, instrument_id, open, high, low, close, volume, amount) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' minutes')::interval,
+          1,
+          45000.0 + random() * 100,
+          45100.0 + random() * 100,
+          44900.0 + random() * 100,
+          45050.0 + random() * 100,
+          100.5 + random() * 50,
+          (45000.0 + random() * 100) * (100.5 + random() * 50)
+        FROM generate_series(0, 1439) i  -- 24 hours of minute data
+        ON CONFLICT (time, instrument_id) DO NOTHING;
+        
+        INSERT INTO minute_bar (time, instrument_id, open, high, low, close, volume, amount) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' minutes')::interval,
+          2,
+          3000.0 + random() * 50,
+          3050.0 + random() * 50,
+          2950.0 + random() * 50,
+          3025.0 + random() * 50,
+          200.5 + random() * 100,
+          (3000.0 + random() * 50) * (200.5 + random() * 100)
+        FROM generate_series(0, 1439) i  -- 24 hours of minute data  
+        ON CONFLICT (time, instrument_id) DO NOTHING;
+        
+        -- Insert test tick data
+        INSERT INTO tick (time, instrument_id, price, volume, trade_type) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' seconds')::interval,
+          1,
+          45000.0 + random() * 100,
+          1.0 + random() * 10,
+          (random() * 3)::smallint
+        FROM generate_series(0, 3599) i  -- 1 hour of tick data
+        ON CONFLICT (time, instrument_id) DO NOTHING;
+        
+        INSERT INTO tick (time, instrument_id, price, volume, trade_type) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' seconds')::interval,
+          2,
+          3000.0 + random() * 50,
+          2.0 + random() * 20,
+          (random() * 3)::smallint
+        FROM generate_series(0, 3599) i  -- 1 hour of tick data
+        ON CONFLICT (time, instrument_id) DO NOTHING;
+        EOF
     
     - name: Install sqlx-cli
       uses: taiki-e/install-action@v2
       with:
         tool: sqlx-cli@0.8.2
         
-    - name: Run database migrations
+    - name: Run database migrations for backtest database
       env:
-        DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
+        MARKET_DATABASE_URL: postgresql://market_reader:market_reader_password@localhost:5431/marketdata
+        DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
         RUST_LOG: sqlx=debug,backtest_server=debug
-        PGPASSWORD: backtest_server
+        PGPASSWORD: backtest_pass
       run: |
-        echo "Running migrations..."
-        sqlx migrate run || (echo "Migration failed!" && exit 1)
-        echo "Verifying continuous aggregates..."
-        psql -h localhost -U backtest_server -d backtest_server -c "\dv" || true
+        echo "Running backtest database migrations with sqlx-cli..."
+        sqlx migrate run --database-url postgresql://backtest_user:backtest_pass@localhost:5432/backtest || (echo "Backtest migration failed!" && exit 1)
+        echo "Verifying backtest database structure..."
+        psql -h localhost -p 5432 -U backtest_user -d backtest -c "\dt" || true
 
     - name: Run integration tests
       env:
-        DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
-        TEST_DATABASE_URL: postgresql://backtest_server:backtest_server@localhost:5432/backtest_server
+        MARKET_DATABASE_URL: postgresql://market_reader:market_reader_password@localhost:5431/marketdata
+        DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
         REDIS_URL: redis://localhost:6379
         RABBITMQ_URL: amqp://guest:guest@localhost:5672
         RUST_LOG: debug

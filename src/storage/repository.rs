@@ -6,27 +6,30 @@ use sqlx::PgPool;
 
 // 重新導出子模塊
 pub mod aggregate;
-pub mod backtest;
 pub mod exchange;
+pub mod execution_log;
+pub mod execution_run;
 pub mod indicator;
 pub mod instrument;
+pub mod instrument_reference;
 pub mod market_data;
-pub mod strategy;
-pub mod strategy_version;
 
 // 重新導出常用類型
 pub use aggregate::AggregateRepository;
-pub use backtest::BacktestRepository;
 pub use exchange::ExchangeRepository;
+pub use execution_log::ExecutionLogRepository;
+pub use execution_run::ExecutionRunRepository;
 pub use indicator::IndicatorRepository;
 pub use instrument::InstrumentRepository;
+pub use instrument_reference::InstrumentReferenceRepository;
 pub use market_data::MarketDataRepository;
-pub use strategy::StrategyRepository;
-pub use strategy_version::StrategyVersionRepository;
+
+// 重新導出具體實現
+pub use market_data::PgMarketDataRepository;
 /// 分頁結果
 #[derive(Debug, Clone)]
 pub struct Page<T> {
-    pub items: Vec<T>,
+    pub data: Vec<T>,
     pub total: i64,
     pub page: i64,
     pub page_size: i64,
@@ -34,10 +37,10 @@ pub struct Page<T> {
 }
 
 impl<T> Page<T> {
-    pub fn new(items: Vec<T>, total: i64, page: i64, page_size: i64) -> Self {
+    pub fn new(data: Vec<T>, total: i64, page: i64, page_size: i64) -> Self {
         let total_pages = (total as f64 / page_size as f64).ceil() as i64;
         Self {
-            items,
+            data,
             total,
             page,
             page_size,
@@ -55,6 +58,12 @@ impl<T> Page<T> {
 pub struct PageQuery {
     pub page: i64,
     pub page_size: i64,
+}
+
+impl PageQuery {
+    pub fn new(page: i64, page_size: i64) -> Self {
+        Self { page, page_size }
+    }
 }
 
 impl Default for PageQuery {
@@ -122,4 +131,21 @@ impl Default for TimeRange {
 /// 通用的數據庫操作特性
 pub trait DbExecutor {
     fn get_pool(&self) -> &PgPool;
+}
+
+/// 市場數據 Repository 實現
+pub struct MarketDataRepositoryImpl {
+    pool: PgPool,
+}
+
+impl MarketDataRepositoryImpl {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+impl DbExecutor for MarketDataRepositoryImpl {
+    fn get_pool(&self) -> &PgPool {
+        &self.pool
+    }
 }

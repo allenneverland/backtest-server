@@ -1,0 +1,52 @@
+# 測試環境配置文件（雙資料庫架構）
+
+[server]
+host = "0.0.0.0"
+port = 8080
+workers = 2
+
+[market_database]
+host = "localhost"
+port = 5431
+username = "market_user"
+password = "market_pass"
+database = "marketdata"
+connection_pool_size = 5
+max_connections = 5
+min_connections = 1
+max_lifetime_secs = 3600
+acquire_timeout_secs = 10
+idle_timeout_secs = 600
+
+[backtest_database]
+host = "localhost"
+port = 5432
+username = "backtest_user"
+password = "backtest_pass"
+database = "backtest"
+connection_pool_size = 10
+max_connections = 10
+min_connections = 1
+max_lifetime_secs = 3600
+acquire_timeout_secs = 10
+idle_timeout_secs = 600
+
+[redis]
+url = "redis://localhost:6379"
+pool_size = 10
+timeout_ms = 5000
+
+[rabbitmq]
+url = "amqp://guest:guest@localhost:5672"
+exchange = "backtest_exchange"
+queue_prefix = "test_"
+
+[logging]
+level = "debug"
+format = "json"
+
+[runtime]
+strategy_timeout_secs = 30
+max_memory_mb = 128
+sandbox_enabled = true
+

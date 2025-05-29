@@ -9,7 +9,14 @@ use futures::StreamExt;
 
 #[tokio::test]
 async fn test_ohlcv_iterator_streams_data() {
-    let pool = common::setup_test_db().await;
+    // This test requires market data database with minute_bar table
+    let pool = match common::setup_market_data_db().await {
+        Some(pool) => pool,
+        None => {
+            eprintln!("Skipping test: Market data database not available");
+            return;
+        }
+    };
     let repo = PgMarketDataRepository::new(pool);
     let instrument_id = 1;
 
@@ -57,7 +64,14 @@ async fn test_ohlcv_iterator_streams_data() {
 
 #[tokio::test]
 async fn test_tick_iterator_streams_data() {
-    let pool = common::setup_test_db().await;
+    // This test requires market data database with tick table
+    let pool = match common::setup_market_data_db().await {
+        Some(pool) => pool,
+        None => {
+            eprintln!("Skipping test: Market data database not available");
+            return;
+        }
+    };
     let repo = PgMarketDataRepository::new(pool);
     let instrument_id = 1;
 
@@ -121,7 +135,14 @@ async fn test_iterator_respects_batch_size() {
 
 #[tokio::test]
 async fn test_iterator_handles_empty_data() {
-    let pool = common::setup_test_db().await;
+    // This test requires market data database
+    let pool = match common::setup_market_data_db().await {
+        Some(pool) => pool,
+        None => {
+            eprintln!("Skipping test: Market data database not available");
+            return;
+        }
+    };
     let repo = PgMarketDataRepository::new(pool);
     let instrument_id = 1;
 
@@ -161,7 +182,14 @@ async fn test_iterator_handles_empty_data() {
 async fn test_multi_source_iterator_integration() {
     use backtest_server::data_provider::{MarketDataIterator, MultiSourceIterator};
 
-    let pool = common::setup_test_db().await;
+    // This test requires market data database with minute_bar table
+    let pool = match common::setup_market_data_db().await {
+        Some(pool) => pool,
+        None => {
+            eprintln!("Skipping test: Market data database not available");
+            return;
+        }
+    };
     let repo1 = PgMarketDataRepository::new(pool.clone());
     let repo2 = PgMarketDataRepository::new(pool);
 

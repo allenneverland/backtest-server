@@ -14,11 +14,11 @@ pub use repository::{
     DbExecutor,
     // 具體倉儲實現
     ExchangeRepository,
+    ExecutionLogRepository,
+    ExecutionRunRepository,
     MarketDataRepository,
     Page,
     PageQuery,
-    StrategyRepository,
-    StrategyVersionRepository,
     TimeRange,
 };
 

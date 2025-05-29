@@ -22,19 +22,19 @@ pub trait AggregateRepository: Send + Sync {
         time_range: TimeRange,
     ) -> Result<Vec<DailyVolumeByInstrument>>;
 
-    /// 獲取指定回測結果的日收益率聚合數據
-    async fn get_backtest_daily_returns(
+    /// 獲取指定執行任務的日收益率聚合數據
+    async fn get_execution_daily_returns(
         &self,
-        result_id: i32,
+        run_id: i32,
         time_range: TimeRange,
-    ) -> Result<Vec<BacktestDailyReturns>>;
+    ) -> Result<Vec<ExecutionDailyReturns>>;
 
-    /// 獲取多個回測結果的日收益率聚合數據（用於比較）
-    async fn get_backtest_daily_returns_multi(
+    /// 獲取多個執行任務的日收益率聚合數據（用於比較）
+    async fn get_execution_daily_returns_multi(
         &self,
-        result_ids: &[i32],
+        run_ids: &[i32],
         time_range: TimeRange,
-    ) -> Result<Vec<BacktestDailyReturns>>;
+    ) -> Result<Vec<ExecutionDailyReturns>>;
 }
 
 /// PostgreSQL 連續聚合視圖儲存庫實現
@@ -121,26 +121,26 @@ impl AggregateRepository for PgAggregateRepository {
         Ok(results)
     }
 
-    async fn get_backtest_daily_returns(
+    async fn get_execution_daily_returns(
         &self,
-        result_id: i32,
+        run_id: i32,
         time_range: TimeRange,
-    ) -> Result<Vec<BacktestDailyReturns>> {
+    ) -> Result<Vec<ExecutionDailyReturns>> {
         let results = sqlx::query_as!(
-            BacktestDailyReturns,
+            ExecutionDailyReturns,
             r#"
             SELECT
                 bucket as "bucket!", 
-                result_id as "result_id!", 
+                run_id as "run_id!", 
                 daily_return as "daily_return!: _",
                 end_of_day_value as "end_of_day_value!: _",
                 end_of_day_equity as "end_of_day_equity!: _"
-            FROM backtest_daily_returns
-            WHERE result_id = $1
+            FROM execution_daily_returns
+            WHERE run_id = $1
             AND bucket BETWEEN $2 AND $3
             ORDER BY bucket
             "#,
-            result_id,
+            run_id,
             time_range.start,
             time_range.end
         )
@@ -150,26 +150,26 @@ impl AggregateRepository for PgAggregateRepository {
         Ok(results)
     }
 
-    async fn get_backtest_daily_returns_multi(
+    async fn get_execution_daily_returns_multi(
         &self,
-        result_ids: &[i32],
+        run_ids: &[i32],
         time_range: TimeRange,
-    ) -> Result<Vec<BacktestDailyReturns>> {
+    ) -> Result<Vec<ExecutionDailyReturns>> {
         let results = sqlx::query_as!(
-            BacktestDailyReturns,
+            ExecutionDailyReturns,
             r#"
             SELECT
                 bucket as "bucket!", 
-                result_id as "result_id!", 
+                run_id as "run_id!", 
                 daily_return as "daily_return!: _",
                 end_of_day_value as "end_of_day_value!: _",
                 end_of_day_equity as "end_of_day_equity!: _"
-            FROM backtest_daily_returns
-            WHERE result_id = ANY($1)
+            FROM execution_daily_returns
+            WHERE run_id = ANY($1)
             AND bucket BETWEEN $2 AND $3
-            ORDER BY result_id, bucket
+            ORDER BY run_id, bucket
             "#,
-            result_ids,
+            run_ids,
             time_range.start,
             time_range.end
         )

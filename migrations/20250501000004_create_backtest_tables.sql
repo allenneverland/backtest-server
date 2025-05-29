@@ -1,55 +1,50 @@
--- 回測配置表
-CREATE TABLE backtest_config (
-    config_id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    description TEXT,
-    start_date TIMESTAMPTZ NOT NULL,
-    end_date TIMESTAMPTZ NOT NULL,
-    initial_capital NUMERIC(24,6) NOT NULL,
-    currency VARCHAR(10) NOT NULL DEFAULT 'USD',
-    instruments INTEGER[] NOT NULL, -- 關聯的金融商品ID數組
-    strategy_id INTEGER NOT NULL REFERENCES strategy(strategy_id),
-    execution_settings JSONB NOT NULL DEFAULT '{}', -- 執行設置：滑點、費用等
-    risk_settings JSONB NOT NULL DEFAULT '{}', -- 風險管理設置
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+-- 執行任務記錄表
+CREATE TABLE execution_runs (
+    run_id SERIAL PRIMARY KEY,
+    external_backtest_id INTEGER NOT NULL,      -- StratPlat 的 backtest ID
+    request_id UUID NOT NULL UNIQUE,            -- RabbitMQ 請求 ID
+    strategy_dsl TEXT NOT NULL,                 -- 從 RabbitMQ 接收的策略 DSL
+    parameters JSONB NOT NULL,                  -- 執行參數（開始日期、結束日期、初始資金等）
+    status VARCHAR(20) NOT NULL DEFAULT 'INITIALIZING', -- INITIALIZING, RUNNING, COMPLETED, FAILED
+    progress INTEGER DEFAULT 0,                 -- 執行進度 (0-100)
+    started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at TIMESTAMPTZ,
+    execution_time_ms INTEGER,                  -- 執行時間（毫秒）
+    error_code VARCHAR(50),                     -- 錯誤代碼
+    error_message TEXT,                         -- 錯誤訊息
+    error_details JSONB,                        -- 詳細錯誤信息
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- 創建索引
-CREATE INDEX idx_backtest_config_strategy ON backtest_config(strategy_id);
+CREATE INDEX idx_execution_runs_external_backtest_id ON execution_runs(external_backtest_id);
+CREATE INDEX idx_execution_runs_request_id ON execution_runs(request_id);
+CREATE INDEX idx_execution_runs_status ON execution_runs(status);
+CREATE INDEX idx_execution_runs_started_at ON execution_runs(started_at);
 
--- 回測結果表（整合績效指標）
-CREATE TABLE backtest_result (
-    result_id SERIAL PRIMARY KEY,
-    config_id INTEGER NOT NULL REFERENCES backtest_config(config_id),
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING', -- 'PENDING', 'RUNNING', 'COMPLETED', 'FAILED'
-    start_time TIMESTAMPTZ,
-    end_time TIMESTAMPTZ,
-    execution_time INTEGER, -- 執行時間（秒）
-    
-    -- 整合所有績效指標
-    metrics JSONB NOT NULL DEFAULT '{}', -- 包含所有指標：收益率、夏普比率、最大回撤等
-    
-    -- 基準比較（如有）
-    benchmark_comparison JSONB, -- 相對於基準的指標
-    
-    -- 錯誤信息
-    error_message TEXT,
-    
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+-- 執行日誌表
+CREATE TABLE execution_logs (
+    log_id BIGSERIAL PRIMARY KEY,
+    run_id INTEGER NOT NULL REFERENCES execution_runs(run_id) ON DELETE CASCADE,
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+    log_level VARCHAR(10) NOT NULL,            -- DEBUG, INFO, WARN, ERROR
+    component VARCHAR(50),                      -- 組件名稱（如：data_loader, strategy_executor）
+    message TEXT NOT NULL,
+    details JSONB,                              -- 額外的結構化數據
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- 創建索引
-CREATE INDEX idx_backtest_result_config ON backtest_result(config_id);
-CREATE INDEX idx_backtest_result_status ON backtest_result(status);
-CREATE INDEX idx_backtest_result_metrics ON backtest_result USING GIN (metrics);
+CREATE INDEX idx_execution_logs_run_id ON execution_logs(run_id);
+CREATE INDEX idx_execution_logs_timestamp ON execution_logs(timestamp);
+CREATE INDEX idx_execution_logs_log_level ON execution_logs(log_level);
+CREATE INDEX idx_execution_logs_component ON execution_logs(component);
 
--- 回測交易記錄表
-CREATE TABLE backtest_trade (
+-- 執行交易記錄表（臨時存儲）
+CREATE TABLE execution_trades (
     time TIMESTAMPTZ NOT NULL,
-    result_id INTEGER NOT NULL REFERENCES backtest_result(result_id),
-    instrument_id INTEGER NOT NULL REFERENCES instrument_reference(instrument_id),
+    run_id INTEGER NOT NULL REFERENCES execution_runs(run_id) ON DELETE CASCADE,
+    instrument_id INTEGER NOT NULL, -- 參考市場數據庫的 instrument
     direction VARCHAR(10) NOT NULL, -- 'BUY', 'SELL'
     price NUMERIC(18,8) NOT NULL,
     quantity NUMERIC(24,8) NOT NULL,
@@ -64,28 +59,28 @@ CREATE TABLE backtest_trade (
 );
 
 -- 轉換為超表
-SELECT create_hypertable('backtest_trade', 'time',
+SELECT create_hypertable('execution_trades', 'time',
                         chunk_time_interval => INTERVAL '1 day');
 
 -- 創建索引
-CREATE INDEX idx_backtest_trade_result ON backtest_trade(result_id);
-CREATE INDEX idx_backtest_trade_instrument ON backtest_trade(instrument_id);
-CREATE INDEX idx_backtest_trade_result_time ON backtest_trade(result_id, time DESC);
+CREATE INDEX idx_execution_trades_run ON execution_trades(run_id);
+CREATE INDEX idx_execution_trades_instrument ON execution_trades(instrument_id);
+CREATE INDEX idx_execution_trades_run_time ON execution_trades(run_id, time DESC);
 
 -- 設置數據壓縮策略
-ALTER TABLE backtest_trade SET (
+ALTER TABLE execution_trades SET (
     timescaledb.compress,
-    timescaledb.compress_segmentby = 'result_id, instrument_id'
+    timescaledb.compress_segmentby = 'run_id, instrument_id'
 );
 
--- 添加壓縮策略（60天前的數據自動壓縮）
-SELECT add_compression_policy('backtest_trade', INTERVAL '60 days');
+-- 添加壓縮策略（7天前的數據自動壓縮）
+SELECT add_compression_policy('execution_trades', INTERVAL '7 days');
 
--- 回測倉位快照表
-CREATE TABLE backtest_position_snapshot (
+-- 執行倉位快照表（臨時存儲）
+CREATE TABLE execution_positions (
     time TIMESTAMPTZ NOT NULL,
-    result_id INTEGER NOT NULL REFERENCES backtest_result(result_id),
-    instrument_id INTEGER NOT NULL REFERENCES instrument_reference(instrument_id),
+    run_id INTEGER NOT NULL REFERENCES execution_runs(run_id) ON DELETE CASCADE,
+    instrument_id INTEGER NOT NULL, -- 參考市場數據庫的 instrument
     quantity NUMERIC(24,8) NOT NULL,
     avg_cost NUMERIC(18,8) NOT NULL,
     market_value NUMERIC(18,8) NOT NULL,
@@ -96,27 +91,27 @@ CREATE TABLE backtest_position_snapshot (
 );
 
 -- 轉換為超表
-SELECT create_hypertable('backtest_position_snapshot', 'time',
+SELECT create_hypertable('execution_positions', 'time',
                         chunk_time_interval => INTERVAL '1 day');
 
 -- 創建索引
-CREATE INDEX idx_backtest_position_result ON backtest_position_snapshot(result_id);
-CREATE INDEX idx_backtest_position_instrument ON backtest_position_snapshot(instrument_id);
-CREATE INDEX idx_backtest_position_result_time ON backtest_position_snapshot(result_id, time DESC);
+CREATE INDEX idx_execution_positions_run ON execution_positions(run_id);
+CREATE INDEX idx_execution_positions_instrument ON execution_positions(instrument_id);
+CREATE INDEX idx_execution_positions_run_time ON execution_positions(run_id, time DESC);
 
 -- 設置數據壓縮策略
-ALTER TABLE backtest_position_snapshot SET (
+ALTER TABLE execution_positions SET (
     timescaledb.compress,
-    timescaledb.compress_segmentby = 'result_id, instrument_id'
+    timescaledb.compress_segmentby = 'run_id, instrument_id'
 );
 
--- 添加壓縮策略（60天前的數據自動壓縮）
-SELECT add_compression_policy('backtest_position_snapshot', INTERVAL '60 days');
+-- 添加壓縮策略（7天前的數據自動壓縮）
+SELECT add_compression_policy('execution_positions', INTERVAL '7 days');
 
--- 回測投資組合快照表
-CREATE TABLE backtest_portfolio_snapshot (
+-- 執行投資組合快照表（臨時存儲）
+CREATE TABLE execution_portfolios (
     time TIMESTAMPTZ NOT NULL,
-    result_id INTEGER NOT NULL REFERENCES backtest_result(result_id),
+    run_id INTEGER NOT NULL REFERENCES execution_runs(run_id) ON DELETE CASCADE,
     total_value NUMERIC(24,8) NOT NULL, -- 投資組合總價值
     cash NUMERIC(24,8) NOT NULL, -- 可用資金
     equity NUMERIC(24,8) NOT NULL, -- 權益
@@ -130,18 +125,18 @@ CREATE TABLE backtest_portfolio_snapshot (
 );
 
 -- 轉換為超表
-SELECT create_hypertable('backtest_portfolio_snapshot', 'time',
+SELECT create_hypertable('execution_portfolios', 'time',
                         chunk_time_interval => INTERVAL '1 day');
 
 -- 創建索引
-CREATE INDEX idx_backtest_portfolio_result ON backtest_portfolio_snapshot(result_id);
-CREATE INDEX idx_backtest_portfolio_result_time ON backtest_portfolio_snapshot(result_id, time DESC);
+CREATE INDEX idx_execution_portfolios_run ON execution_portfolios(run_id);
+CREATE INDEX idx_execution_portfolios_run_time ON execution_portfolios(run_id, time DESC);
 
 -- 設置數據壓縮策略
-ALTER TABLE backtest_portfolio_snapshot SET (
+ALTER TABLE execution_portfolios SET (
     timescaledb.compress,
-    timescaledb.compress_segmentby = 'result_id'
+    timescaledb.compress_segmentby = 'run_id'
 );
 
--- 添加壓縮策略（60天前的數據自動壓縮）
-SELECT add_compression_policy('backtest_portfolio_snapshot', INTERVAL '60 days'); 
+-- 添加壓縮策略（7天前的數據自動壓縮）
+SELECT add_compression_policy('execution_portfolios', INTERVAL '7 days');

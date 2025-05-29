@@ -1,7 +1,7 @@
 use crate::data_provider::cache::{generate_cache_key, MultiLevelCache};
 use crate::domain_types::*;
 use crate::redis::operations::cache::{CacheError, CacheManager};
-use crate::redis::pool::{ConnectionPool, RedisPool};
+use crate::redis::pool::ConnectionPool;
 use crate::storage::{
     models::market_data::{MinuteBar, Tick as DbTick},
     repository::{
@@ -79,7 +79,7 @@ pub trait DataLoader: Send + Sync {
 pub struct MarketDataLoader {
     database: Arc<PgPool>,
     redis_pool: Option<Arc<ConnectionPool>>,
-    cache: Option<Arc<MultiLevelCache<ConnectionPool>>>,
+    cache: Option<Arc<MultiLevelCache<Arc<ConnectionPool>>>>,
     cache_ttl_seconds: u64,
 }
 
@@ -96,16 +96,15 @@ impl MarketDataLoader {
 
     /// 設定 Redis 連接池以啟用快取功能
     pub fn with_redis(mut self, redis_pool: Arc<ConnectionPool>) -> Self {
-        self.redis_pool = Some(redis_pool.clone());
-
         // 創建多層級快取
-        let cache_manager = Arc::new(CacheManager::new(redis_pool));
+        let cache_manager = Arc::new(CacheManager::new(redis_pool.clone()));
         let multi_level_cache = Arc::new(MultiLevelCache::new(
             cache_manager,
             1000, // 內存快取容量
             self.cache_ttl_seconds,
         ));
         self.cache = Some(multi_level_cache);
+        self.redis_pool = Some(redis_pool);
 
         self
     }
@@ -142,8 +141,8 @@ impl MarketDataLoader {
                 }
             }
 
-            // 批量預熱快取
-            cache.warm_cache(cache_keys).await?;
+            // 批量預熱快取 - 預設為分鐘級資料
+            cache.warm_minute_bars_cache(cache_keys).await?;
 
             debug!(
                 "快取預熱完成: {} 個項目",
@@ -187,7 +186,7 @@ impl DataLoader for MarketDataLoader {
 
         // 如果快取可用，嘗試從快取獲取
         if let Some(ref cache) = self.cache {
-            match cache.get::<Vec<MinuteBar>>(&cache_key).await {
+            match cache.get_minute_bars(&cache_key).await {
                 Ok(Some(cached_bars)) => {
                     debug!("從快取獲取 OHLCV 資料: {}", cache_key);
                     // 轉換快取的資料並返回
@@ -231,7 +230,7 @@ impl DataLoader for MarketDataLoader {
 
         // 如果快取可用，將資料存入快取
         if let Some(ref cache) = self.cache {
-            if let Err(e) = cache.set(&cache_key, &bars).await {
+            if let Err(e) = cache.set_minute_bars(&cache_key, &bars).await {
                 warn!("快取寫入錯誤: {}", e);
             }
         }
@@ -289,7 +288,7 @@ impl DataLoader for MarketDataLoader {
 
         // 如果快取可用，嘗試從快取獲取
         if let Some(ref cache) = self.cache {
-            match cache.get::<Vec<DbTick>>(&cache_key).await {
+            match cache.get_ticks(&cache_key).await {
                 Ok(Some(cached_ticks)) => {
                     debug!("從快取獲取 Tick 資料: {}", cache_key);
                     // 轉換快取的資料並返回
@@ -325,7 +324,7 @@ impl DataLoader for MarketDataLoader {
 
         // 如果快取可用，將資料存入快取
         if let Some(ref cache) = self.cache {
-            if let Err(e) = cache.set(&cache_key, &ticks).await {
+            if let Err(e) = cache.set_ticks(&cache_key, &ticks).await {
                 warn!("快取寫入錯誤: {}", e);
             }
         }

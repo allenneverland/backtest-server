@@ -6,6 +6,7 @@ use deadpool_redis::{
     redis::{cmd, RedisError},
     Config, Connection, CreatePoolError, Pool, PoolConfig, PoolError, Runtime, Timeouts,
 };
+use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tracing::{debug, error, info};
@@ -130,6 +131,22 @@ impl RedisPool for ConnectionPool {
 
     fn pool_size(&self) -> u32 {
         self.config.pool_size
+    }
+}
+
+/// Arc<ConnectionPool> 也實現 RedisPool trait，便於共享連接池
+#[async_trait]
+impl RedisPool for Arc<ConnectionPool> {
+    async fn get_conn(&self) -> Result<Connection, RedisPoolError> {
+        (**self).get_conn().await
+    }
+
+    async fn check_health(&self) -> bool {
+        (**self).check_health().await
+    }
+
+    fn pool_size(&self) -> u32 {
+        (**self).pool_size()
     }
 }
 

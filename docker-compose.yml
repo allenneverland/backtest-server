@@ -118,5 +118,5 @@ networks:
   backtest_server-network:
     driver: bridge
   market_data-network:
-    external: true  # 加入外部網路，例如 B compose 的 network
+    external: true
     name: marketdata-center_market_data-network

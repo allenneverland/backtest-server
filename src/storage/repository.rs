@@ -25,7 +25,7 @@ pub use instrument_reference::InstrumentReferenceRepository;
 pub use market_data::MarketDataRepository;
 
 // 重新導出具體實現
-pub use self::MarketDataRepositoryImpl as MarketDataRepo;
+pub use market_data::PgMarketDataRepository;
 /// 分頁結果
 #[derive(Debug, Clone)]
 pub struct Page<T> {
@@ -149,4 +149,3 @@ impl DbExecutor for MarketDataRepositoryImpl {
         &self.pool
     }
 }
-

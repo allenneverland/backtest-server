@@ -1,12 +1,20 @@
 use anyhow::Result;
-use backtest_server::storage::repository::{BacktestRepo, DbExecutor, MarketDataRepo};
+use backtest_server::storage::repository::execution_run::PgExecutionRunRepository;
+use backtest_server::storage::repository::{DbExecutor, PgMarketDataRepository};
 
 /// 測試市場數據 repository 使用正確的資料庫
 #[tokio::test]
 async fn test_market_data_repository_uses_market_db() -> Result<()> {
     let market_db_url = std::env::var("MARKET_DATABASE_URL")?;
-    let market_pool = sqlx::PgPool::connect(&market_db_url).await?;
-    let repo = MarketDataRepo::new(market_pool);
+
+    // 創建帶有適當超時設定的連接池
+    let market_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .acquire_timeout(std::time::Duration::from_secs(30))
+        .connect(&market_db_url)
+        .await?;
+
+    let repo = PgMarketDataRepository::new(market_pool);
 
     // 測試查詢操作（驗證使用正確的連接池）
     // 這裡主要測試 repository 是否綁定到正確的資料庫
@@ -21,7 +29,7 @@ async fn test_market_data_repository_uses_market_db() -> Result<()> {
 async fn test_backtest_repository_uses_backtest_db() -> Result<()> {
     let backtest_db_url = std::env::var("DATABASE_URL")?;
     let backtest_pool = sqlx::PgPool::connect(&backtest_db_url).await?;
-    let repo = BacktestRepo::new(backtest_pool);
+    let repo = PgExecutionRunRepository::new(std::sync::Arc::new(backtest_pool));
 
     // 測試寫入操作（驗證使用正確的連接池）
     // 這裡主要測試 repository 是否綁定到正確的資料庫
@@ -37,12 +45,21 @@ async fn test_cross_database_query_scenario() -> Result<()> {
     let market_db_url = std::env::var("MARKET_DATABASE_URL")?;
     let backtest_db_url = std::env::var("DATABASE_URL")?;
 
-    // 創建兩個 repository
-    let market_pool = sqlx::PgPool::connect(&market_db_url).await?;
-    let backtest_pool = sqlx::PgPool::connect(&backtest_db_url).await?;
+    // 創建兩個 repository，使用適當的超時設定
+    let market_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .acquire_timeout(std::time::Duration::from_secs(30))
+        .connect(&market_db_url)
+        .await?;
 
-    let market_repo = MarketDataRepo::new(market_pool);
-    let backtest_repo = BacktestRepo::new(backtest_pool);
+    let backtest_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .acquire_timeout(std::time::Duration::from_secs(30))
+        .connect(&backtest_db_url)
+        .await?;
+
+    let market_repo = PgMarketDataRepository::new(market_pool);
+    let backtest_repo = PgExecutionRunRepository::new(std::sync::Arc::new(backtest_pool));
 
     // 模擬回測流程：從市場數據讀取，寫入回測結果
     // 這裡主要驗證兩個 repository 使用不同的資料庫連接池

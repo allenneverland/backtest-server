@@ -24,3 +24,13 @@ pub use repository::{
 
 // 匯出遷移功能
 pub use migrations::*;
+
+#[cfg(test)]
+pub async fn create_test_pool() -> sqlx::PgPool {
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://postgres:password@localhost/test".to_string());
+
+    sqlx::PgPool::connect(&database_url)
+        .await
+        .expect("Failed to create test database pool")
+}

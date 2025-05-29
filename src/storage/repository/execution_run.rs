@@ -1,9 +1,9 @@
-use crate::storage::models::execution_run::*;
 use crate::storage::models::execution_data::*;
+use crate::storage::models::execution_run::*;
 use crate::storage::repository::{DbExecutor, Page, PageQuery, TimeRange};
 use anyhow::Result;
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -18,7 +18,10 @@ pub trait ExecutionRunRepository: Send + Sync {
     async fn get_execution_run(&self, run_id: i32) -> Result<Option<ExecutionRun>>;
 
     /// 根據請求ID獲取執行任務
-    async fn get_execution_run_by_request_id(&self, request_id: Uuid) -> Result<Option<ExecutionRun>>;
+    async fn get_execution_run_by_request_id(
+        &self,
+        request_id: Uuid,
+    ) -> Result<Option<ExecutionRun>>;
 
     /// 根據外部回測ID獲取執行任務
     async fn get_execution_runs_by_backtest_id(
@@ -136,7 +139,8 @@ impl ExecutionRunRepository for PgExecutionRunRepository {
             run.request_id,
             run.strategy_dsl,
             run.parameters as _,
-            run.status.unwrap_or_else(|| ExecutionStatus::Initializing.as_str().to_string()),
+            run.status
+                .unwrap_or_else(|| ExecutionStatus::Initializing.as_str().to_string()),
             run.progress.unwrap_or(0)
         )
         .fetch_one(DbExecutor::get_pool(self))
@@ -165,7 +169,10 @@ impl ExecutionRunRepository for PgExecutionRunRepository {
         Ok(result)
     }
 
-    async fn get_execution_run_by_request_id(&self, request_id: Uuid) -> Result<Option<ExecutionRun>> {
+    async fn get_execution_run_by_request_id(
+        &self,
+        request_id: Uuid,
+    ) -> Result<Option<ExecutionRun>> {
         let result = sqlx::query_as!(
             ExecutionRun,
             r#"
@@ -258,7 +265,7 @@ impl ExecutionRunRepository for PgExecutionRunRepository {
         query.push_str(&format!(" WHERE run_id = ${} RETURNING *", bind_count));
 
         let mut query_builder = sqlx::query_as::<_, ExecutionRun>(&query);
-        
+
         if let Some(status) = update.status {
             query_builder = query_builder.bind(status);
         }
@@ -283,9 +290,7 @@ impl ExecutionRunRepository for PgExecutionRunRepository {
 
         query_builder = query_builder.bind(run_id);
 
-        let result = query_builder
-            .fetch_one(DbExecutor::get_pool(self))
-            .await?;
+        let result = query_builder.fetch_one(DbExecutor::get_pool(self)).await?;
 
         Ok(result)
     }
@@ -318,10 +323,11 @@ impl ExecutionRunRepository for PgExecutionRunRepository {
             .fetch_all(DbExecutor::get_pool(self))
             .await?;
 
-            let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM execution_runs WHERE status = $1")
-                .bind(&status)
-                .fetch_one(DbExecutor::get_pool(self))
-                .await?;
+            let total: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM execution_runs WHERE status = $1")
+                    .bind(&status)
+                    .fetch_one(DbExecutor::get_pool(self))
+                    .await?;
 
             (runs, total)
         } else {
@@ -551,7 +557,7 @@ impl ExecutionRunRepository for PgExecutionRunRepository {
         .await?;
 
         let total: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM execution_positions WHERE run_id = $1 AND time BETWEEN $2 AND $3"
+            "SELECT COUNT(*) FROM execution_positions WHERE run_id = $1 AND time BETWEEN $2 AND $3",
         )
         .bind(run_id)
         .bind(time_range.start)
@@ -701,7 +707,7 @@ impl ExecutionRunRepository for PgExecutionRunRepository {
 
     async fn cleanup_old_execution_data(&self, days: i32) -> Result<u64> {
         let cutoff_date = Utc::now() - chrono::Duration::days(days as i64);
-        
+
         let result = sqlx::query!(
             r#"
             DELETE FROM execution_runs
@@ -721,7 +727,6 @@ impl ExecutionRunRepository for PgExecutionRunRepository {
 mod tests {
     use super::*;
     use crate::storage::create_test_pool;
-    use chrono::Utc;
     use sqlx::types::Json;
 
     #[tokio::test]

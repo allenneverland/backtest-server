@@ -191,7 +191,10 @@ mod tests {
         assert_eq!(TradeDirection::Sell.as_str(), "SELL");
 
         assert_eq!(TradeDirection::from("BUY".to_string()), TradeDirection::Buy);
-        assert_eq!(TradeDirection::from("sell".to_string()), TradeDirection::Sell);
+        assert_eq!(
+            TradeDirection::from("sell".to_string()),
+            TradeDirection::Sell
+        );
     }
 
     #[test]

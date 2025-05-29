@@ -2,7 +2,7 @@ use crate::storage::models::execution_log::*;
 use crate::storage::repository::{DbExecutor, Page, PageQuery};
 use anyhow::Result;
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use sqlx::PgPool;
 use std::sync::Arc;
 
@@ -32,11 +32,7 @@ pub trait ExecutionLogRepository: Send + Sync {
     ) -> Result<Page<ExecutionLog>>;
 
     /// 獲取最近的錯誤日誌
-    async fn get_recent_error_logs(
-        &self,
-        run_id: i32,
-        limit: i64,
-    ) -> Result<Vec<ExecutionLog>>;
+    async fn get_recent_error_logs(&self, run_id: i32, limit: i64) -> Result<Vec<ExecutionLog>>;
 
     /// 清理舊的執行日誌
     async fn cleanup_old_logs(&self, days: i32) -> Result<u64>;
@@ -240,11 +236,7 @@ impl ExecutionLogRepository for PgExecutionLogRepository {
         Ok(Page::new(logs, total, page.page, page.page_size))
     }
 
-    async fn get_recent_error_logs(
-        &self,
-        run_id: i32,
-        limit: i64,
-    ) -> Result<Vec<ExecutionLog>> {
+    async fn get_recent_error_logs(&self, run_id: i32, limit: i64) -> Result<Vec<ExecutionLog>> {
         let logs = sqlx::query_as!(
             ExecutionLog,
             r#"

@@ -20,7 +20,7 @@ jobs:
   # 先運行格式檢查，這個最快
   fmt:
     name: Format Check
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout code
       uses: actions/checkout@v4.1.1
@@ -35,7 +35,7 @@ jobs:
 
   test-and-clippy:
     name: Test Suite and Clippy
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 40  # 增加到 40 分鐘
     needs: fmt  # 等待格式檢查完成
     
@@ -53,7 +53,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 5431:5431
+          - 5431:5432
       
       # 回測資料庫 (讀寫)
       postgres-backtest:
@@ -220,7 +220,7 @@ jobs:
 
   integration:
     name: Integration Tests
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: test-and-clippy  # 等待測試和 clippy 完成
     
@@ -238,7 +238,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 5431:5431
+          - 5431:5432
       
       # 回測資料庫 (讀寫)
       postgres-backtest:

@@ -40,10 +40,15 @@
   - [12.2 版本命名規範](#122-版本命名規範)
   - [12.3 版本存取與管理](#123-版本存取與管理)
 - [13. 回測系統架構](#13-回測系統架構)
+  - [13.1 事件驅動架構](#131-事件驅動架構)
+  - [13.2 統一資金管理](#132-統一資金管理)
+- [14. 快取系統架構](#14-快取系統架構)
+  - [14.1 快取層級](#141-快取層級)
+  - [14.2 排名快取設計](#142-排名快取設計)
 
 ## 1. 專案概述
 
-backtest-server 是一個使用 Rust 開發的高效能金融回測伺服器，專為支持多策略和動態策略管理設計。本文檔詳細描述了專案的整體結構設計。
+backtest-server 是一個使用 Rust 開發的高效能金融回測伺服器，專為支持多策略和動態策略管理設計。系統採用事件驅動架構，實現真實的市場環境模擬和統一資金管理。本文檔詳細描述了專案的整體結構設計。
 
 ## 2. 目錄結構
 
@@ -64,14 +69,13 @@ backtest_server/                # 專案根目錄
 ├── config/                     # 配置文件目錄
 ├── scripts/                    # 輔助腳本目錄
 ├── src/                        # 源代碼目錄
-├── strategies/                 # 策略存儲目錄
-│   └── {strategy_id}/          # 策略ID目錄
-│       └── {strategy_id}_v1.dsl # 版本1策略檔案
+├── cache/                      # 快取目錄
+│   ├── rankings/               # 排名快取檔案
+│   └── indicators/             # 技術指標快取
 ├── migrations/                 # 數據庫遷移文件目錄
 ├── tests/                      # 集成測試目錄
 ├── benches/                    # 性能基準測試目錄
 ├── examples/                   # 示例代碼目錄
-├── raw/                        # 原始數據目錄
 └── README.md                   # 專案說明文檔
 ```
 
@@ -83,16 +87,23 @@ docs/                           # 文檔目錄
 ├── TASK.md                     # 任務清單文檔
 ├── STRUCTURE.md                # 結構說明文檔
 ├── BACKTEST_ARCHITECTURE.md    # 回測系統架構文檔
+├── EVENT_DRIVEN_DESIGN.md      # 事件驅動設計文檔
+├── CACHE_STRATEGY.md           # 快取策略文檔
 └── DB_SCHEMA.md                # 數據庫結構文檔
 
 config/                         # 配置文件目錄
 ├── development.toml            # 開發環境配置
 ├── production.toml             # 生產環境配置
+├── cache.toml                  # 快取配置
+├── backtest.toml               # 回測配置
 └── rabbitmq.conf               # RabbitMQ配置文件
 
 scripts/                        # 輔助腳本目錄
 ├── db/                         # 數據庫相關腳本
 │   └── init.sql                # 數據庫初始化腳本
+├── cache/                      # 快取相關腳本
+│   ├── build_ranking_cache.sh  # 構建排名快取
+│   └── clear_cache.sh          # 清理快取
 ├── rabbitmq/                   # RabbitMQ相關腳本
 │   ├── init.sh                 # RabbitMQ初始化腳本
 │   └── definitions.json        # RabbitMQ預設定義
@@ -107,7 +118,8 @@ scripts/                        # 輔助腳本目錄
 src/                            # 源代碼目錄
 ├── bin/                        # 程序入口點
 │   ├── main.rs                 # 主程序入口
-│   └── migrate.rs              # 數據庫遷移工具入口
+│   ├── migrate.rs              # 數據庫遷移工具入口
+│   └── cache_builder.rs        # 快取構建工具
 ├── lib.rs                      # 庫入口點，宣告主要模組
 ├── config.rs                   # 配置管理模組，宣告子模組
 ├── domain_types.rs             # 核心領域類型模組
@@ -122,6 +134,7 @@ src/                            # 源代碼目錄
 ├── server.rs                   # 伺服器核心組件，宣告子模組
 ├── storage.rs                  # 存儲系統模組，宣告子模組
 ├── backtest.rs                 # 回測系統模組，宣告子模組
+├── cache.rs                    # 快取系統模組，宣告子模組
 └── utils.rs                    # 公共工具模組，宣告子模組
 ```
 
@@ -135,22 +148,30 @@ src/domain_types/                   # 核心領域類型模組目錄
 ├── frequency.rs                    # 頻率定義
 ├── frame.rs                        # 基於 Polars 的市場數據框架
 ├── series.rs                       # 時間序列相關功能
-└── indicators.rs                   # 基本技術指標
+├── indicators.rs                   # 基本技術指標
+├── event.rs                        # 市場事件類型定義
+└── portfolio.rs                    # 投資組合類型
 
 
 src/data_provider/                  # 數據提供模組目錄
 ├── types.rs                        # 核心類型定義
 ├── loader.rs                       # 統一的數據加載器實現
-├── cache.rs                        # 數據緩存管理
+├── cache.rs                        # 數據緩存管理（分層快取）
 ├── resampler.rs                    # 時間序列重採樣功能
 ├── precalculator.rs                # 技術指標計算
-└── iterator.rs                     # 市場數據迭代器實現
+├── iterator.rs                     # 市場數據迭代器實現
+├── ranking_cache.rs                # 排名快取系統入口
+└── ranking_cache/                  # 排名快取子模組
+    ├── memory.rs                   # 內存快取實現
+    ├── persistent.rs               # 本地檔案持久化
+    ├── builder.rs                  # 排名預處理器
+    └── types.rs                    # 排名相關類型
 
 # 策略與執行相關模組
-src/strategy/                       # 策略管理模組目錄（不再存儲策略，只處理執行）
+src/strategy/                       # 策略管理模組目錄（不存儲策略）
 ├── parser.rs                       # 策略 DSL 解析器（從 RabbitMQ 接收）
 ├── executor.rs                     # 策略執行器
-├── context.rs                      # 策略執行上下文
+├── context.rs                      # 策略執行上下文（含資金狀態）
 ├── runtime.rs                      # 策略運行時狀態管理
 └── types.rs                        # 策略執行相關類型
 
@@ -158,21 +179,24 @@ src/execution/                      # 執行模擬器模組目錄
 ├── simulator.rs                    # 訂單執行模擬器
 ├── matching.rs                     # 訂單匹配引擎
 ├── position.rs                     # 倉位和資產管理
+├── portfolio.rs                    # 統一投資組合管理
 ├── types.rs                        # 執行相關類型宣告與重新導出
 └── types/                          # 執行相關類型子模組目錄
     ├── order.rs                    # 訂單定義
-    └── trade.rs                    # 交易記錄定義
+    ├── trade.rs                    # 交易記錄定義
+    └── fill.rs                     # 成交記錄定義
 
 src/dsl/                            # DSL解釋器模組目錄
 ├── parser.rs                       # DSL語法解析器
 ├── runtime.rs                      # DSL運行時
-├── stdlib.rs                       # DSL標準庫
+├── stdlib.rs                       # DSL標準庫（含資金查詢）
 └── compiler.rs                     # DSL編譯器
 
 src/risk/                           # 風險管理模組目錄
 ├── checker.rs                      # 風險檢查器
-├── limits.rs                       # 風險限制
-└── metrics.rs                      # 風險指標
+├── limits.rs                       # 風險限制（含資金限制）
+├── metrics.rs                      # 風險指標
+└── position_sizing.rs              # 倉位大小計算
 
 # 系統與運行時模組
 src/runtime/                        # 隔離運行時模組目錄
@@ -182,8 +206,19 @@ src/runtime/                        # 隔離運行時模組目錄
 
 src/event/                          # 事件處理系統模組目錄
 ├── bus.rs                          # 事件總線
-├── queue.rs                        # 事件佇列
-└── dispatcher.rs                   # 事件分發器
+├── queue.rs                        # 事件優先級佇列
+├── dispatcher.rs                   # 事件分發器
+├── types.rs                        # 事件類型定義
+└── generator.rs                    # 事件生成器
+
+# 快取系統模組
+src/cache/                          # 快取系統模組目錄
+├── hierarchy.rs                    # 分層快取管理
+├── memory.rs                       # 內存快取實現
+├── file.rs                         # 檔案快取實現
+├── redis.rs                        # Redis快取介面
+├── strategy.rs                     # 快取策略
+└── metrics.rs                      # 快取指標監控
 
 # 消息系統模組
 src/messaging/                      # 消息系統模組目錄
@@ -196,28 +231,33 @@ src/messaging/                      # 消息系統模組目錄
 │   ├── rpc.rs                      # RPC實現
 │   └── error.rs                    # 錯誤處理
 ├── protocol.rs                     # 通訊協議定義
-├── handlers/                       # 消息處理器目錄（待實現）
-│   ├── backtest.rs                 # 回測相關消息處理（待實現）
-│   ├── strategy.rs                 # 策略相關消息處理（待實現）
-│   └── data.rs                     # 數據相關消息處理（待實現）
+├── handlers/                       # 消息處理器目錄
+│   ├── backtest.rs                 # 回測相關消息處理
+│   ├── strategy.rs                 # 策略相關消息處理
+│   ├── data.rs                     # 數據相關消息處理
+│   └── ranking.rs                  # 排名查詢處理
 ├── models/                         # 消息模型目錄
 │   ├── commands.rs                 # 命令消息模型
 │   ├── events.rs                   # 事件消息模型
 │   └── responses.rs                # 回應消息模型
-│── rabbitmq.rs                     # RabbitMQ導出
-│── models.rs                       # 模組定義與導出
-└── auth.rs                         # 消息認證和授權（待實現）
+├── rabbitmq.rs                     # RabbitMQ導出
+├── models.rs                       # 模組定義與導出
+└── auth.rs                         # 消息認證和授權
 
 # 回測系統模組
 src/backtest/                       # 回測系統模組目錄
-├── engine.rs                       # 回測引擎核心實現
+├── engine.rs                       # 事件驅動回測引擎核心
 ├── task.rs                         # 回測任務管理
 ├── results.rs                      # 回測結果處理
 ├── progress.rs                     # 回測進度監控
 ├── executor.rs                     # 回測執行調度器
-├── context.rs                      # 回測執行上下文
+├── context.rs                      # 回測執行上下文（統一資金池）
 ├── metrics.rs                      # 回測性能指標計算
-└── storage.rs                      # 回測結果存儲
+├── storage.rs                      # 回測結果存儲
+├── event_generator.rs              # 市場事件生成器
+├── event_queue.rs                  # 事件優先級佇列
+├── portfolio.rs                    # 統一投資組合管理
+└── time_slicer.rs                  # 時間片執行優化
 
 # 服務與消息系統模組
 src/server/                         # 伺服器模組目錄
@@ -227,12 +267,15 @@ src/server/                         # 伺服器模組目錄
 # 基礎設施模組
 src/config/                         # 配置管理模組目錄
 ├── loader.rs                       # 配置加載（環境變量、文件等）
-└── validation.rs                   # 配置驗證
+├── validation.rs                   # 配置驗證
+├── cache_config.rs                 # 快取配置結構
+└── backtest_config.rs              # 回測配置結構
 
 src/storage/                        # 存儲系統模組目錄
 ├── database.rs                     # 數據庫連接管理
 ├── models.rs                       # 數據模型
 ├── migrations.rs                   # 數據庫遷移管理(對應/migrations目錄)
+├── external_db.rs                  # 外部市場數據庫連接
 └── redis/                          # Redis模組目錄
     ├── client.rs                   # Redis客戶端實現
     ├── config.rs                   # Redis配置結構
@@ -246,37 +289,47 @@ src/storage/                        # 存儲系統模組目錄
 
 src/utils/                          # 公共工具模組目錄
 ├── time_utils.rs                   # 時間轉換工具，處理不同層間的時間格式轉換
-└── error.rs                        # 通用錯誤處理
+├── error.rs                        # 通用錯誤處理
+├── metrics.rs                      # 系統指標收集
+└── binary_heap.rs                  # 自定義二元堆實現（事件優先級）
 ```
 
 ### 2.5 測試與示例目錄
 
 ```
 tests/                              # 集成測試目錄
-├── data_ingestion_tests.rs         # 數據導入模組測試
 ├── data_provider_tests.rs          # 數據提供模組測試
+├── ranking_cache_tests.rs          # 排名快取系統測試
 ├── strategy_tests.rs               # 策略模組測試
 ├── backtest_tests.rs               # 回測系統測試
+├── event_driven_tests.rs           # 事件驅動架構測試
+├── portfolio_tests.rs              # 投資組合管理測試
 ├── messaging_tests.rs              # 消息系統測試
 └── dsl_tests.rs                    # DSL解釋器測試
 
 benches/                            # 性能基準測試目錄
 ├── data_loading.rs                 # 數據加載性能測試
 ├── stock_filtering.rs              # 股票篩選性能測試
+├── ranking_cache_performance.rs    # 排名快取性能測試
+├── event_processing.rs             # 事件處理性能測試
 ├── strategy_execution.rs           # 策略執行性能測試
+├── cache_comparison.rs             # 快取層級對比測試
 └── messaging_performance.rs        # 消息系統性能測試
 
 examples/                           # 示例代碼目錄
 ├── simple_strategy.rs              # 簡單策略示例
+├── day_trading_strategy.rs         # 當沖策略示例
+├── event_driven_backtest.rs        # 事件驅動回測示例
+├── ranking_cache_usage.rs          # 排名快取使用示例
 ├── backtest_runner.rs              # 回測運行器示例
 └── messaging_client.rs             # 消息客戶端示例
 ```
 
 ## 3. 核心模組
 
-## 3.1 領域類型模組 (domain_types)
+### 3.1 領域類型模組 (domain_types)
 
-此模組定義了整個應用程序中使用的核心金融數據結構和類型，基於 Polars 提供高效的數據處理能力。
+此模組定義了整個應用程序中使用的核心金融數據結構和類型，基於 Polars 提供高效的數據處理能力，並支援事件驅動架構。
 
 **注意**：此模組不包含策略定義相關類型，策略由外部 StratPlat 系統管理。
 
@@ -284,6 +337,7 @@ examples/                           # 示例代碼目錄
 - 提供標準化的金融市場數據表示
 - 定義資產類型和交易枚舉
 - 整合 Polars 資料結構，實現高效率的數據操作
+- 定義事件類型支援事件驅動架構
 - 為應用程序提供統一的數據類型系統
 
 **主要組件** (`src/domain_types/`):
@@ -292,76 +346,89 @@ examples/                           # 示例代碼目錄
 - `frame.rs`: 基於 Polars 的市場數據框架
 - `series.rs`: 時間序列相關功能
 - `indicators.rs`: 基本技術指標
+- `event.rs`: 市場事件類型定義（MarketOpen、TickData 等）
+- `portfolio.rs`: 投資組合和資金管理類型
 
+### 3.2 數據提供模組 (data_provider)
 
-## 3.2 數據提供模組 (data_provider)
-
-此模組作為回測系統的數據來源，專注於高效率地從資料庫提取經過驗證的數據，並提供優化的查詢和數據轉換功能。
+此模組作為回測系統的數據來源，專注於高效率地從外部資料庫提取數據，並提供優化的查詢、數據轉換和排名快取功能。
 
 **主要功能**:
-- 從資料庫高效讀取已驗證的數據(無需再次驗證)
+- 從外部資料庫高效讀取市場數據
 - 提供統一的數據訪問接口給回測系統
-- 實現數據緩存策略，優化頻繁訪問的數據讀取
+- 實現多層快取策略，優化頻繁訪問的數據讀取
+- 管理股票排名快取系統
 - 執行數據轉換操作，如頻率轉換、技術指標計算等
 - 支持流式數據處理和惰性計算
 
 **主要組件** (`src/data_provider/`):
-- `loader.rs`: 高層資料加載邏輯 (使用 storage 和 query_builder)
-- `cache.rs`: 實現多層緩存策略，平衡記憶體使用和性能
-- `iterator.rs`: 提供高效的市場數據迭代器，用於回測過程中的順序數據存取
-- `precalculator.rs`: 基於 Polars 向量化操作實現技術指標的預計算和緩存。
-- `query_builder.rs`: 專注於構建優化的查詢語句，支持複雜的時間範圍和資產過濾 (透過Storage Repository 不需要直接操作資料庫連接或SQL語句)
-- `resampler.rs`: 使用 Polars 高效實現頻率轉換(分鐘→小時→日等)，提供時區管理和交易時段處理 (暫不實現)
+- `loader.rs`: 高層資料加載邏輯，整合排名快取
+- `cache.rs`: 實現多層緩存策略（內存優先）
+- `iterator.rs`: 提供高效的市場數據迭代器
+- `precalculator.rs`: 基於 Polars 向量化操作實現技術指標預計算
+- `ranking_cache.rs`: 排名快取系統入口
+- `ranking_cache/memory.rs`: 基於 BTreeMap 的內存快取
+- `ranking_cache/persistent.rs`: 二進制序列化的本地檔案快取
+- `ranking_cache/builder.rs`: 從外部數據庫預處理排名數據
 
-## 設計重點和優化
-
-1. **數據提供專注**:
-   - `data_provider` 專注於高效數據提取和轉換
-   - 假設資料庫中數據已經過驗證，提供統一的數據訪問介面
-
-2. **Polars 深度整合**:
-   - 利用 Polars 的惰性評估和向量化操作提高性能
-   - 數據保持在 Polars 格式中，避免不必要的轉換開銷
-   - 使用 Polars 的查詢優化和內存管理能力
-
-3. **高效數據訪問**:
-   - 實現智能緩存策略，優先緩存熱門數據
-   - 使用 Polars LazyFrame 惰性計算降低記憶體壓力
-   - 支持批處理和流式處理，適應不同數據量和使用場景
-
-這種設計確保了系統在處理大量市場數據時保持高效，同時維持了數據的完整性和可靠性。
-
+**排名快取設計重點**:
+- 預處理：啟動時計算所有歷史排名
+- 內存存儲：O(1) 查詢時間
+- 增量更新：只計算新增日期
+- 壓縮存儲：減少內存佔用
 
 ### 3.3 策略DSL模組
 
-策略DSL模組提供了一種專用的領域特定語言，簡化策略開發並確保策略執行的安全性和一致性。
+策略DSL模組提供了一種專用的領域特定語言，簡化策略開發並確保策略執行的安全性和一致性，支援統一資金管理。
 
 **主要功能**:
 - 解析策略DSL代碼
 - 提供安全的執行環境
 - 實現DSL標準庫和內建函數
 - 支持策略編譯優化
+- 提供資金查詢和管理接口
 
 **主要組件** (`src/dsl/`):
 - `parser.rs`: 將DSL代碼解析為抽象語法樹
 - `runtime.rs`: 執行解析後的DSL代碼
-- `stdlib.rs`: 提供DSL標準庫功能
+- `stdlib.rs`: 提供DSL標準庫功能（包含資金管理函數）
 - `compiler.rs`: 將DSL代碼編譯為優化的中間表示
+
+**資金管理功能**:
+```rust
+// DSL 中可用的資金函數
+available_cash()      // 查詢可用資金
+position_value(symbol) // 查詢持倉價值
+total_equity()        // 查詢總權益
+can_afford(order)     // 檢查是否有足夠資金
+```
 
 ### 3.4 事件處理系統模組
 
-事件處理系統負責系統中各個組件之間的消息傳遞和事件處理，支持鬆耦合的組件通信。
+事件處理系統負責系統中各個組件之間的消息傳遞和事件處理，是實現事件驅動回測的核心。
 
 **主要功能**:
 - 實現事件發布/訂閱機制
-- 管理事件佇列和分發
+- 管理事件優先級佇列
 - 提供異步事件處理
 - 支持事件過濾和路由
+- 確保事件按時間順序處理
 
 **主要組件** (`src/event/`):
 - `bus.rs`: 實現中央事件總線，用於事件發布和訂閱
-- `queue.rs`: 實現高效的事件佇列
+- `queue.rs`: 基於 BinaryHeap 的優先級事件佇列
 - `dispatcher.rs`: 管理事件分發邏輯
+- `types.rs`: 定義所有事件類型
+- `generator.rs`: 從市場數據生成事件流
+
+**事件優先級設計**:
+```rust
+// 事件按時間戳排序，同時間按類型優先級
+1. MarketOpen/Close
+2. OrderFilled
+3. TickData/MinuteBar
+4. PositionUpdate
+```
 
 ### 3.5 隔離運行時模組
 
@@ -371,6 +438,7 @@ examples/                           # 示例代碼目錄
 - 提供策略沙箱環境
 - 管理資源配額和限制
 - 處理策略錯誤和異常
+- 限制系統資源訪問
 
 **主要組件** (`src/runtime/`):
 - `sandbox.rs`: 實現策略沙箱，限制策略的訪問權限
@@ -379,34 +447,50 @@ examples/                           # 示例代碼目錄
 
 ### 3.6 執行模擬器模組
 
-執行模擬器負責模擬市場中的訂單執行過程，包括處理不同類型的訂單、計算滑點和佣金等。
+執行模擬器負責模擬市場中的訂單執行過程，包括處理不同類型的訂單、計算滑點和佣金等，並管理統一的投資組合。
 
 **主要功能**:
 - 模擬不同類型的訂單執行
 - 計算滑點和交易成本
-- 管理倉位和資產組合
+- 管理統一資金池
+- 追蹤所有持倉
 - 生成執行報告
 
 **主要組件** (`src/execution/`):
 - `simulator.rs`: 實現訂單執行模擬器
 - `matching.rs`: 實現訂單匹配引擎
-- `position.rs`: 管理倉位和資產組合
+- `position.rs`: 管理個別股票倉位
+- `portfolio.rs`: 統一投資組合和資金管理
 - `types.rs`: 定義執行相關的核心類型
 - `types/order.rs`: 定義訂單類型和結構
 - `types/trade.rs`: 定義交易記錄結構
+- `types/fill.rs`: 定義成交記錄結構
+
+**統一資金管理**:
+```rust
+pub struct Portfolio {
+    cash: Decimal,
+    positions: HashMap<String, Position>,
+    pending_orders: Vec<Order>,
+    total_value: Decimal,
+}
+```
 
 ### 3.7 風險管理模組
 
-風險管理模組負責評估和控制交易風險，確保策略符合預設的風險參數。
+風險管理模組負責評估和控制交易風險，確保策略符合預設的風險參數，特別是資金使用限制。
 
 **主要功能**:
 - 實現風險檢查和限制
 - 計算風險指標和暴露
+- 控制倉位大小
+- 監控資金使用
 
 **主要組件** (`src/risk/`):
 - `checker.rs`: 實現風險檢查邏輯
-- `limits.rs`: 定義風險限制規則
+- `limits.rs`: 定義風險限制規則（包含資金限制）
 - `metrics.rs`: 計算風險指標
+- `position_sizing.rs`: 根據資金計算合適倉位
 
 ### 3.8 消息系統模組
 
@@ -417,39 +501,33 @@ examples/                           # 示例代碼目錄
 - 實現多種消息模式（請求/回應、發布/訂閱、工作佇列）
 - 處理命令和事件消息
 - 提供消息認證和授權
+- 支援排名查詢請求
 
 **主要組件** (`src/messaging/`):
-- `rabbitmq/connection.rs`: 管理 RabbitMQ 連接
-- `rabbitmq/broker.rs`: 實現消息代理和路由
-- `rabbitmq/client.rs`: 提供客戶端使用的 API
-- `rabbitmq/consumer.rs`: 處理消息消費邏輯
-- `rabbitmq/publisher.rs`: 處理消息發布邏輯
-- `rabbitmq/rpc.rs`: 實現 RPC 調用模式
-- `rabbitmq/error.rs`: 處理 RabbitMQ 相關錯誤
+- `rabbitmq/`: RabbitMQ 實現細節
 - `protocol.rs`: 定義通訊協議和格式
-- `handlers/backtest.rs`: 處理回測相關請求（待實現）
-- `handlers/strategy.rs`: 處理策略相關請求（待實現）
-- `handlers/data.rs`: 處理數據相關請求（待實現）
-- `models/commands.rs`: 定義命令消息結構
-- `models/events.rs`: 定義事件消息結構
-- `models/responses.rs`: 定義回應消息結構
-- `auth.rs`: 處理消息認證和授權（待實現）
-
-消息系統使用 RabbitMQ 作為消息代理，支持多種消息模式，包括請求/回應模式、發布/訂閱模式和工作佇列模式。系統中的命令和事件被定義為標準化的消息模型，以確保一致性和可擴展性。
+- `handlers/backtest.rs`: 處理回測相關請求
+- `handlers/strategy.rs`: 處理策略相關請求
+- `handlers/data.rs`: 處理數據相關請求
+- `handlers/ranking.rs`: 處理排名查詢請求
+- `models/`: 消息模型定義
+- `auth.rs`: 處理消息認證和授權
 
 ### 3.9 配置管理模組
 
-配置管理模組負責加載、驗證和管理系統的配置選項。
+配置管理模組負責加載、驗證和管理系統的配置選項，包含快取和回測特定配置。
 
 **主要功能**:
 - 從不同來源加載配置（文件、環境變量等）
 - 驗證配置的有效性
 - 提供默認配置值
+- 管理快取策略配置
 
 **主要組件** (`src/config/`):
 - `loader.rs`: 實現配置加載邏輯
 - `validation.rs`: 實現配置驗證
-- `defaults.rs`: 定義默認配置值
+- `cache_config.rs`: 快取系統配置
+- `backtest_config.rs`: 回測引擎配置
 
 ### 3.10 伺服器模組
 
@@ -466,40 +544,53 @@ examples/                           # 示例代碼目錄
 
 ### 3.11 回測模組
 
-回測模組是系統的核心，負責執行金融策略的歷史回測。
+回測模組是系統的核心，負責執行金融策略的歷史回測，採用事件驅動架構實現真實的市場模擬。
 
 **主要功能**:
-- 執行五階段回測流程（初始化、數據準備、策略執行、結果收集、結果分析）
+- 實現事件驅動回測引擎
 - 管理回測任務和資源
+- 生成市場事件流
+- 協調策略執行和資金管理
 - 計算性能指標
 - 生成回測報告
 
 **主要組件** (`src/backtest/`):
-- `engine.rs`: 實現回測引擎核心
+- `engine.rs`: 事件驅動回測引擎核心
 - `task.rs`: 管理回測任務
 - `results.rs`: 處理回測結果
 - `progress.rs`: 監控回測進度
 - `executor.rs`: 調度回測任務執行
-- `context.rs`: 管理回測執行上下文
+- `context.rs`: 管理回測執行上下文（含統一資金池）
 - `metrics.rs`: 計算性能指標
 - `storage.rs`: 存儲回測結果
+- `event_generator.rs`: 從市場數據生成事件
+- `event_queue.rs`: 管理事件優先級佇列
+- `portfolio.rs`: 統一投資組合狀態管理
+- `time_slicer.rs`: 時間片優化執行
 
-請參閱 [BACKTEST_ARCHITECTURE.md](docs/BACKTEST_ARCHITECTURE.md) 獲取更詳細的回測系統架構說明。
+**事件驅動執行流程**:
+1. 生成所有市場事件
+2. 按時間順序處理事件
+3. 每個事件可能觸發策略信號
+4. 檢查資金約束後執行交易
+5. 更新投資組合狀態
 
 ### 3.12 存儲系統模組
 
-存儲系統模組負責管理系統的持久化存儲，包括數據庫和快取操作。
+存儲系統模組負責管理系統的持久化存儲，包括連接外部數據庫、管理系統數據庫和快取操作。
 
 **主要功能**:
-- 管理數據庫連接和操作
+- 管理外部市場數據庫連接（只讀）
+- 管理系統數據庫（TimescaleDB）
 - 提供數據模型和ORM功能
-- 管理Redis快取和分佈式功能
+- 管理Redis快取（用於跨進程共享）
 
 **主要組件** (`src/storage/`):
-- `database.rs`: 數據庫連接管理
+- `database.rs`: 系統數據庫連接管理
+- `external_db.rs`: 外部市場數據庫連接
 - `models.rs`: 數據模型
 - `migrations.rs`: 數據庫遷移管理
-- `redis/*`: Redis相關功能實現
+- `redis/*`: Redis相關功能實現（主要用於狀態共享）
 
 ## 4. 配置文件
 
@@ -510,76 +601,92 @@ examples/                           # 示例代碼目錄
 - **Makefile.toml**: cargo-make任務定義
 - **config/development.toml**: 開發環境配置
 - **config/production.toml**: 生產環境配置
+- **config/cache.toml**: 快取策略配置
+- **config/backtest.toml**: 回測引擎配置
 - **config/rabbitmq.conf**: RabbitMQ配置
+
+### 快取配置示例：
+```toml
+# config/cache.toml
+[ranking]
+type = "memory"
+memory_size_mb = 512
+file_cache_dir = "./cache/rankings"
+ttl_days = 30
+
+[market_data]
+type = "hierarchical"
+memory_size_mb = 2048
+redis_enabled = false
+```
+
+### 回測配置示例：
+```toml
+# config/backtest.toml
+[execution]
+mode = "event_driven"
+time_slice_seconds = 1
+
+[portfolio]
+initial_cash = 10000000
+max_position_per_symbol = 0.1
+max_positions = 10
+```
 
 ## 5. 資料庫結構
 
-專案使用TimescaleDB（PostgreSQL的時間序列擴展）作為主要數據存儲。詳細資料庫結構請參見 [DB_SCHEMA.md](docs/DB_SCHEMA.md)。
+專案採用混合資料庫策略：
+- **外部市場數據庫**：只讀訪問原始市場數據
+- **TimescaleDB**：存儲回測結果和系統數據
+- **本地檔案**：存儲排名快取
+
+詳細資料庫結構請參見 [DB_SCHEMA.md](docs/DB_SCHEMA.md)。
 
 ### 5.1 數據庫遷移文件
 
 系統使用Sqlx的數據庫遷移機制來管理數據庫結構的版本控制：
 
 - **migrations/**: 遷移文件目錄
-  - **20250501000000_create_base_tables.sql**: 創建基礎表結構
-  - **20250502000000_add_indexes.sql**: 添加索引優化
-  - **20250503000000_create_views.sql**: 創建視圖和函數
-
-遷移文件按照版本號順序執行，確保數據庫結構能夠可靠地從一個版本更新到下一個版本。
+  - **20250501000000_create_system_tables.sql**: 創建系統表
+  - **20250502000000_create_backtest_tables.sql**: 創建回測相關表
+  - **20250503000000_add_indexes.sql**: 添加索引優化
+  - **20250504000000_create_views.sql**: 創建視圖和函數
 
 ### 5.2 數據庫模型
 
-數據庫模型反映了核心領域模型，主要包括以下表結構：
+數據庫模型主要包括以下表結構：
 
-1. **基礎資產表**:
-   - `exchange`: 交易所信息
-   - `instrument`: 金融商品基本信息
-   - 資產特定表: `stock`, `future`, `option_contract`, `forex`, `crypto`
+1. **系統管理表**:
+   - `system_config`: 系統配置
+   - `task_queue`: 任務佇列
+   - `cache_metadata`: 快取元數據
 
-2. **市場數據表**:
-   - `minute_bar`: 分鐘級K線數據
-   - `tick`: Tick級別行情數據
-   - `market_event`: 市場事件記錄
+2. **策略管理表**:
+   - `strategy`: 策略元數據
+   - `strategy_version`: 策略版本
+   - `strategy_instance`: 策略實例
 
-3. **策略和交易表**:
-   - `strategy`: 策略定義
-   - `strategy_version`: 策略版本管理
-   - `strategy_instance`: 策略實例配置
-   - `trade`: 交易記錄
-   - `portfolio`: 資產組合管理
-
-4. **回測相關表**:
-   - `backtest_config`: 回測配置信息
+3. **回測結果表**:
+   - `backtest_config`: 回測配置
    - `backtest_result`: 回測結果摘要
-   - `backtest_trade`: 回測交易記錄
-   - `backtest_position_snapshot`: 回測倉位快照
-   - `backtest_portfolio_snapshot`: 回測投資組合快照
+   - `backtest_trade`: 交易記錄
+   - `backtest_position_snapshot`: 倉位快照
+   - `backtest_portfolio_snapshot`: 投資組合快照
+   - `backtest_event_log`: 事件日誌
 
-5. **技術指標和預計算數據表**:
-   - `technical_indicator`: 技術指標定義
-   - `instrument_daily_indicator`: 商品日級指標數據
-   - `fundamental_indicator`: 基本面指標
-
-完整的數據庫模型和關係圖請參見 [DB_SCHEMA.md](docs/DB_SCHEMA.md)。
+4. **績效分析表**:
+   - `performance_metrics`: 績效指標
+   - `drawdown_analysis`: 回撤分析
+   - `risk_metrics`: 風險指標
 
 ## 6. Docker環境
 
 專案提供完整的Docker開發環境，包括：
 
 - **Dockerfile**: 定義Rust開發環境
-- **Dockerfile.db**: 定義TimescaleDB數據庫環境，包括：
-  - 基於timescale/timescaledb:latest-pg14鏡像
-  - 自動加載數據庫遷移文件
-  - 配置TimescaleDB優化參數
-- **Dockerfile.rabbitmq**: 定義RabbitMQ環境，包括：
-  - 基於rabbitmq:3.11-management鏡像
-  - 加載預設交換機和佇列定義
-  - 配置管理界面和插件
-- **docker-compose.yml**: 配置多服務開發環境，包括：
-  - Rust開發容器
-  - TimescaleDB數據庫
-  - Redis緩存和消息系統
-  - RabbitMQ消息代理
+- **Dockerfile.db**: 定義TimescaleDB數據庫環境
+- **Dockerfile.rabbitmq**: 定義RabbitMQ環境
+- **docker-compose.yml**: 配置多服務開發環境
 
 Docker環境配置確保開發和生產環境的一致性，簡化部署流程。
 
@@ -587,38 +694,40 @@ Docker環境配置確保開發和生產環境的一致性，簡化部署流程�
 
 專案包含多個層次的測試：
 
-- **單元測試**: 位於各模組中的`tests`模組，測試單個功能和組件
-- **集成測試**: 位於`tests/`目錄，測試多個組件的協同工作
-- **性能基準測試**: 位於`benches/`目錄，測量關鍵操作的性能
+- **單元測試**: 位於各模組中的`tests`模組
+- **集成測試**: 位於`tests/`目錄
+- **性能基準測試**: 位於`benches/`目錄
 
-測試使用以下工具和框架：
-- `cargo test`: 運行單元和集成測試
-- `cargo-nextest`: 並行運行測試提高效率
-- `mockall`: 用於模擬依賴組件
-- `proptest`: 基於屬性的測試，生成隨機測試資料
+重點測試領域：
+- 排名快取系統的正確性和效能
+- 事件驅動引擎的時序正確性
+- 資金計算的準確性
+- 多股票並發執行的一致性
 
 ## 8. 效能基準測試
 
 專案使用Criterion.rs進行性能基準測試，主要測試案例包括：
 
-- **數據加載性能**: 測試從CSV和數據庫加載數據的效率
-- **篩選和查詢性能**: 測試資產篩選和數據查詢效率
-- **策略執行性能**: 測試在不同數據量下的策略執行效率
-- **DSL解析和執行性能**: 測試DSL解析器和運行時的效率
-- **消息系統性能**: 測試RabbitMQ消息傳輸效率和延遲
+- **排名快取效能**: 測試內存查詢 vs 數據庫查詢
+- **事件處理效能**: 測試事件佇列吞吐量
+- **資金計算效能**: 測試統一資金管理開銷
+- **策略執行效能**: 測試多股票並行處理
+- **快取層級對比**: 測試內存 vs 檔案 vs Redis
 
-基準測試結果用於識別性能瓶頸和驗證優化效果。
+基準測試結果用於驗證設計決策和優化效果。
 
 ## 9. 示例代碼
 
 `examples/`目錄包含使用本庫的示例程序：
 
-- `simple_strategy.rs`: 展示如何創建和測試簡單交易策略
-- `backtest_runner.rs`: 展示如何配置和運行完整回測
-- `messaging_client.rs`: 展示如何使用RabbitMQ客戶端與系統交互
-- 其他專用示例，如技術指標計算、自定義DSL策略等
+- `simple_strategy.rs`: 展示基本交易策略
+- `day_trading_strategy.rs`: 展示當沖策略實現
+- `event_driven_backtest.rs`: 展示事件驅動回測
+- `ranking_cache_usage.rs`: 展示排名快取使用
+- `backtest_runner.rs`: 展示完整回測流程
+- `messaging_client.rs`: 展示RabbitMQ客戶端
 
-示例代碼提供了實際使用場景的參考，幫助用戶快速上手。
+示例代碼提供了實際使用場景的參考。
 
 ## 10. 文檔
 
@@ -630,10 +739,8 @@ Docker環境配置確保開發和生產環境的一致性，簡化部署流程�
 - **docs/STRUCTURE.md**: 本文檔，詳細的專案結構
 - **docs/DB_SCHEMA.md**: 數據庫結構設計
 - **docs/BACKTEST_ARCHITECTURE.md**: 回測系統架構細節
-- **消息協議文檔**: 描述RabbitMQ消息格式和協議
-- **用戶指南**: 策略開發和系統使用手冊
-
-文檔通過`cargo doc`生成，並可通過Github Wiki或專用文檔網站訪問。
+- **docs/EVENT_DRIVEN_DESIGN.md**: 事件驅動設計說明
+- **docs/CACHE_STRATEGY.md**: 快取策略詳解
 
 ## 11. Rust 模組系統與組織方式
 
@@ -642,39 +749,9 @@ Docker環境配置確保開發和生產環境的一致性，簡化部署流程�
 ### 11.1 模組結構基本原則
 
 1. **主模組宣告**：在 `lib.rs` 中使用 `pub mod` 宣告所有頂層模組
-   ```rust
-   // lib.rs
-   pub mod data_ingestion;
-   pub mod execution;
-   // 其他頂層模組...
-   ```
-
 2. **子模組宣告**：使用與模組同名的 `.rs` 文件來宣告子模組
-   ```rust
-   // data_ingestion.rs
-   pub mod processor;
-   pub mod validator;
-   ```
-
 3. **子模組實現**：子模組放在與父模組同名的目錄中
-   ```
-   src/
-   ├── data_ingestion.rs           # 宣告 data_ingestion 模組的子模組
-   └── data_ingestion/             # 存放 data_ingestion 子模組實現
-       ├── processor.rs            # processor 子模組的實現
-       └── validator.rs            # validator 子模組的實現
-   ```
-
 4. **深層子模組**：深層子模組也遵循相同的模式
-   ```
-   src/
-   ├── data_ingestion.rs           # 宣告 data_ingestion 模組的子模組
-   └── data_ingestion/             
-       ├── processor.rs            # 宣告 processor 的子模組
-       └── processor/              # 存放 processor 的子模組實現
-           ├── csv_io.rs
-           └── ...
-   ```
 
 ### 11.2 好處與最佳實踐
 
@@ -685,23 +762,17 @@ Docker環境配置確保開發和生產環境的一致性，簡化部署流程�
 
 ### 11.3 使用示例
 
-**在 `data_provider/loader.rs` 中宣告和重新導出子模組**：
+**在 `data_provider/ranking_cache.rs` 中宣告和重新導出子模組**：
 ```rust
 // 宣告子模組
-pub mod csv_reader;
-pub mod data_loader;
+pub mod memory;
+pub mod persistent;
+pub mod builder;
 
 // 重新導出，簡化外部使用
-pub use csv_reader::CsvReader;
-pub use data_loader::DataLoader;
-```
-
-**從外部使用**：
-```rust
-// 由於重新導出，可以直接使用
-use crate::data_provider::loader::CsvReader;
-// 而不必
-// use crate::data_provider::loader::csv_reader::CsvReader;
+pub use memory::RankingMemoryCache;
+pub use persistent::RankingFileCache;
+pub use builder::RankingPreprocessor;
 ```
 
 ## 12. 策略版本管理系統
@@ -710,44 +781,95 @@ use crate::data_provider::loader::CsvReader;
 
 ### 12.1 版本儲存結構
 
-策略檔案以標準化目錄結構保存：
-
-```
-strategies/
-└── {strategy_id}/                # 策略ID目錄
-    └── {strategy_id}_v{n}.dsl    # 策略檔案
-```
+策略通過 RabbitMQ 接收，系統不存儲策略檔案，只在資料庫中記錄元數據。
 
 ### 12.2 版本命名規範
 
-策略檔案採用明確的版本命名規範：
-- 格式：`{strategy_id}_v{version}.dsl`
-- 例如：`my_strategy_v1.dsl`, `my_strategy_v2.dsl`
-- 版本號格式為整數遞增，確保版本排序一致性
+策略版本資訊存儲在資料庫中：
+- 策略ID：唯一標識符
+- 版本號：整數遞增
+- 接收時間：記錄策略接收時間
 
 ### 12.3 版本存取與管理
 
-版本管理完全依賴資料庫，所有策略元數據和版本信息都儲存在資料庫中。系統通過資料庫查詢直接獲取策略信息，而非依賴檔案系統中的元數據檔案。
-
-系統提供簡化的版本管理功能：
-
-**創建新版本**
-- 自動生成下一個版本號
-- 保留舊版本檔案作為歷史記錄
-- 在資料庫中更新相關記錄
+版本管理完全依賴資料庫，所有策略元數據和版本信息都儲存在資料庫中。
 
 ## 13. 回測系統架構
 
-回測系統採用五階段協作架構，將回測過程分為明確的階段，確保組件之間的責任分離和協作：
+### 13.1 事件驅動架構
+
+回測系統採用事件驅動架構，確保真實模擬市場環境：
 
 ```
-┌─── 初始化階段 ───┐   ┌─── 數據準備階段 ───┐   ┌─── 策略執行階段 ───┐   ┌─── 結果收集階段 ───┐   ┌─── 結果分析階段 ───┐
-│  使用模組:        │   │  使用模組:          │   │  使用模組:          │   │  使用模組:          │   │  使用模組:          │
-│  - 回測模組       │   │  - 數據提供模組     │   │  - 策略模組         │   │  - 執行模擬器模組   │   │  - 回測模組         │
-│  - 配置管理模組   │   │  - 運行時模組       │   │  - DSL模組          │   │  - 風險管理模組     │   │  - 消息系統模組    │
-│                  │   │  - 回測模組         │   │  - 運行時模組       │   │  - 回測模組         │   │                    │
-│                  │   │                    │   │  - 執行模擬器模組    │   │                    │   │                    │
-└──────────────────┘   └────────────────────┘   └────────────────────┘   └────────────────────┘   └────────────────────┘
+事件生成 → 事件佇列 → 事件處理 → 策略執行 → 訂單生成 → 資金檢查 → 執行模擬
 ```
 
-每個階段有明確的職責和輸入/輸出，詳細架構請參見 [BACKTEST_ARCHITECTURE.md](docs/BACKTEST_ARCHITECTURE.md)。
+**核心組件**：
+1. **事件生成器**：從市場數據生成時序事件
+2. **事件佇列**：基於 BinaryHeap 的優先級佇列
+3. **事件調度器**：按時間順序分發事件
+4. **策略執行器**：處理事件並生成交易信號
+5. **執行模擬器**：模擬訂單執行和資金變化
+
+### 13.2 統一資金管理
+
+所有股票共享同一資金池，確保資金約束的真實性：
+
+```rust
+pub struct UnifiedPortfolio {
+    cash: Decimal,
+    positions: HashMap<String, Position>,
+    pending_orders: Vec<Order>,
+    
+    // 資金管理方法
+    pub fn available_cash(&self) -> Decimal
+    pub fn can_afford(&self, order: &Order) -> bool
+    pub fn execute_order(&mut self, order: Order) -> Result<Trade>
+}
+```
+
+## 14. 快取系統架構
+
+### 14.1 快取層級
+
+系統實現三層快取架構：
+
+1. **L1 - 內存快取**：
+   - 最快速的訪問（< 100ns）
+   - 用於熱數據和當前交易日數據
+   - 基於 LRU 策略
+
+2. **L2 - 本地檔案快取**：
+   - 持久化存儲（< 1ms）
+   - 用於排名數據和預計算結果
+   - 使用二進制序列化
+
+3. **L3 - Redis（可選）**：
+   - 跨進程共享（< 10ms）
+   - 用於系統狀態和分散式鎖
+   - 不用於高頻數據
+
+### 14.2 排名快取設計
+
+專門優化的排名快取系統：
+
+```rust
+pub struct RankingCache {
+    // 內存存儲
+    memory: BTreeMap<NaiveDate, Vec<String>>,
+    // LRU快取
+    lru: LruCache<NaiveDate, Vec<String>>,
+    // 檔案路徑
+    cache_file: PathBuf,
+    
+    // 核心方法
+    pub fn get_top_stocks(&self, date: NaiveDate) -> &[String]
+    pub fn build_from_db(&mut self, date_range: DateRange)
+    pub fn update_incremental(&mut self, new_date: NaiveDate)
+}
+```
+
+**效能指標**：
+- 初始構建：< 5分鐘（10年數據）
+- 查詢延遲：< 100ns（內存命中）
+- 增量更新：< 1秒（單日數據）

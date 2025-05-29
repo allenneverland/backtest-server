@@ -23,12 +23,9 @@ impl<P: RedisPool> MultiLevelCache<P> {
     /// * `redis_cache` - Redis 快取管理器
     /// * `memory_capacity` - 內存快取容量
     /// * `cache_ttl` - 快取過期時間（秒）
-    pub fn new(
-        redis_cache: Arc<CacheManager<P>>,
-        memory_capacity: usize,
-        cache_ttl: u64,
-    ) -> Self {
-        let capacity = NonZeroUsize::new(memory_capacity).unwrap_or(NonZeroUsize::new(1000).unwrap());
+    pub fn new(redis_cache: Arc<CacheManager<P>>, memory_capacity: usize, cache_ttl: u64) -> Self {
+        let capacity =
+            NonZeroUsize::new(memory_capacity).unwrap_or(NonZeroUsize::new(1000).unwrap());
         Self {
             memory_cache: Arc::new(RwLock::new(LruCache::new(capacity))),
             redis_cache,
@@ -65,13 +62,13 @@ impl<P: RedisPool> MultiLevelCache<P> {
             let config = bincode::config::standard();
             let serialized = bincode::encode_to_vec(&value, config)
                 .map_err(|e| CacheError::SerializationError(e.to_string()))?;
-            
+
             // 更新內存快取
             {
                 let mut cache = self.memory_cache.write();
                 cache.put(key.to_string(), serialized);
             }
-            
+
             return Ok(Some(value));
         }
 
@@ -97,7 +94,9 @@ impl<P: RedisPool> MultiLevelCache<P> {
         }
 
         // 2. 更新 Redis 快取
-        self.redis_cache.set(key, value, Some(self.cache_ttl)).await?;
+        self.redis_cache
+            .set(key, value, Some(self.cache_ttl))
+            .await?;
 
         Ok(())
     }
@@ -148,10 +147,10 @@ impl<P: RedisPool> MultiLevelCache<P> {
 
         // 執行函數獲取數據
         let value = f().await?;
-        
+
         // 快取結果
         self.set(key, &value).await?;
-        
+
         Ok(value)
     }
 
@@ -204,7 +203,10 @@ pub fn generate_cache_key(
     start_ts: i64,
     end_ts: i64,
 ) -> String {
-    format!("market_data:{}:{}:{}:{}", instrument_id, frequency, start_ts, end_ts)
+    format!(
+        "market_data:{}:{}:{}:{}",
+        instrument_id, frequency, start_ts, end_ts
+    )
 }
 
 #[cfg(test)]
@@ -219,7 +221,7 @@ mod tests {
 
     mock! {
         CacheOps {}
-        
+
         #[async_trait]
         impl CacheOperations for CacheOps {
             async fn get<T: serde::de::DeserializeOwned + Send>(&self, key: &str) -> Result<Option<T>, CacheError>;
@@ -240,7 +242,9 @@ mod tests {
             MarketData {
                 id: 1,
                 instrument_id: 100,
-                timestamp: DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z").unwrap().with_timezone(&Utc),
+                timestamp: DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
+                    .unwrap()
+                    .with_timezone(&Utc),
                 open: dec!(100.0),
                 high: dec!(105.0),
                 low: dec!(99.0),
@@ -251,7 +255,9 @@ mod tests {
             MarketData {
                 id: 2,
                 instrument_id: 100,
-                timestamp: DateTime::parse_from_rfc3339("2024-01-01T01:00:00Z").unwrap().with_timezone(&Utc),
+                timestamp: DateTime::parse_from_rfc3339("2024-01-01T01:00:00Z")
+                    .unwrap()
+                    .with_timezone(&Utc),
                 open: dec!(104.0),
                 high: dec!(106.0),
                 low: dec!(103.0),
@@ -266,13 +272,13 @@ mod tests {
     async fn test_multi_level_cache_get_from_memory() {
         let redis_cache = Arc::new(MockCacheOps::new());
         let cache = MultiLevelCache::new(redis_cache, 100, 300);
-        
+
         let key = "test_key";
         let data = create_test_market_data();
-        
+
         // Set data in memory cache
         cache.set(key, &data).await.unwrap();
-        
+
         // Get should retrieve from memory without hitting Redis
         let result: Vec<MarketData> = cache.get(key).await.unwrap().unwrap();
         assert_eq!(result.len(), 2);
@@ -284,20 +290,20 @@ mod tests {
         let mut redis_cache = MockCacheOps::new();
         let data = create_test_market_data();
         let data_clone = data.clone();
-        
+
         redis_cache
             .expect_get()
             .with(eq("test_key"))
             .times(1)
             .returning(move |_| Ok(Some(data_clone.clone())));
-            
+
         let cache = MultiLevelCache::new(Arc::new(redis_cache), 100, 300);
-        
+
         // Get should retrieve from Redis and populate memory cache
         let result: Vec<MarketData> = cache.get("test_key").await.unwrap().unwrap();
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].close, dec!(104.0));
-        
+
         // Second get should come from memory cache
         let result2: Vec<MarketData> = cache.get("test_key").await.unwrap().unwrap();
         assert_eq!(result2.len(), 2);
@@ -306,19 +312,19 @@ mod tests {
     #[tokio::test]
     async fn test_multi_level_cache_set() {
         let mut redis_cache = MockCacheOps::new();
-        
+
         redis_cache
             .expect_set()
             .with(eq("test_key"), always(), eq(Some(300)))
             .times(1)
             .returning(|_, _, _| Ok(()));
-            
+
         let cache = MultiLevelCache::new(Arc::new(redis_cache), 100, 300);
         let data = create_test_market_data();
-        
+
         // Set should update both memory and Redis
         cache.set("test_key", &data).await.unwrap();
-        
+
         // Verify data is in memory cache
         let result: Vec<MarketData> = cache.get("test_key").await.unwrap().unwrap();
         assert_eq!(result.len(), 2);
@@ -328,17 +334,23 @@ mod tests {
     async fn test_lru_eviction() {
         let redis_cache = Arc::new(MockCacheOps::new());
         let cache = MultiLevelCache::new(redis_cache, 2, 300); // Small capacity for testing
-        
+
         // Add 3 items to trigger eviction
         cache.set("key1", &vec![1]).await.unwrap();
         cache.set("key2", &vec![2]).await.unwrap();
         cache.set("key3", &vec![3]).await.unwrap();
-        
+
         // key1 should be evicted
         assert!(cache.get::<Vec<i32>>("key1").await.unwrap().is_none());
         // key2 and key3 should still be in memory
-        assert_eq!(cache.get::<Vec<i32>>("key2").await.unwrap().unwrap(), vec![2]);
-        assert_eq!(cache.get::<Vec<i32>>("key3").await.unwrap().unwrap(), vec![3]);
+        assert_eq!(
+            cache.get::<Vec<i32>>("key2").await.unwrap().unwrap(),
+            vec![2]
+        );
+        assert_eq!(
+            cache.get::<Vec<i32>>("key3").await.unwrap().unwrap(),
+            vec![3]
+        );
     }
 
     #[tokio::test]
@@ -348,27 +360,36 @@ mod tests {
         let data2 = vec![4, 5, 6];
         let data1_clone = data1.clone();
         let data2_clone = data2.clone();
-        
+
         redis_cache
             .expect_get()
             .with(eq("warm_key1"))
             .times(1)
             .returning(move |_| Ok(Some(data1_clone.clone())));
-            
+
         redis_cache
             .expect_get()
             .with(eq("warm_key2"))
             .times(1)
             .returning(move |_| Ok(Some(data2_clone.clone())));
-            
+
         let cache = MultiLevelCache::new(Arc::new(redis_cache), 100, 300);
-        
+
         // Warm the cache
-        cache.warm_cache(vec!["warm_key1".to_string(), "warm_key2".to_string()]).await.unwrap();
-        
+        cache
+            .warm_cache(vec!["warm_key1".to_string(), "warm_key2".to_string()])
+            .await
+            .unwrap();
+
         // Data should be in memory cache now
-        assert_eq!(cache.get::<Vec<i32>>("warm_key1").await.unwrap().unwrap(), vec![1, 2, 3]);
-        assert_eq!(cache.get::<Vec<i32>>("warm_key2").await.unwrap().unwrap(), vec![4, 5, 6]);
+        assert_eq!(
+            cache.get::<Vec<i32>>("warm_key1").await.unwrap().unwrap(),
+            vec![1, 2, 3]
+        );
+        assert_eq!(
+            cache.get::<Vec<i32>>("warm_key2").await.unwrap().unwrap(),
+            vec![4, 5, 6]
+        );
     }
 
     #[tokio::test]
@@ -380,29 +401,29 @@ mod tests {
     #[tokio::test]
     async fn test_cache_consistency() {
         let mut redis_cache = MockCacheOps::new();
-        
+
         // Redis set should be called when setting data
         redis_cache
             .expect_set()
             .times(1)
             .returning(|_, _, _| Ok(()));
-            
+
         // Redis delete should be called when deleting data
         redis_cache
             .expect_delete()
             .with(eq("test_key"))
             .times(1)
             .returning(|_| Ok(true));
-            
+
         let cache = MultiLevelCache::new(Arc::new(redis_cache), 100, 300);
         let data = vec![1, 2, 3];
-        
+
         // Set data
         cache.set("test_key", &data).await.unwrap();
-        
+
         // Delete should remove from both layers
         cache.delete("test_key").await.unwrap();
-        
+
         // Verify data is removed from memory
         assert!(cache.get::<Vec<i32>>("test_key").await.unwrap().is_none());
     }

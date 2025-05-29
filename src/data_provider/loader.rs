@@ -97,7 +97,7 @@ impl MarketDataLoader {
     /// 設定 Redis 連接池以啟用快取功能
     pub fn with_redis(mut self, redis_pool: Arc<ConnectionPool>) -> Self {
         self.redis_pool = Some(redis_pool.clone());
-        
+
         // 創建多層級快取
         let cache_manager = Arc::new(CacheManager::new(redis_pool));
         let multi_level_cache = Arc::new(MultiLevelCache::new(
@@ -106,7 +106,7 @@ impl MarketDataLoader {
             self.cache_ttl_seconds,
         ));
         self.cache = Some(multi_level_cache);
-        
+
         self
     }
 
@@ -128,7 +128,7 @@ impl MarketDataLoader {
     ) -> Result<()> {
         if let Some(ref cache) = self.cache {
             let mut cache_keys = Vec::new();
-            
+
             // 生成所有需要預熱的快取鍵
             for &instrument_id in instrument_ids {
                 for &frequency in frequencies {
@@ -141,13 +141,16 @@ impl MarketDataLoader {
                     cache_keys.push(key);
                 }
             }
-            
+
             // 批量預熱快取
             cache.warm_cache(cache_keys).await?;
-            
-            debug!("快取預熱完成: {} 個項目", instrument_ids.len() * frequencies.len());
+
+            debug!(
+                "快取預熱完成: {} 個項目",
+                instrument_ids.len() * frequencies.len()
+            );
         }
-        
+
         Ok(())
     }
 }
@@ -189,8 +192,9 @@ impl DataLoader for MarketDataLoader {
                     debug!("從快取獲取 OHLCV 資料: {}", cache_key);
                     // 轉換快取的資料並返回
                     let df = minute_bars_to_dataframe(cached_bars)?;
-                    let minute_ohlcv = OhlcvSeries::<Minute>::from_lazy(df.lazy(), instrument_id.to_string());
-                    
+                    let minute_ohlcv =
+                        OhlcvSeries::<Minute>::from_lazy(df.lazy(), instrument_id.to_string());
+
                     if F::to_frequency() == Frequency::Minute {
                         let df_collected = minute_ohlcv.collect()?;
                         return Ok(OhlcvSeries::<F>::from_dataframe_unchecked(

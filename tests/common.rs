@@ -28,7 +28,14 @@ pub async fn setup_market_data_db() -> Option<PgPool> {
             "postgresql://market_reader:market_reader_password@marketdata-center-market-db-1:5432/marketdata".to_string()
         } else {
             // In CI or local testing, use localhost with correct port
-            "postgresql://market_reader:market_reader_password@localhost:5431/marketdata".to_string()
+            // Try both connection strings for compatibility
+            if std::env::var("DATABASE_URL").is_ok() {
+                // In CI environment
+                "postgresql://market_reader:market_reader_password@localhost:5431/marketdata".to_string()
+            } else {
+                // Local development with default credentials
+                "postgresql://market_reader:market_reader_password@localhost:5431/marketdata".to_string()
+            }
         }
     });
 

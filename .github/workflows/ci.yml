@@ -44,8 +44,8 @@ jobs:
       postgres-market:
         image: timescale/timescaledb:latest-pg14
         env:
-          POSTGRES_USER: market_user
-          POSTGRES_PASSWORD: market_pass
+          POSTGRES_USER: market_reader
+          POSTGRES_PASSWORD: market_reader_password
           POSTGRES_DB: marketdata
         options: >-
           --health-cmd pg_isready
@@ -116,10 +116,10 @@ jobs:
 
     - name: Setup market database
       env:
-        PGPASSWORD: market_pass
+        PGPASSWORD: market_reader_password
       run: |
         echo "Creating TimescaleDB extension in market database..."
-        psql -h localhost -p 5431 -U market_user -d marketdata -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        psql -h localhost -p 5431 -U market_reader -d marketdata -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
         echo "Market database TimescaleDB extension created successfully"
 
     - name: Setup backtest database
@@ -130,35 +130,78 @@ jobs:
         psql -h localhost -p 5432 -U backtest_user -d backtest -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
         echo "Backtest database TimescaleDB extension created successfully"
 
-    - name: Setup test data in market database
+    - name: Setup market database schema and test data
       env:
-        PGPASSWORD: market_pass
+        PGPASSWORD: market_reader_password
       run: |
-        echo "Setting up test market data..."
-        psql -h localhost -p 5431 -U market_user -d marketdata << 'EOF'
-        CREATE TABLE IF NOT EXISTS market_data (
-          id BIGSERIAL PRIMARY KEY,
-          timestamp TIMESTAMPTZ NOT NULL,
-          symbol VARCHAR(32) NOT NULL,
-          open_price DECIMAL(20,8) NOT NULL,
-          high_price DECIMAL(20,8) NOT NULL,
-          low_price DECIMAL(20,8) NOT NULL,
-          close_price DECIMAL(20,8) NOT NULL,
-          volume DECIMAL(20,8) NOT NULL DEFAULT 0,
-          created_at TIMESTAMPTZ DEFAULT NOW()
-        );
+        echo "Initializing market database with proper schema..."
+        psql -h localhost -p 5431 -U market_reader -d marketdata -f scripts/init-market-db.sql
         
-        SELECT create_hypertable('market_data', 'timestamp', if_not_exists => TRUE);
+        echo "Adding test data for CI tests..."
+        psql -h localhost -p 5431 -U market_reader -d marketdata << 'EOF'
+        -- Insert test exchange
+        INSERT INTO exchange (code, name, country, timezone) VALUES 
+        ('TEST', 'Test Exchange', 'US', 'America/New_York')
+        ON CONFLICT (code) DO NOTHING;
         
-        INSERT INTO market_data (timestamp, symbol, open_price, high_price, low_price, close_price, volume) VALUES
-        ('2024-01-01 00:00:00+00', 'BTCUSD', 45000.0, 45100.0, 44900.0, 45050.0, 100.5),
-        ('2024-01-01 01:00:00+00', 'BTCUSD', 45050.0, 45200.0, 45000.0, 45150.0, 120.3),
-        ('2024-01-01 02:00:00+00', 'BTCUSD', 45150.0, 45300.0, 45100.0, 45250.0, 95.7);
+        -- Insert test instruments
+        INSERT INTO instrument (symbol, exchange_id, instrument_type, name, currency, tick_size, lot_size) 
+        SELECT 'BTCUSD', exchange_id, 'CRYPTO', 'Bitcoin USD', 'USD', 0.01, 1
+        FROM exchange WHERE code = 'TEST'
+        ON CONFLICT (symbol, exchange_id, instrument_type) DO NOTHING;
         
-        GRANT CONNECT ON DATABASE marketdata TO market_user;
-        GRANT USAGE ON SCHEMA public TO market_user;
-        GRANT SELECT ON ALL TABLES IN SCHEMA public TO market_user;
-        GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO market_user;
+        INSERT INTO instrument (symbol, exchange_id, instrument_type, name, currency, tick_size, lot_size) 
+        SELECT 'ETHUSD', exchange_id, 'CRYPTO', 'Ethereum USD', 'USD', 0.01, 1
+        FROM exchange WHERE code = 'TEST'
+        ON CONFLICT (symbol, exchange_id, instrument_type) DO NOTHING;
+        
+        -- Insert test minute_bar data
+        INSERT INTO minute_bar (time, instrument_id, open, high, low, close, volume, amount) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' minutes')::interval,
+          1,
+          45000.0 + random() * 100,
+          45100.0 + random() * 100,
+          44900.0 + random() * 100,
+          45050.0 + random() * 100,
+          100.5 + random() * 50,
+          (45000.0 + random() * 100) * (100.5 + random() * 50)
+        FROM generate_series(0, 1439) i  -- 24 hours of minute data
+        ON CONFLICT (time, instrument_id) DO NOTHING;
+        
+        INSERT INTO minute_bar (time, instrument_id, open, high, low, close, volume, amount) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' minutes')::interval,
+          2,
+          3000.0 + random() * 50,
+          3050.0 + random() * 50,
+          2950.0 + random() * 50,
+          3025.0 + random() * 50,
+          200.5 + random() * 100,
+          (3000.0 + random() * 50) * (200.5 + random() * 100)
+        FROM generate_series(0, 1439) i  -- 24 hours of minute data  
+        ON CONFLICT (time, instrument_id) DO NOTHING;
+        
+        -- Insert test tick data
+        INSERT INTO tick (time, instrument_id, price, volume, trade_type) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' seconds')::interval,
+          1,
+          45000.0 + random() * 100,
+          1.0 + random() * 10,
+          (random() * 3)::smallint
+        FROM generate_series(0, 3599) i  -- 1 hour of tick data
+        ON CONFLICT (time, instrument_id) DO NOTHING;
+        
+        INSERT INTO tick (time, instrument_id, price, volume, trade_type) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' seconds')::interval,
+          2,
+          3000.0 + random() * 50,
+          2.0 + random() * 20,
+          (random() * 3)::smallint
+        FROM generate_series(0, 3599) i  -- 1 hour of tick data
+        ON CONFLICT (time, instrument_id) DO NOTHING;
         EOF
     
     - name: Install sqlx-cli
@@ -180,7 +223,7 @@ jobs:
 
     - name: Build test binaries
       env:
-        MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
+        MARKET_DATABASE_URL: postgresql://market_reader:market_reader_password@localhost:5431/marketdata
         DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
       run: |
         echo "Building test binaries at $(date)"
@@ -189,7 +232,7 @@ jobs:
         
     - name: Run tests
       env:
-        MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
+        MARKET_DATABASE_URL: postgresql://market_reader:market_reader_password@localhost:5431/marketdata
         DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
         REDIS_URL: redis://localhost:6379
         RABBITMQ_URL: amqp://guest:guest@localhost:5672
@@ -202,13 +245,13 @@ jobs:
 
     - name: Run doc tests
       env:
-        MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
+        MARKET_DATABASE_URL: postgresql://market_reader:market_reader_password@localhost:5431/marketdata
         DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
       run: cargo test --doc
     
     - name: Run clippy
       env:
-        MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
+        MARKET_DATABASE_URL: postgresql://market_reader:market_reader_password@localhost:5431/marketdata
         DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
       run: cargo clippy --all-targets --all-features -- -D warnings
 
@@ -224,8 +267,8 @@ jobs:
       postgres-market:
         image: timescale/timescaledb:latest-pg14
         env:
-          POSTGRES_USER: market_user
-          POSTGRES_PASSWORD: market_pass
+          POSTGRES_USER: market_reader
+          POSTGRES_PASSWORD: market_reader_password
           POSTGRES_DB: marketdata
         options: >-
           --health-cmd pg_isready
@@ -294,10 +337,10 @@ jobs:
 
     - name: Setup market database
       env:
-        PGPASSWORD: market_pass
+        PGPASSWORD: market_reader_password
       run: |
         echo "Creating TimescaleDB extension in market database..."
-        psql -h localhost -p 5431 -U market_user -d marketdata -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+        psql -h localhost -p 5431 -U market_reader -d marketdata -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
         echo "Market database TimescaleDB extension created successfully"
 
     - name: Setup backtest database
@@ -308,35 +351,78 @@ jobs:
         psql -h localhost -p 5432 -U backtest_user -d backtest -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
         echo "Backtest database TimescaleDB extension created successfully"
 
-    - name: Setup test data in market database
+    - name: Setup market database schema and test data
       env:
-        PGPASSWORD: market_pass
+        PGPASSWORD: market_reader_password
       run: |
-        echo "Setting up test market data..."
-        psql -h localhost -p 5431 -U market_user -d marketdata << 'EOF'
-        CREATE TABLE IF NOT EXISTS market_data (
-          id BIGSERIAL PRIMARY KEY,
-          timestamp TIMESTAMPTZ NOT NULL,
-          symbol VARCHAR(32) NOT NULL,
-          open_price DECIMAL(20,8) NOT NULL,
-          high_price DECIMAL(20,8) NOT NULL,
-          low_price DECIMAL(20,8) NOT NULL,
-          close_price DECIMAL(20,8) NOT NULL,
-          volume DECIMAL(20,8) NOT NULL DEFAULT 0,
-          created_at TIMESTAMPTZ DEFAULT NOW()
-        );
+        echo "Initializing market database with proper schema..."
+        psql -h localhost -p 5431 -U market_reader -d marketdata -f scripts/init-market-db.sql
         
-        SELECT create_hypertable('market_data', 'timestamp', if_not_exists => TRUE);
+        echo "Adding test data for CI tests..."
+        psql -h localhost -p 5431 -U market_reader -d marketdata << 'EOF'
+        -- Insert test exchange
+        INSERT INTO exchange (code, name, country, timezone) VALUES 
+        ('TEST', 'Test Exchange', 'US', 'America/New_York')
+        ON CONFLICT (code) DO NOTHING;
         
-        INSERT INTO market_data (timestamp, symbol, open_price, high_price, low_price, close_price, volume) VALUES
-        ('2024-01-01 00:00:00+00', 'BTCUSD', 45000.0, 45100.0, 44900.0, 45050.0, 100.5),
-        ('2024-01-01 01:00:00+00', 'BTCUSD', 45050.0, 45200.0, 45000.0, 45150.0, 120.3),
-        ('2024-01-01 02:00:00+00', 'BTCUSD', 45150.0, 45300.0, 45100.0, 45250.0, 95.7);
+        -- Insert test instruments
+        INSERT INTO instrument (symbol, exchange_id, instrument_type, name, currency, tick_size, lot_size) 
+        SELECT 'BTCUSD', exchange_id, 'CRYPTO', 'Bitcoin USD', 'USD', 0.01, 1
+        FROM exchange WHERE code = 'TEST'
+        ON CONFLICT (symbol, exchange_id, instrument_type) DO NOTHING;
         
-        GRANT CONNECT ON DATABASE marketdata TO market_user;
-        GRANT USAGE ON SCHEMA public TO market_user;
-        GRANT SELECT ON ALL TABLES IN SCHEMA public TO market_user;
-        GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO market_user;
+        INSERT INTO instrument (symbol, exchange_id, instrument_type, name, currency, tick_size, lot_size) 
+        SELECT 'ETHUSD', exchange_id, 'CRYPTO', 'Ethereum USD', 'USD', 0.01, 1
+        FROM exchange WHERE code = 'TEST'
+        ON CONFLICT (symbol, exchange_id, instrument_type) DO NOTHING;
+        
+        -- Insert test minute_bar data
+        INSERT INTO minute_bar (time, instrument_id, open, high, low, close, volume, amount) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' minutes')::interval,
+          1,
+          45000.0 + random() * 100,
+          45100.0 + random() * 100,
+          44900.0 + random() * 100,
+          45050.0 + random() * 100,
+          100.5 + random() * 50,
+          (45000.0 + random() * 100) * (100.5 + random() * 50)
+        FROM generate_series(0, 1439) i  -- 24 hours of minute data
+        ON CONFLICT (time, instrument_id) DO NOTHING;
+        
+        INSERT INTO minute_bar (time, instrument_id, open, high, low, close, volume, amount) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' minutes')::interval,
+          2,
+          3000.0 + random() * 50,
+          3050.0 + random() * 50,
+          2950.0 + random() * 50,
+          3025.0 + random() * 50,
+          200.5 + random() * 100,
+          (3000.0 + random() * 50) * (200.5 + random() * 100)
+        FROM generate_series(0, 1439) i  -- 24 hours of minute data  
+        ON CONFLICT (time, instrument_id) DO NOTHING;
+        
+        -- Insert test tick data
+        INSERT INTO tick (time, instrument_id, price, volume, trade_type) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' seconds')::interval,
+          1,
+          45000.0 + random() * 100,
+          1.0 + random() * 10,
+          (random() * 3)::smallint
+        FROM generate_series(0, 3599) i  -- 1 hour of tick data
+        ON CONFLICT (time, instrument_id) DO NOTHING;
+        
+        INSERT INTO tick (time, instrument_id, price, volume, trade_type) 
+        SELECT 
+          '2024-01-01 00:00:00+00'::timestamptz + (i || ' seconds')::interval,
+          2,
+          3000.0 + random() * 50,
+          2.0 + random() * 20,
+          (random() * 3)::smallint
+        FROM generate_series(0, 3599) i  -- 1 hour of tick data
+        ON CONFLICT (time, instrument_id) DO NOTHING;
         EOF
     
     - name: Install sqlx-cli
@@ -346,7 +432,7 @@ jobs:
         
     - name: Run database migrations for backtest database
       env:
-        MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
+        MARKET_DATABASE_URL: postgresql://market_reader:market_reader_password@localhost:5431/marketdata
         DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
         RUST_LOG: sqlx=debug,backtest_server=debug
         PGPASSWORD: backtest_pass
@@ -358,7 +444,7 @@ jobs:
 
     - name: Run integration tests
       env:
-        MARKET_DATABASE_URL: postgresql://market_user:market_pass@localhost:5431/marketdata
+        MARKET_DATABASE_URL: postgresql://market_reader:market_reader_password@localhost:5431/marketdata
         DATABASE_URL: postgresql://backtest_user:backtest_pass@localhost:5432/backtest
         REDIS_URL: redis://localhost:6379
         RABBITMQ_URL: amqp://guest:guest@localhost:5672

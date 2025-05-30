@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use deadpool_redis::redis::{cmd, AsyncCommands};
+use metrics::{counter, histogram};
 use serde::{de::DeserializeOwned, Serialize};
+use std::time::Instant;
 use thiserror::Error;
 use tracing::{debug, error, warn};
 
@@ -91,15 +93,49 @@ pub trait CacheOperations: Send + Sync + 'static {
         V: Serialize + Send + Sync;
 }
 
+/// Redis 快取監控指標命名空間
+const REDIS_METRIC_NAMESPACE: &str = "redis_cache";
+
 /// 快取操作實現
 pub struct CacheManager<P: RedisPool> {
     pool: P,
 }
 
 impl<P: RedisPool> CacheManager<P> {
+    /// 記錄 Redis 操作指標
+    fn record_redis_operation(
+        &self,
+        operation: &str,
+        success: bool,
+        duration: std::time::Duration,
+    ) {
+        let status = if success { "success" } else { "error" };
+
+        counter!(
+            format!("{}.operation", REDIS_METRIC_NAMESPACE),
+            "operation" => operation.to_string(),
+            "status" => status.to_string()
+        )
+        .increment(1);
+
+        histogram!(
+            format!("{}.latency_ns", REDIS_METRIC_NAMESPACE),
+            "operation" => operation.to_string()
+        )
+        .record(duration.as_nanos() as f64);
+    }
+
     /// 創建新的快取管理器
     pub fn new(pool: P) -> Self {
         Self { pool }
+    }
+
+    /// 獲取 Redis 連接 - 用於 Pipeline 操作
+    pub async fn get_connection(&self) -> Result<deadpool_redis::Connection, CacheError> {
+        self.pool
+            .get_conn()
+            .await
+            .map_err(CacheError::ConnectionError)
     }
 
     /// 生成快取鍵前綴
@@ -148,6 +184,8 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
         K: AsRef<str> + Send + Sync,
         V: Serialize + Send + Sync,
     {
+        let start = Instant::now();
+
         // 序列化值
         let serialized = serde_json::to_string(value)
             .map_err(|e| CacheError::SerializationError(e.to_string()))?;
@@ -167,10 +205,12 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
             {
                 Ok(_) => {
                     debug!("快取設置成功 (帶TTL): {}", prefixed_key);
+                    self.record_redis_operation("set_with_ttl", true, start.elapsed());
                     Ok(())
                 }
                 Err(e) => {
                     error!("快取設置失敗 (帶TTL): {}", e);
+                    self.record_redis_operation("set_with_ttl", false, start.elapsed());
                     Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
                 }
             }
@@ -179,10 +219,12 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
             match conn.set::<_, _, String>(&prefixed_key, &serialized).await {
                 Ok(_) => {
                     debug!("快取設置成功: {}", prefixed_key);
+                    self.record_redis_operation("set", true, start.elapsed());
                     Ok(())
                 }
                 Err(e) => {
                     error!("快取設置失敗: {}", e);
+                    self.record_redis_operation("set", false, start.elapsed());
                     Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
                 }
             }
@@ -194,6 +236,7 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
         K: AsRef<str> + Send + Sync,
         V: DeserializeOwned + Send + Sync,
     {
+        let start = Instant::now();
         let prefixed_key = self.prefix_key(key);
         let mut conn = self.pool.get_conn().await?;
 
@@ -204,20 +247,28 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
                 match serde_json::from_str(&value) {
                     Ok(deserialized) => {
                         debug!("快取命中: {}", prefixed_key);
+                        self.record_redis_operation("get_hit", true, start.elapsed());
                         Ok(deserialized)
                     }
                     Err(e) => {
                         warn!("快取值反序列化失敗: {}", e);
+                        self.record_redis_operation(
+                            "get_deserialization_error",
+                            false,
+                            start.elapsed(),
+                        );
                         Err(CacheError::DeserializationError(e.to_string()))
                     }
                 }
             }
             Ok(None) => {
                 debug!("快取未命中: {}", prefixed_key);
+                self.record_redis_operation("get_miss", true, start.elapsed());
                 Err(CacheError::CacheMiss(prefixed_key))
             }
             Err(e) => {
                 error!("快取讀取失敗: {}", e);
+                self.record_redis_operation("get_error", false, start.elapsed());
                 Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
             }
         }

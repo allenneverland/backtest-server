@@ -9,8 +9,11 @@ use metrics::{counter, histogram};
 use moka::future::Cache;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
+
+/// 監控指標命名空間
+const METRIC_NAMESPACE: &str = "backtest_cache";
 
 /// 高性能多層級快取實現，使用 u64 hash 作為內存快取鍵
 ///
@@ -32,6 +35,65 @@ pub struct MultiLevelCache<P: RedisPool> {
 }
 
 impl<P: RedisPool> MultiLevelCache<P> {
+    /// 記錄快取命中指標
+    fn record_hit(&self, layer: &str, data_type: &str) {
+        counter!(
+            format!("{}.hit", METRIC_NAMESPACE),
+            "layer" => layer.to_string(),
+            "type" => data_type.to_string()
+        )
+        .increment(1);
+    }
+
+    /// 記錄快取未命中指標
+    fn record_miss(&self, data_type: &str) {
+        counter!(
+            format!("{}.miss", METRIC_NAMESPACE),
+            "type" => data_type.to_string()
+        )
+        .increment(1);
+    }
+
+    /// 記錄操作延遲指標
+    fn record_latency(&self, operation: &str, duration: Duration) {
+        histogram!(
+            format!("{}.latency_ns", METRIC_NAMESPACE),
+            "operation" => operation.to_string()
+        )
+        .record(duration.as_nanos() as f64);
+    }
+
+    /// 記錄錯誤指標
+    fn record_error(&self, operation: &str, data_type: &str) {
+        counter!(
+            format!("{}.error", METRIC_NAMESPACE),
+            "operation" => operation.to_string(),
+            "type" => data_type.to_string()
+        )
+        .increment(1);
+    }
+
+    /// 記錄批量操作指標
+    fn record_batch_operation(
+        &self,
+        operation: &str,
+        data_type: &str,
+        count: usize,
+        duration: Duration,
+    ) {
+        counter!(
+            format!("{}.batch_{}", METRIC_NAMESPACE, operation),
+            "type" => data_type.to_string()
+        )
+        .increment(count as u64);
+
+        histogram!(
+            format!("{}.batch_latency_ns", METRIC_NAMESPACE),
+            "operation" => operation.to_string(),
+            "type" => data_type.to_string()
+        )
+        .record(duration.as_nanos() as f64);
+    }
     /// 創建新的多層級快取實例
     ///
     /// # Arguments
@@ -77,18 +139,16 @@ impl<P: RedisPool> MultiLevelCache<P> {
 
         // 1. 嘗試從內存快取獲取（使用 hash）
         if let Some(arc_bars) = self.minute_bars_cache.get(&hash).await {
-            counter!("cache_hit", "layer" => "memory", "type" => "minute_bars").increment(1);
-            histogram!("cache_get_duration", "layer" => "memory", "type" => "minute_bars")
-                .record(start.elapsed());
+            self.record_hit("memory", "minute_bars");
+            self.record_latency("get_memory", start.elapsed());
             return Ok(Some(arc_bars));
         }
 
         // 2. 嘗試從 Redis 獲取
         match self.redis_cache.get::<_, Vec<MinuteBar>>(key).await {
             Ok(bars) => {
-                counter!("cache_hit", "layer" => "redis", "type" => "minute_bars").increment(1);
-                histogram!("cache_get_duration", "layer" => "redis", "type" => "minute_bars")
-                    .record(start.elapsed());
+                self.record_hit("redis", "minute_bars");
+                self.record_latency("get_redis", start.elapsed());
 
                 // 更新內存快取和映射
                 let arc_bars = Arc::new(bars);
@@ -100,13 +160,12 @@ impl<P: RedisPool> MultiLevelCache<P> {
                 Ok(Some(arc_bars))
             }
             Err(CacheError::CacheMiss(_)) => {
-                counter!("cache_miss", "type" => "minute_bars").increment(1);
-                histogram!("cache_get_duration", "layer" => "miss", "type" => "minute_bars")
-                    .record(start.elapsed());
+                self.record_miss("minute_bars");
+                self.record_latency("get_miss", start.elapsed());
                 Ok(None)
             }
             Err(e) => {
-                counter!("cache_error", "type" => "minute_bars").increment(1);
+                self.record_error("get", "minute_bars");
                 Err(e)
             }
         }
@@ -131,12 +190,16 @@ impl<P: RedisPool> MultiLevelCache<P> {
         // 3. 更新 Redis 快取
         match self.redis_cache.set(key, bars, Some(self.cache_ttl)).await {
             Ok(_) => {
-                counter!("cache_set", "type" => "minute_bars").increment(1);
-                histogram!("cache_set_duration", "type" => "minute_bars").record(start.elapsed());
+                counter!(
+                    format!("{}.set", METRIC_NAMESPACE),
+                    "type" => "minute_bars"
+                )
+                .increment(1);
+                self.record_latency("set", start.elapsed());
                 Ok(())
             }
             Err(e) => {
-                counter!("cache_set_error", "type" => "minute_bars").increment(1);
+                self.record_error("set", "minute_bars");
                 Err(e)
             }
         }
@@ -166,12 +229,16 @@ impl<P: RedisPool> MultiLevelCache<P> {
             .await
         {
             Ok(_) => {
-                counter!("cache_set", "type" => "minute_bars").increment(1);
-                histogram!("cache_set_duration", "type" => "minute_bars").record(start.elapsed());
+                counter!(
+                    format!("{}.set", METRIC_NAMESPACE),
+                    "type" => "minute_bars"
+                )
+                .increment(1);
+                self.record_latency("set_arc", start.elapsed());
                 Ok(())
             }
             Err(e) => {
-                counter!("cache_set_error", "type" => "minute_bars").increment(1);
+                self.record_error("set_arc", "minute_bars");
                 Err(e)
             }
         }
@@ -187,18 +254,16 @@ impl<P: RedisPool> MultiLevelCache<P> {
 
         // 1. 嘗試從內存快取獲取（使用 hash）
         if let Some(arc_ticks) = self.ticks_cache.get(&hash).await {
-            counter!("cache_hit", "layer" => "memory", "type" => "ticks").increment(1);
-            histogram!("cache_get_duration", "layer" => "memory", "type" => "ticks")
-                .record(start.elapsed());
+            self.record_hit("memory", "ticks");
+            self.record_latency("get_memory", start.elapsed());
             return Ok(Some(arc_ticks));
         }
 
         // 2. 嘗試從 Redis 獲取
         match self.redis_cache.get::<_, Vec<DbTick>>(key).await {
             Ok(ticks) => {
-                counter!("cache_hit", "layer" => "redis", "type" => "ticks").increment(1);
-                histogram!("cache_get_duration", "layer" => "redis", "type" => "ticks")
-                    .record(start.elapsed());
+                self.record_hit("redis", "ticks");
+                self.record_latency("get_redis", start.elapsed());
 
                 // 更新內存快取和映射
                 let arc_ticks = Arc::new(ticks);
@@ -210,13 +275,12 @@ impl<P: RedisPool> MultiLevelCache<P> {
                 Ok(Some(arc_ticks))
             }
             Err(CacheError::CacheMiss(_)) => {
-                counter!("cache_miss", "type" => "ticks").increment(1);
-                histogram!("cache_get_duration", "layer" => "miss", "type" => "ticks")
-                    .record(start.elapsed());
+                self.record_miss("ticks");
+                self.record_latency("get_miss", start.elapsed());
                 Ok(None)
             }
             Err(e) => {
-                counter!("cache_error", "type" => "ticks").increment(1);
+                self.record_error("get", "ticks");
                 Err(e)
             }
         }
@@ -237,12 +301,16 @@ impl<P: RedisPool> MultiLevelCache<P> {
         // 3. 更新 Redis 快取
         match self.redis_cache.set(key, ticks, Some(self.cache_ttl)).await {
             Ok(_) => {
-                counter!("cache_set", "type" => "ticks").increment(1);
-                histogram!("cache_set_duration", "type" => "ticks").record(start.elapsed());
+                counter!(
+                    format!("{}.set", METRIC_NAMESPACE),
+                    "type" => "ticks"
+                )
+                .increment(1);
+                self.record_latency("set", start.elapsed());
                 Ok(())
             }
             Err(e) => {
-                counter!("cache_set_error", "type" => "ticks").increment(1);
+                self.record_error("set", "ticks");
                 Err(e)
             }
         }
@@ -272,12 +340,16 @@ impl<P: RedisPool> MultiLevelCache<P> {
             .await
         {
             Ok(_) => {
-                counter!("cache_set", "type" => "ticks").increment(1);
-                histogram!("cache_set_duration", "type" => "ticks").record(start.elapsed());
+                counter!(
+                    format!("{}.set", METRIC_NAMESPACE),
+                    "type" => "ticks"
+                )
+                .increment(1);
+                self.record_latency("set_arc", start.elapsed());
                 Ok(())
             }
             Err(e) => {
-                counter!("cache_set_error", "type" => "ticks").increment(1);
+                self.record_error("set_arc", "ticks");
                 Err(e)
             }
         }
@@ -299,14 +371,14 @@ impl<P: RedisPool> MultiLevelCache<P> {
 
         // 如果快取命中，返回 Arc（使用 hash）
         if let Some(arc_bars) = self.minute_bars_cache.get(&hash).await {
-            counter!("cache_hit", "layer" => "memory", "type" => "minute_bars").increment(1);
+            self.record_hit("memory", "minute_bars");
             return Ok(arc_bars);
         }
 
         // 嘗試從 Redis 獲取
         match self.redis_cache.get::<_, Vec<MinuteBar>>(key).await {
             Ok(bars) => {
-                counter!("cache_hit", "layer" => "redis", "type" => "minute_bars").increment(1);
+                self.record_hit("redis", "minute_bars");
                 let arc_bars = Arc::new(bars);
                 self.minute_bars_cache.insert(hash, arc_bars.clone()).await;
 
@@ -317,7 +389,7 @@ impl<P: RedisPool> MultiLevelCache<P> {
             }
             Err(CacheError::CacheMiss(_)) => {
                 // 計算新數據
-                counter!("cache_miss", "type" => "minute_bars").increment(1);
+                self.record_miss("minute_bars");
                 let bars = compute();
                 let arc_bars = Arc::new(bars);
 
@@ -350,14 +422,14 @@ impl<P: RedisPool> MultiLevelCache<P> {
 
         // 如果快取命中，返回 Arc（使用 hash）
         if let Some(arc_ticks) = self.ticks_cache.get(&hash).await {
-            counter!("cache_hit", "layer" => "memory", "type" => "ticks").increment(1);
+            self.record_hit("memory", "ticks");
             return Ok(arc_ticks);
         }
 
         // 嘗試從 Redis 獲取
         match self.redis_cache.get::<_, Vec<DbTick>>(key).await {
             Ok(ticks) => {
-                counter!("cache_hit", "layer" => "redis", "type" => "ticks").increment(1);
+                self.record_hit("redis", "ticks");
                 let arc_ticks = Arc::new(ticks);
                 self.ticks_cache.insert(hash, arc_ticks.clone()).await;
 
@@ -368,7 +440,7 @@ impl<P: RedisPool> MultiLevelCache<P> {
             }
             Err(CacheError::CacheMiss(_)) => {
                 // 計算新數據
-                counter!("cache_miss", "type" => "ticks").increment(1);
+                self.record_miss("ticks");
                 let ticks = compute();
                 let arc_ticks = Arc::new(ticks);
 
@@ -403,13 +475,16 @@ impl<P: RedisPool> MultiLevelCache<P> {
         // 從 Redis 刪除
         match self.redis_cache.delete(key).await {
             Ok(deleted) => {
-                counter!("cache_delete", "result" => if deleted { "success" } else { "not_found" })
-                    .increment(1);
-                histogram!("cache_delete_duration").record(start.elapsed());
+                counter!(
+                    format!("{}.delete", METRIC_NAMESPACE),
+                    "result" => if deleted { "success" } else { "not_found" }
+                )
+                .increment(1);
+                self.record_latency("delete", start.elapsed());
                 Ok(deleted)
             }
             Err(e) => {
-                counter!("cache_delete_error").increment(1);
+                self.record_error("delete", "general");
                 Err(e)
             }
         }
@@ -454,8 +529,7 @@ impl<P: RedisPool> MultiLevelCache<P> {
             let hash = Self::hash_key(key);
             if let Some(arc_bars) = self.minute_bars_cache.get(&hash).await {
                 results[idx] = Some(arc_bars);
-                counter!("cache_batch_hit", "layer" => "memory", "type" => "minute_bars")
-                    .increment(1);
+                self.record_hit("memory", "minute_bars");
             } else {
                 missing_keys.push(key.clone());
                 missing_indices.push(idx);
@@ -485,16 +559,14 @@ impl<P: RedisPool> MultiLevelCache<P> {
                     // 更新映射
                     key_mapping.insert(*hash, keys[*idx].clone());
                     results[*idx] = Some(arc_bars);
-                    counter!("cache_batch_hit", "layer" => "redis", "type" => "minute_bars")
-                        .increment(1);
+                    self.record_hit("redis", "minute_bars");
                 } else {
-                    counter!("cache_batch_miss", "type" => "minute_bars").increment(1);
+                    self.record_miss("minute_bars");
                 }
             }
         }
 
-        histogram!("cache_batch_get_duration", "type" => "minute_bars").record(start.elapsed());
-        counter!("cache_batch_get_total", "type" => "minute_bars").increment(keys.len() as u64);
+        self.record_batch_operation("get", "minute_bars", keys.len(), start.elapsed());
 
         Ok(results)
     }
@@ -529,7 +601,7 @@ impl<P: RedisPool> MultiLevelCache<P> {
             let hash = Self::hash_key(key);
             if let Some(arc_ticks) = self.ticks_cache.get(&hash).await {
                 results[idx] = Some(arc_ticks);
-                counter!("cache_batch_hit", "layer" => "memory", "type" => "ticks").increment(1);
+                self.record_hit("memory", "ticks");
             } else {
                 missing_keys.push(key.clone());
                 missing_indices.push(idx);
@@ -559,15 +631,14 @@ impl<P: RedisPool> MultiLevelCache<P> {
                     // 更新映射
                     key_mapping.insert(*hash, keys[*idx].clone());
                     results[*idx] = Some(arc_ticks);
-                    counter!("cache_batch_hit", "layer" => "redis", "type" => "ticks").increment(1);
+                    self.record_hit("redis", "ticks");
                 } else {
-                    counter!("cache_batch_miss", "type" => "ticks").increment(1);
+                    self.record_miss("ticks");
                 }
             }
         }
 
-        histogram!("cache_batch_get_duration", "type" => "ticks").record(start.elapsed());
-        counter!("cache_batch_get_total", "type" => "ticks").increment(keys.len() as u64);
+        self.record_batch_operation("get", "ticks", keys.len(), start.elapsed());
 
         Ok(results)
     }
@@ -674,6 +745,64 @@ impl<P: RedisPool> MultiLevelCache<P> {
         }
     }
 
+    /// 使用 Pipeline 批量設置 MinuteBars - 最大化 Redis 性能
+    ///
+    /// 使用 Redis Pipeline 技術一次性執行多個命令，大幅減少網路往返次數。
+    /// 適合大批量數據寫入場景，性能比逐個設置或 MSET 更佳。
+    pub async fn set_minute_bars_batch_pipeline(
+        &self,
+        items: &[(String, Arc<Vec<MinuteBar>>)],
+    ) -> Result<(), CacheError> {
+        let start = Instant::now();
+
+        if items.is_empty() {
+            return Ok(());
+        }
+
+        // 1. 批量更新內存快取
+        let mut key_mapping = self.key_mapping.write().await;
+        for (key, arc_bars) in items {
+            let hash = Self::hash_key(key);
+            self.minute_bars_cache.insert(hash, arc_bars.clone()).await;
+            key_mapping.insert(hash, key.clone());
+        }
+        drop(key_mapping); // 釋放寫鎖
+
+        // 2. 使用 Redis Pipeline 批量設置
+        let mut conn = self.redis_cache.get_connection().await?;
+        let mut pipe = redis::pipe();
+
+        // 構建 Pipeline 命令
+        for (key, bars) in items {
+            let prefixed_key = format!("cache:{}", key);
+            let serialized = serde_json::to_string(&**bars)
+                .map_err(|e| CacheError::SerializationError(e.to_string()))?;
+
+            pipe.cmd("SET")
+                .arg(&prefixed_key)
+                .arg(&serialized)
+                .arg("EX")
+                .arg(self.cache_ttl);
+        }
+
+        // 一次性執行所有命令
+        match pipe.query_async::<()>(&mut conn).await {
+            Ok(_) => {
+                counter!("cache_pipeline_set", "type" => "minute_bars")
+                    .increment(items.len() as u64);
+                histogram!("cache_pipeline_set_duration", "type" => "minute_bars")
+                    .record(start.elapsed());
+                Ok(())
+            }
+            Err(e) => {
+                counter!("cache_pipeline_set_error", "type" => "minute_bars").increment(1);
+                Err(CacheError::RedisError(
+                    crate::redis::client::RedisClientError::ConnectionError(e),
+                ))
+            }
+        }
+    }
+
     /// 批量設置 Ticks 資料 - 帶監控指標
     pub async fn set_ticks_batch(&self, items: &[(String, Vec<DbTick>)]) -> Result<(), CacheError> {
         let start = Instant::now();
@@ -743,6 +872,63 @@ impl<P: RedisPool> MultiLevelCache<P> {
             Err(e) => {
                 counter!("cache_batch_set_error", "type" => "ticks").increment(1);
                 Err(e)
+            }
+        }
+    }
+
+    /// 使用 Pipeline 批量設置 Ticks - 最大化 Redis 性能
+    ///
+    /// 使用 Redis Pipeline 技術一次性執行多個命令，大幅減少網路往返次數。
+    /// 適合大批量 Tick 數據寫入場景，性能比逐個設置或 MSET 更佳。
+    pub async fn set_ticks_batch_pipeline(
+        &self,
+        items: &[(String, Arc<Vec<DbTick>>)],
+    ) -> Result<(), CacheError> {
+        let start = Instant::now();
+
+        if items.is_empty() {
+            return Ok(());
+        }
+
+        // 1. 批量更新內存快取
+        let mut key_mapping = self.key_mapping.write().await;
+        for (key, arc_ticks) in items {
+            let hash = Self::hash_key(key);
+            self.ticks_cache.insert(hash, arc_ticks.clone()).await;
+            key_mapping.insert(hash, key.clone());
+        }
+        drop(key_mapping); // 釋放寫鎖
+
+        // 2. 使用 Redis Pipeline 批量設置
+        let mut conn = self.redis_cache.get_connection().await?;
+        let mut pipe = redis::pipe();
+
+        // 構建 Pipeline 命令
+        for (key, ticks) in items {
+            let prefixed_key = format!("cache:{}", key);
+            let serialized = serde_json::to_string(&**ticks)
+                .map_err(|e| CacheError::SerializationError(e.to_string()))?;
+
+            pipe.cmd("SET")
+                .arg(&prefixed_key)
+                .arg(&serialized)
+                .arg("EX")
+                .arg(self.cache_ttl);
+        }
+
+        // 一次性執行所有命令
+        match pipe.query_async::<()>(&mut conn).await {
+            Ok(_) => {
+                counter!("cache_pipeline_set", "type" => "ticks").increment(items.len() as u64);
+                histogram!("cache_pipeline_set_duration", "type" => "ticks")
+                    .record(start.elapsed());
+                Ok(())
+            }
+            Err(e) => {
+                counter!("cache_pipeline_set_error", "type" => "ticks").increment(1);
+                Err(CacheError::RedisError(
+                    crate::redis::client::RedisClientError::ConnectionError(e),
+                ))
             }
         }
     }
@@ -837,8 +1023,7 @@ impl<P: RedisPool> MultiLevelCache<P> {
             let hash = Self::hash_key(key);
             if let Some(arc_bars) = self.minute_bars_cache.get(&hash).await {
                 results[idx] = Some(arc_bars);
-                counter!("cache_batch_hit", "layer" => "memory", "type" => "minute_bars")
-                    .increment(1);
+                self.record_hit("memory", "minute_bars");
             } else {
                 buffer.keys.push(key.clone());
                 buffer.indices.push(idx);
@@ -869,16 +1054,14 @@ impl<P: RedisPool> MultiLevelCache<P> {
                     // 更新映射
                     key_mapping.insert(*hash, keys[*idx].clone());
                     results[*idx] = Some(arc_bars);
-                    counter!("cache_batch_hit", "layer" => "redis", "type" => "minute_bars")
-                        .increment(1);
+                    self.record_hit("redis", "minute_bars");
                 } else {
-                    counter!("cache_batch_miss", "type" => "minute_bars").increment(1);
+                    self.record_miss("minute_bars");
                 }
             }
         }
 
-        histogram!("cache_batch_get_duration", "type" => "minute_bars").record(start.elapsed());
-        counter!("cache_batch_get_total", "type" => "minute_bars").increment(keys.len() as u64);
+        self.record_batch_operation("get", "minute_bars", keys.len(), start.elapsed());
 
         Ok(results)
     }
@@ -900,7 +1083,7 @@ impl<P: RedisPool> MultiLevelCache<P> {
             let hash = Self::hash_key(key);
             if let Some(arc_ticks) = self.ticks_cache.get(&hash).await {
                 results[idx] = Some(arc_ticks);
-                counter!("cache_batch_hit", "layer" => "memory", "type" => "ticks").increment(1);
+                self.record_hit("memory", "ticks");
             } else {
                 buffer.keys.push(key.clone());
                 buffer.indices.push(idx);
@@ -931,15 +1114,14 @@ impl<P: RedisPool> MultiLevelCache<P> {
                     // 更新映射
                     key_mapping.insert(*hash, keys[*idx].clone());
                     results[*idx] = Some(arc_ticks);
-                    counter!("cache_batch_hit", "layer" => "redis", "type" => "ticks").increment(1);
+                    self.record_hit("redis", "ticks");
                 } else {
-                    counter!("cache_batch_miss", "type" => "ticks").increment(1);
+                    self.record_miss("ticks");
                 }
             }
         }
 
-        histogram!("cache_batch_get_duration", "type" => "ticks").record(start.elapsed());
-        counter!("cache_batch_get_total", "type" => "ticks").increment(keys.len() as u64);
+        self.record_batch_operation("get", "ticks", keys.len(), start.elapsed());
 
         Ok(results)
     }
@@ -1267,6 +1449,41 @@ mod tests {
                 bucket_count
             );
         }
+    }
+
+    #[test]
+    fn test_pipeline_operations_data_preparation() {
+        // 測試 Pipeline 操作數據準備
+        let test_bars = create_test_minute_bars();
+        let test_ticks = create_test_ticks();
+
+        // Pipeline MinuteBars 數據準備
+        let minute_bars_items = vec![
+            ("pipeline_key1".to_string(), Arc::new(test_bars.clone())),
+            ("pipeline_key2".to_string(), Arc::new(test_bars.clone())),
+            ("pipeline_key3".to_string(), Arc::new(test_bars)),
+        ];
+        assert_eq!(minute_bars_items.len(), 3);
+
+        // Pipeline Ticks 數據準備
+        let ticks_items = vec![
+            (
+                "pipeline_tick_key1".to_string(),
+                Arc::new(test_ticks.clone()),
+            ),
+            (
+                "pipeline_tick_key2".to_string(),
+                Arc::new(test_ticks.clone()),
+            ),
+            ("pipeline_tick_key3".to_string(), Arc::new(test_ticks)),
+        ];
+        assert_eq!(ticks_items.len(), 3);
+
+        // 測試空 Pipeline 操作
+        let empty_minute_bars: Vec<(String, Arc<Vec<MinuteBar>>)> = vec![];
+        let empty_ticks: Vec<(String, Arc<Vec<DbTick>>)> = vec![];
+        assert!(empty_minute_bars.is_empty());
+        assert!(empty_ticks.is_empty());
     }
 
     #[test]

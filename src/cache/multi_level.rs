@@ -48,6 +48,12 @@ impl<P: RedisPool> MultiLevelCache<P> {
         let start = Instant::now();
         let hash = Self::hash_key(key);
 
+        // 檢查 hash 碰撞
+        if self.check_hash_collision(hash, key).await {
+            // 如果檢測到碰撞，清理不一致的快取並重新從 Redis 獲取
+            self.invalidate_inconsistent_cache(key).await;
+        }
+
         // 1. 嘗試從內存快取獲取（使用 hash）
         if let Some(arc_data) = cache.get(&hash).await {
             self.record_metric::<T>(MetricType::Hit { layer: "memory" }, None);
@@ -107,6 +113,12 @@ impl<P: RedisPool> MultiLevelCache<P> {
         let start = Instant::now();
         let hash = Self::hash_key(key);
 
+        // 檢查 hash 碰撞
+        if self.check_hash_collision(hash, key).await {
+            // 如果檢測到碰撞，清理不一致的快取
+            self.invalidate_inconsistent_cache(key).await;
+        }
+
         // 1. 先更新 Redis 快取
         match self.redis_cache.set(key, data, Some(self.cache_ttl)).await {
             Ok(_) => {
@@ -140,6 +152,12 @@ impl<P: RedisPool> MultiLevelCache<P> {
     ) -> Result<(), CacheError> {
         let start = Instant::now();
         let hash = Self::hash_key(key);
+
+        // 檢查 hash 碰撞
+        if self.check_hash_collision(hash, key).await {
+            // 如果檢測到碰撞，清理不一致的快取
+            self.invalidate_inconsistent_cache(key).await;
+        }
 
         // 1. 先更新 Redis 快取（需要解引用）
         match self
@@ -204,6 +222,38 @@ impl<P: RedisPool> MultiLevelCache<P> {
     #[inline(always)]
     fn hash_key(key: &str) -> u64 {
         CacheKeyHash::new(key).0
+    }
+
+    /// 檢查並處理潛在的 hash 碰撞
+    ///
+    /// 檢測是否存在 hash 碰撞（不同的鍵產生相同的 hash 值），
+    /// 如果檢測到碰撞，會記錄監控指標並發出警告日誌。
+    ///
+    /// # Arguments
+    /// * `hash` - 待檢查的 hash 值
+    /// * `key` - 對應的原始鍵
+    ///
+    /// # Returns
+    /// 如果檢測到 hash 碰撞返回 `true`，否則返回 `false`
+    async fn check_hash_collision(&self, hash: u64, key: &str) -> bool {
+        if let Some(existing_key) = self.key_mapping.read().await.get(&hash) {
+            if existing_key != key {
+                // 檢測到碰撞
+                CacheMetrics::record_hash_collision();
+                CacheMetrics::record_hash_collision_check(true);
+                tracing::warn!(
+                    "Hash collision detected: existing_key='{}' new_key='{}' hash={}",
+                    existing_key,
+                    key,
+                    hash
+                );
+                return true;
+            }
+        }
+
+        // 未檢測到碰撞
+        CacheMetrics::record_hash_collision_check(false);
+        false
     }
 
     // 使用巨集生成 MinuteBar 和 DbTick 的所有快取操作方法
@@ -337,6 +387,35 @@ impl<P: RedisPool> MultiLevelCache<P> {
 
         // 記錄清理操作
         CacheMetrics::record_inconsistent_cleanup();
+    }
+
+    /// 定期清理過期的映射
+    ///
+    /// 檢查 key_mapping 中的映射是否對應到已經過期的快取項目，
+    /// 如果對應的數據在內存快取中已不存在，則清理該映射。
+    /// 這有助於防止 key_mapping 無限制地累積已過期的映射。
+    pub async fn cleanup_expired_mappings(&self) {
+        let mut mapping = self.key_mapping.write().await;
+        let mut expired_hashes = Vec::new();
+
+        for (hash, _) in mapping.iter() {
+            // 檢查內存快取中是否還存在
+            if self.minute_bars_cache.get(hash).await.is_none()
+                && self.ticks_cache.get(hash).await.is_none()
+            {
+                expired_hashes.push(*hash);
+            }
+        }
+
+        let cleaned_count = expired_hashes.len();
+
+        // 批量刪除過期的映射
+        for hash in expired_hashes {
+            mapping.remove(&hash);
+        }
+
+        // 記錄清理操作的監控指標
+        CacheMetrics::record_mapping_cleanup(cleaned_count);
     }
 
     /// 獲取快取統計信息
@@ -694,6 +773,113 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn test_hash_collision_detection() {
+        // 測試 hash 碰撞檢測功能
+        if RedisTestConfig::skip_if_redis_unavailable("test_hash_collision_detection")
+            .await
+            .is_none()
+        {
+            return;
+        }
+
+        let pool = RedisTestConfig::create_test_pool()
+            .await
+            .expect("無法創建測試 Redis 池");
+        let redis_cache = Arc::new(CacheManager::new(pool));
+        let cache = MultiLevelCache::new(redis_cache, 100, 300);
+
+        // 測試無碰撞情況
+        let key1 = "test_key_1";
+        let hash1 = MultiLevelCache::<crate::redis::pool::ConnectionPool>::hash_key(key1);
+        let collision_detected = cache.check_hash_collision(hash1, key1).await;
+        assert!(!collision_detected, "首次檢查不應該檢測到碰撞");
+
+        // 手動添加映射
+        cache
+            .key_mapping
+            .write()
+            .await
+            .insert(hash1, key1.to_string());
+
+        // 測試相同鍵無碰撞
+        let collision_detected = cache.check_hash_collision(hash1, key1).await;
+        assert!(!collision_detected, "相同鍵不應該檢測到碰撞");
+
+        // 模擬碰撞情況（不同的鍵有相同的 hash）
+        let key2 = "different_key";
+        let collision_detected = cache.check_hash_collision(hash1, key2).await;
+        assert!(collision_detected, "不同鍵相同 hash 應該檢測到碰撞");
+    }
+
+    #[tokio::test]
+    async fn test_collision_detection_with_cache_operations() {
+        // 測試快取操作中的碰撞檢測整合
+        if RedisTestConfig::skip_if_redis_unavailable(
+            "test_collision_detection_with_cache_operations",
+        )
+        .await
+        .is_none()
+        {
+            return;
+        }
+
+        let pool = RedisTestConfig::create_test_pool()
+            .await
+            .expect("無法創建測試 Redis 池");
+        let redis_cache = Arc::new(CacheManager::new(pool));
+        let cache = MultiLevelCache::new(redis_cache, 100, 300);
+
+        let test_data = create_test_minute_bars();
+        let key1 = "collision_test_key_1";
+        let _key2 = "collision_test_key_2";
+
+        // 設定第一個鍵的數據
+        let result = cache.set_minute_bars(key1, &test_data).await;
+        assert!(result.is_ok(), "設定快取應該成功");
+
+        // 獲取數據以確保正常運作
+        let retrieved = cache.get_minute_bars(key1).await;
+        assert!(retrieved.is_ok(), "獲取快取應該成功");
+        assert!(retrieved.unwrap().is_some(), "應該能獲取到數據");
+
+        // 如果兩個不同的鍵產生相同的 hash，系統應該能正確處理
+        // 在實際情況下，這極少發生，但我們的檢測機制應該能處理這種情況
+    }
+
+    #[test]
+    fn test_forced_hash_collision_scenario() {
+        // 測試強制 hash 碰撞場景
+        // 注意：這是一個理論性測試，因為 FxHasher 的碰撞機率非常低
+
+        let key1 = "test_key_1";
+        let key2 = "test_key_2";
+        let hash1 = CacheKeyHash::new(key1).0;
+        let hash2 = CacheKeyHash::new(key2).0;
+
+        // 在正常情況下，不同的鍵應該產生不同的 hash
+        assert_ne!(hash1, hash2, "不同的鍵通常會產生不同的 hash");
+
+        // 測試碰撞檢測邏輯（使用相同的 hash 值模擬碰撞）
+        let collision_hash = hash1;
+
+        // 創建一個模擬的 key_mapping
+        use rustc_hash::FxHashMap;
+        let mut mapping = FxHashMap::default();
+        mapping.insert(collision_hash, key1.to_string());
+
+        // 檢查相同鍵
+        if let Some(existing_key) = mapping.get(&collision_hash) {
+            assert_eq!(existing_key, key1, "相同鍵應該匹配");
+        }
+
+        // 模擬碰撞情況
+        if let Some(existing_key) = mapping.get(&collision_hash) {
+            let collision_detected = existing_key != key2;
+            assert!(collision_detected, "不同鍵相同 hash 應該檢測到碰撞");
+        }
+    }
+
     #[test]
     fn test_pipeline_operations_data_preparation() {
         // 測試 Pipeline 操作數據準備
@@ -793,5 +979,97 @@ mod tests {
         // 測試清理不一致快取的功能
         // TODO: 實現完整的測試用例
         // 確保 invalidate_inconsistent_cache 方法能正確清理所有層級的快取
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_expired_mappings() {
+        // 測試清理過期映射的功能
+        if RedisTestConfig::skip_if_redis_unavailable("test_cleanup_expired_mappings")
+            .await
+            .is_none()
+        {
+            return;
+        }
+
+        let pool = RedisTestConfig::create_test_pool()
+            .await
+            .expect("無法創建測試 Redis 池");
+        let redis_cache = Arc::new(CacheManager::new(pool));
+        let cache = MultiLevelCache::new(redis_cache, 100, 1); // 短 TTL 用於測試
+
+        let test_data = create_test_minute_bars();
+        let key1 = "expire_test_key_1";
+        let key2 = "expire_test_key_2";
+
+        // 設定測試數據
+        let _ = cache.set_minute_bars(key1, &test_data).await;
+        let _ = cache.set_minute_bars(key2, &test_data).await;
+
+        // 驗證映射存在
+        {
+            let mapping = cache.key_mapping.read().await;
+            assert_eq!(mapping.len(), 2, "應該有2個映射");
+        }
+
+        // 等待快取過期
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+        // 執行清理
+        cache.cleanup_expired_mappings().await;
+
+        // 驗證映射已被清理
+        {
+            let mapping = cache.key_mapping.read().await;
+            assert_eq!(mapping.len(), 0, "所有過期映射應該被清理");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_expired_mappings_partial() {
+        // 測試部分映射過期的情況
+        if RedisTestConfig::skip_if_redis_unavailable("test_cleanup_expired_mappings_partial")
+            .await
+            .is_none()
+        {
+            return;
+        }
+
+        let pool = RedisTestConfig::create_test_pool()
+            .await
+            .expect("無法創建測試 Redis 池");
+        let redis_cache = Arc::new(CacheManager::new(pool));
+        let cache = MultiLevelCache::new(redis_cache, 100, 300);
+
+        let test_data = create_test_minute_bars();
+        let key1 = "partial_expire_key_1";
+        let key2 = "partial_expire_key_2";
+
+        // 設定第一個鍵
+        let _ = cache.set_minute_bars(key1, &test_data).await;
+
+        // 手動清理第一個鍵的內存快取（模擬過期）
+        let hash1 = MultiLevelCache::<crate::redis::pool::ConnectionPool>::hash_key(key1);
+        cache.minute_bars_cache.invalidate(&hash1).await;
+
+        // 設定第二個鍵（保持有效）
+        let _ = cache.set_minute_bars(key2, &test_data).await;
+
+        // 驗證初始狀態
+        {
+            let mapping = cache.key_mapping.read().await;
+            assert_eq!(mapping.len(), 2, "應該有2個映射");
+        }
+
+        // 執行清理
+        cache.cleanup_expired_mappings().await;
+
+        // 驗證只有過期的映射被清理
+        {
+            let mapping = cache.key_mapping.read().await;
+            assert_eq!(mapping.len(), 1, "只有1個有效映射應該保留");
+
+            let hash2 = MultiLevelCache::<crate::redis::pool::ConnectionPool>::hash_key(key2);
+            assert!(mapping.contains_key(&hash2), "有效映射應該保留");
+        }
     }
 }

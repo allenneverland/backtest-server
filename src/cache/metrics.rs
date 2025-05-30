@@ -156,4 +156,24 @@ impl CacheMetrics {
     pub fn record_pipeline_set_error(data_type: &'static str) {
         counter!("cache_pipeline_set_error", "type" => data_type).increment(1);
     }
+
+    /// 記錄 hash 碰撞事件
+    pub fn record_hash_collision() {
+        counter!("cache_hash_collision").increment(1);
+    }
+
+    /// 記錄 hash 碰撞檢測操作
+    pub fn record_hash_collision_check(collision_detected: bool) {
+        counter!(
+            "cache_hash_collision_check",
+            "result" => if collision_detected { "collision" } else { "no_collision" }
+        )
+        .increment(1);
+    }
+
+    /// 記錄映射清理操作
+    pub fn record_mapping_cleanup(cleaned_count: usize) {
+        counter!("cache_mapping_cleanup").increment(1);
+        histogram!("cache_mapping_cleaned_count").record(cleaned_count as f64);
+    }
 }

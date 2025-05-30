@@ -1,6 +1,6 @@
 Commend use Traditional Chinese with correct UTF-8 format
 
-Always use sequentialthinking mcp
+Always use sequential-thinking mcp
 
 github repo: https://github.com/allenneverland/backtest-server
 

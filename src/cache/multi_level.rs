@@ -776,12 +776,7 @@ mod tests {
     #[tokio::test]
     async fn test_hash_collision_detection() {
         // 測試 hash 碰撞檢測功能
-        if RedisTestConfig::skip_if_redis_unavailable("test_hash_collision_detection")
-            .await
-            .is_none()
-        {
-            return;
-        }
+        RedisTestConfig::ensure_redis_available("test_hash_collision_detection").await;
 
         let pool = RedisTestConfig::create_test_pool()
             .await
@@ -815,14 +810,7 @@ mod tests {
     #[tokio::test]
     async fn test_collision_detection_with_cache_operations() {
         // 測試快取操作中的碰撞檢測整合
-        if RedisTestConfig::skip_if_redis_unavailable(
-            "test_collision_detection_with_cache_operations",
-        )
-        .await
-        .is_none()
-        {
-            return;
-        }
+        RedisTestConfig::ensure_redis_available("test_collision_detection_with_cache_operations").await;
 
         let pool = RedisTestConfig::create_test_pool()
             .await
@@ -950,12 +938,7 @@ mod tests {
     #[tokio::test]
     async fn test_cache_consistency_on_redis_failure() {
         // 測試 Redis 失敗時的快取一致性
-        if RedisTestConfig::skip_if_redis_unavailable("test_cache_consistency_on_redis_failure")
-            .await
-            .is_none()
-        {
-            return;
-        }
+        RedisTestConfig::ensure_redis_available("test_cache_consistency_on_redis_failure").await;
 
         // 建立測試用的 Redis 池
         let pool = RedisTestConfig::create_test_pool()
@@ -970,26 +953,213 @@ mod tests {
     #[tokio::test]
     async fn test_cache_consistency_on_successful_update() {
         // 測試成功更新時的快取一致性
-        // TODO: 實現完整的測試用例
-        // 確保 Redis 和內存快取都被正確更新
+        RedisTestConfig::ensure_redis_available("test_cache_consistency_on_successful_update").await;
+
+        let pool = RedisTestConfig::create_test_pool()
+            .await
+            .expect("無法創建測試 Redis 池");
+        let redis_cache = Arc::new(CacheManager::new(pool));
+        let cache = MultiLevelCache::new(redis_cache.clone(), 100, 300);
+
+        let test_data = create_test_minute_bars();
+        let key = "consistency_test_key";
+
+        // 1. 設定快取數據
+        let result = cache.set_minute_bars(key, &test_data).await;
+        assert!(result.is_ok(), "設定快取應該成功");
+
+        // 2. 驗證內存快取包含數據
+        let hash = MultiLevelCache::<crate::redis::pool::ConnectionPool>::hash_key(key);
+        let memory_data = cache.minute_bars_cache.get(&hash).await;
+        assert!(memory_data.is_some(), "內存快取應該包含數據");
+        assert_eq!(
+            memory_data.as_ref().unwrap().len(),
+            test_data.len(),
+            "內存快取數據長度應該正確"
+        );
+
+        // 3. 驗證 Redis 快取包含數據
+        let redis_data: Result<Vec<MinuteBar>, _> = redis_cache.get(key).await;
+        assert!(redis_data.is_ok(), "Redis 快取應該包含數據");
+        let redis_data = redis_data.unwrap();
+        assert_eq!(
+            redis_data.len(),
+            test_data.len(),
+            "Redis 快取數據長度應該正確"
+        );
+
+        // 4. 驗證兩層快取數據一致性
+        let memory_data = memory_data.unwrap();
+        for (memory_bar, redis_bar) in memory_data.iter().zip(redis_data.iter()) {
+            assert_eq!(memory_bar.instrument_id, redis_bar.instrument_id);
+            assert_eq!(memory_bar.time, redis_bar.time);
+            assert_eq!(memory_bar.open, redis_bar.open);
+            assert_eq!(memory_bar.high, redis_bar.high);
+            assert_eq!(memory_bar.low, redis_bar.low);
+            assert_eq!(memory_bar.close, redis_bar.close);
+            assert_eq!(memory_bar.volume, redis_bar.volume);
+        }
+
+        // 5. 驗證 key mapping 正確性
+        {
+            let mapping = cache.key_mapping.read().await;
+            assert!(mapping.contains_key(&hash), "映射應該包含該鍵的 hash");
+            assert_eq!(mapping.get(&hash).unwrap(), key, "映射應該指向正確的鍵");
+        }
+
+        // 6. 測試通過快取接口獲取數據的一致性
+        let cached_data = cache.get_minute_bars(key).await;
+        assert!(cached_data.is_ok(), "通過快取接口獲取數據應該成功");
+        let cached_data = cached_data.unwrap();
+        assert!(cached_data.is_some(), "應該能獲取到快取數據");
+        let cached_data = cached_data.unwrap();
+        assert_eq!(
+            cached_data.len(),
+            test_data.len(),
+            "快取接口返回的數據長度應該正確"
+        );
+
+        // 7. 驗證數據內容一致性
+        for (cached_bar, original_bar) in cached_data.iter().zip(test_data.iter()) {
+            assert_eq!(cached_bar.instrument_id, original_bar.instrument_id);
+            assert_eq!(cached_bar.time, original_bar.time);
+            assert_eq!(cached_bar.open, original_bar.open);
+            assert_eq!(cached_bar.high, original_bar.high);
+            assert_eq!(cached_bar.low, original_bar.low);
+            assert_eq!(cached_bar.close, original_bar.close);
+            assert_eq!(cached_bar.volume, original_bar.volume);
+        }
     }
 
     #[tokio::test]
     async fn test_invalidate_inconsistent_cache() {
         // 測試清理不一致快取的功能
-        // TODO: 實現完整的測試用例
-        // 確保 invalidate_inconsistent_cache 方法能正確清理所有層級的快取
+        RedisTestConfig::ensure_redis_available("test_invalidate_inconsistent_cache").await;
+
+        let pool = RedisTestConfig::create_test_pool()
+            .await
+            .expect("無法創建測試 Redis 池");
+        let redis_cache = Arc::new(CacheManager::new(pool));
+        let cache = MultiLevelCache::new(redis_cache.clone(), 100, 300);
+
+        let test_minute_bars = create_test_minute_bars();
+        let test_ticks = create_test_ticks();
+        let key1 = "invalidate_test_key_1";
+        let key2 = "invalidate_test_key_2";
+
+        // 1. 設定初始快取數據
+        let result1 = cache.set_minute_bars(key1, &test_minute_bars).await;
+        let result2 = cache.set_ticks(key2, &test_ticks).await;
+        assert!(result1.is_ok(), "設定 minute bars 快取應該成功");
+        assert!(result2.is_ok(), "設定 ticks 快取應該成功");
+
+        // 2. 驗證數據已被快取（兩層都有）
+        let hash1 = MultiLevelCache::<crate::redis::pool::ConnectionPool>::hash_key(key1);
+        let hash2 = MultiLevelCache::<crate::redis::pool::ConnectionPool>::hash_key(key2);
+
+        // 檢查內存快取
+        assert!(
+            cache.minute_bars_cache.get(&hash1).await.is_some(),
+            "內存快取應該包含 minute bars"
+        );
+        assert!(
+            cache.ticks_cache.get(&hash2).await.is_some(),
+            "內存快取應該包含 ticks"
+        );
+
+        // 檢查 Redis 快取
+        let redis_bars: Result<Vec<MinuteBar>, _> = redis_cache.get(key1).await;
+        let redis_ticks: Result<Vec<DbTick>, _> = redis_cache.get(key2).await;
+        assert!(redis_bars.is_ok(), "Redis 應該包含 minute bars");
+        assert!(redis_ticks.is_ok(), "Redis 應該包含 ticks");
+
+        // 檢查映射
+        {
+            let mapping = cache.key_mapping.read().await;
+            assert!(mapping.contains_key(&hash1), "映射應該包含 key1");
+            assert!(mapping.contains_key(&hash2), "映射應該包含 key2");
+            assert_eq!(mapping.len(), 2, "映射應該包含2個項目");
+        }
+
+        // 3. 調用 invalidate_inconsistent_cache 清理第一個鍵
+        cache.invalidate_inconsistent_cache(key1).await;
+
+        // 4. 驗證第一個鍵的所有層級快取都被清理
+        // 檢查內存快取
+        assert!(
+            cache.minute_bars_cache.get(&hash1).await.is_none(),
+            "內存快取中的 minute bars 應該被清理"
+        );
+        assert!(
+            cache.ticks_cache.get(&hash1).await.is_none(),
+            "內存快取中不應該有該鍵的 ticks 數據"
+        );
+
+        // 檢查 Redis 快取（應該被嘗試刪除，雖然可能因為權限等原因失敗）
+        // 這裡我們主要檢查方法不會出錯
+        let _redis_check: Result<Vec<MinuteBar>, _> = redis_cache.get(key1).await;
+        // 不管結果如何，至少方法應該能正常執行
+
+        // 檢查映射
+        {
+            let mapping = cache.key_mapping.read().await;
+            assert!(!mapping.contains_key(&hash1), "映射不應該包含已清理的 key1");
+            assert!(mapping.contains_key(&hash2), "映射仍應該包含未清理的 key2");
+            assert_eq!(mapping.len(), 1, "映射應該只包含1個項目");
+        }
+
+        // 5. 驗證第二個鍵的快取仍然存在（未被影響）
+        assert!(
+            cache.ticks_cache.get(&hash2).await.is_some(),
+            "未清理的 ticks 快取應該仍然存在"
+        );
+        let redis_ticks_check: Result<Vec<DbTick>, _> = redis_cache.get(key2).await;
+        assert!(
+            redis_ticks_check.is_ok(),
+            "未清理的 Redis ticks 應該仍然存在"
+        );
+
+        // 6. 測試清理不存在的鍵（應該不會出錯）
+        cache
+            .invalidate_inconsistent_cache("non_existent_key")
+            .await;
+        // 確保這不會導致錯誤或影響其他快取
+
+        // 7. 驗證剩餘快取仍然正常工作
+        let remaining_data = cache.get_ticks(key2).await;
+        assert!(remaining_data.is_ok(), "獲取剩餘快取數據應該成功");
+        assert!(remaining_data.unwrap().is_some(), "剩餘快取數據應該存在");
+
+        // 8. 清理第二個鍵並驗證完全清空
+        cache.invalidate_inconsistent_cache(key2).await;
+
+        {
+            let mapping = cache.key_mapping.read().await;
+            assert_eq!(mapping.len(), 0, "所有映射應該被清理");
+        }
+
+        assert!(
+            cache.minute_bars_cache.get(&hash1).await.is_none(),
+            "所有 minute bars 快取應該被清理"
+        );
+        assert!(
+            cache.minute_bars_cache.get(&hash2).await.is_none(),
+            "所有 minute bars 快取應該被清理"
+        );
+        assert!(
+            cache.ticks_cache.get(&hash1).await.is_none(),
+            "所有 ticks 快取應該被清理"
+        );
+        assert!(
+            cache.ticks_cache.get(&hash2).await.is_none(),
+            "所有 ticks 快取應該被清理"
+        );
     }
 
     #[tokio::test]
     async fn test_cleanup_expired_mappings() {
         // 測試清理過期映射的功能
-        if RedisTestConfig::skip_if_redis_unavailable("test_cleanup_expired_mappings")
-            .await
-            .is_none()
-        {
-            return;
-        }
+        RedisTestConfig::ensure_redis_available("test_cleanup_expired_mappings").await;
 
         let pool = RedisTestConfig::create_test_pool()
             .await
@@ -1027,12 +1197,7 @@ mod tests {
     #[tokio::test]
     async fn test_cleanup_expired_mappings_partial() {
         // 測試部分映射過期的情況
-        if RedisTestConfig::skip_if_redis_unavailable("test_cleanup_expired_mappings_partial")
-            .await
-            .is_none()
-        {
-            return;
-        }
+        RedisTestConfig::ensure_redis_available("test_cleanup_expired_mappings_partial").await;
 
         let pool = RedisTestConfig::create_test_pool()
             .await

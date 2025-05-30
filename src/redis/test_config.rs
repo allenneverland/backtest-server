@@ -62,17 +62,8 @@ impl RedisTestConfig {
 
     /// 檢查 Redis 是否可用於測試
     ///
-    /// 如果 REDIS_TEST_AVAILABLE 環境變數未設置為 "true"，
-    /// 或者無法連接到 Redis，返回 false
+    /// 嘗試連接到 Redis，如果無法連接返回 false
     pub async fn is_redis_available() -> bool {
-        // 檢查環境變數
-        let redis_available =
-            std::env::var("REDIS_TEST_AVAILABLE").unwrap_or_else(|_| "false".to_string());
-
-        if redis_available != "true" {
-            return false;
-        }
-
         // 嘗試建立連接
         match Self::create_test_pool().await {
             Ok(pool) => pool.check_health().await,
@@ -80,15 +71,13 @@ impl RedisTestConfig {
         }
     }
 
-    /// 跳過 Redis 測試的輔助巨集
+    /// 確保 Redis 可用於測試
     ///
-    /// 在測試開始時呼叫，如果 Redis 不可用則跳過測試
-    pub async fn skip_if_redis_unavailable(test_name: &str) -> Option<()> {
+    /// 如果 Redis 不可用則 panic，讓測試失敗
+    pub async fn ensure_redis_available(test_name: &str) {
         if !Self::is_redis_available().await {
-            println!("跳過 Redis 測試 '{}' - Redis 環境不可用", test_name);
-            return None;
+            panic!("Redis 測試 '{}' 失敗 - Redis 環境不可用", test_name);
         }
-        Some(())
     }
 }
 
@@ -118,10 +107,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_redis_availability_check() {
-        // 此測試不需要實際 Redis 連接，只測試邏輯
-        std::env::set_var("REDIS_TEST_AVAILABLE", "false");
-        assert!(!RedisTestConfig::is_redis_available().await);
-
-        std::env::remove_var("REDIS_TEST_AVAILABLE");
+        // 測試 Redis 可用性檢查
+        // 這會嘗試實際連接 Redis 服務
+        let is_available = RedisTestConfig::is_redis_available().await;
+        // 如果 Redis 服務正在運行，應該返回 true
+        assert!(is_available, "Redis 服務應該可用於測試");
     }
 }

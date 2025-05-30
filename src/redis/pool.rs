@@ -158,12 +158,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_connection_pool() {
-        if RedisTestConfig::skip_if_redis_unavailable("test_connection_pool")
-            .await
-            .is_none()
-        {
-            return;
-        }
+        RedisTestConfig::ensure_redis_available("test_connection_pool").await;
 
         // 創建連接池
         let config = RedisTestConfig::create_test_config();

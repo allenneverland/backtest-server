@@ -532,12 +532,7 @@ mod tests {
     async fn test_cache_operations() {
         use crate::redis::test_config::RedisTestConfig;
 
-        if RedisTestConfig::skip_if_redis_unavailable("test_cache_operations")
-            .await
-            .is_none()
-        {
-            return;
-        }
+        RedisTestConfig::ensure_redis_available("test_cache_operations").await;
 
         // 創建Redis連接池和快取管理器
         let pool = RedisTestConfig::create_test_pool()
@@ -603,12 +598,7 @@ mod tests {
     async fn test_batch_operations() {
         use crate::redis::test_config::RedisTestConfig;
 
-        if RedisTestConfig::skip_if_redis_unavailable("test_batch_operations")
-            .await
-            .is_none()
-        {
-            return;
-        }
+        RedisTestConfig::ensure_redis_available("test_batch_operations").await;
 
         // 創建Redis連接池和快取管理器
         let pool = RedisTestConfig::create_test_pool()
@@ -667,12 +657,7 @@ mod tests {
     async fn test_empty_batch_operations() {
         use crate::redis::test_config::RedisTestConfig;
 
-        if RedisTestConfig::skip_if_redis_unavailable("test_empty_batch_operations")
-            .await
-            .is_none()
-        {
-            return;
-        }
+        RedisTestConfig::ensure_redis_available("test_empty_batch_operations").await;
 
         let pool = RedisTestConfig::create_test_pool()
             .await
@@ -700,12 +685,7 @@ mod tests {
     async fn test_pipeline_operations() {
         use crate::redis::test_config::RedisTestConfig;
 
-        if RedisTestConfig::skip_if_redis_unavailable("test_pipeline_operations")
-            .await
-            .is_none()
-        {
-            return;
-        }
+        RedisTestConfig::ensure_redis_available("test_pipeline_operations").await;
 
         let pool = RedisTestConfig::create_test_pool()
             .await
@@ -774,12 +754,7 @@ mod tests {
     async fn test_pipeline_empty_input() {
         use crate::redis::test_config::RedisTestConfig;
 
-        if RedisTestConfig::skip_if_redis_unavailable("test_pipeline_empty_input")
-            .await
-            .is_none()
-        {
-            return;
-        }
+        RedisTestConfig::ensure_redis_available("test_pipeline_empty_input").await;
 
         let pool = RedisTestConfig::create_test_pool()
             .await

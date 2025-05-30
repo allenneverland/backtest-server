@@ -341,12 +341,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_redis_operations() {
-        if RedisTestConfig::skip_if_redis_unavailable("test_redis_operations")
-            .await
-            .is_none()
-        {
-            return;
-        }
+        RedisTestConfig::ensure_redis_available("test_redis_operations").await;
 
         let config = RedisTestConfig::create_test_config();
         let client = Client::new(config).expect("無法創建Redis客戶端");

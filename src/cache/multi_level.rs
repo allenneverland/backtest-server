@@ -810,7 +810,8 @@ mod tests {
     #[tokio::test]
     async fn test_collision_detection_with_cache_operations() {
         // 測試快取操作中的碰撞檢測整合
-        RedisTestConfig::ensure_redis_available("test_collision_detection_with_cache_operations").await;
+        RedisTestConfig::ensure_redis_available("test_collision_detection_with_cache_operations")
+            .await;
 
         let pool = RedisTestConfig::create_test_pool()
             .await
@@ -938,22 +939,65 @@ mod tests {
     #[tokio::test]
     async fn test_cache_consistency_on_redis_failure() {
         // 測試 Redis 失敗時的快取一致性
-        RedisTestConfig::ensure_redis_available("test_cache_consistency_on_redis_failure").await;
 
-        // 建立測試用的 Redis 池
-        let pool = RedisTestConfig::create_test_pool()
+        // 測試無效 Redis URL 的連接失敗情況
+        let invalid_config = crate::config::types::RedisConfig {
+            url: "redis://invalid-host:6379".to_string(),
+            pool_size: 1,
+            connection_timeout_secs: 1, // 短超時時間加速測試
+            read_timeout_secs: 1,
+            write_timeout_secs: 1,
+            reconnect_attempts: 0, // 不重試，加速測試
+            reconnect_delay_secs: 1,
+        };
+
+        // 嘗試建立與無效 Redis 主機的連接
+        let result = crate::redis::pool::ConnectionPool::new(invalid_config).await;
+
+        match result {
+            Ok(pool) => {
+                // 如果池創建成功，檢查健康狀態應該會失敗
+                let health_check = pool.check_health().await;
+                assert!(!health_check, "無效主機的健康檢查應該失敗");
+
+                // 測試快取操作在 Redis 連接失敗時的行為
+                let redis_cache = Arc::new(CacheManager::new(pool));
+                let cache = MultiLevelCache::new(redis_cache, 100, 300);
+
+                let test_data = create_test_minute_bars();
+                let key = "redis_failure_test_key";
+
+                // 嘗試設定快取數據，應該會因為 Redis 連接失敗而出錯
+                let result = cache.set_minute_bars(key, &test_data).await;
+                assert!(result.is_err(), "Redis 連接失敗時設定快取應該出錯");
+
+                // 嘗試獲取快取數據，應該會因為 Redis 連接失敗而出錯
+                let result = cache.get_minute_bars(key).await;
+                assert!(result.is_err(), "Redis 連接失敗時獲取快取應該出錯");
+            }
+            Err(e) => {
+                // 如果池創建就失敗了，這也是預期的行為
+                // 在某些環境中，無效的 URL 可能在創建階段就被檢測出來
+                println!("連接池創建失敗（預期行為）: {}", e);
+            }
+        }
+
+        // 額外測試：確保正常的 Redis 連接仍然工作
+        RedisTestConfig::ensure_redis_available("test_cache_consistency_on_redis_failure").await;
+        let valid_pool = RedisTestConfig::create_test_pool()
             .await
             .expect("無法創建測試 Redis 池");
-
-        // TODO: 可以測試錯誤的 Redis URL 來模擬連接失敗
-        // 現在暫時只驗證池的健康狀態
-        assert!(pool.check_health().await);
+        assert!(
+            valid_pool.check_health().await,
+            "有效 Redis 池的健康檢查應該成功"
+        );
     }
 
     #[tokio::test]
     async fn test_cache_consistency_on_successful_update() {
         // 測試成功更新時的快取一致性
-        RedisTestConfig::ensure_redis_available("test_cache_consistency_on_successful_update").await;
+        RedisTestConfig::ensure_redis_available("test_cache_consistency_on_successful_update")
+            .await;
 
         let pool = RedisTestConfig::create_test_pool()
             .await

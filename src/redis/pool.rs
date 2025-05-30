@@ -150,57 +150,23 @@ impl RedisPool for Arc<ConnectionPool> {
     }
 }
 
-/// 連接池輔助器，用於測試
-#[cfg(test)]
-pub mod test_helpers {
-    use super::*;
-
-    /// 創建測試用的連接池
-    pub async fn create_test_pool() -> Result<ConnectionPool, RedisPoolError> {
-        // 檢查測試環境中是否有Redis可用
-        let redis_url = std::env::var("REDIS_TEST_URL")
-            .unwrap_or_else(|_| "redis://localhost:6379".to_string());
-
-        let config = RedisConfig {
-            url: redis_url,
-            pool_size: 3,
-            connection_timeout_secs: 5,
-            read_timeout_secs: 5,
-            write_timeout_secs: 5,
-            reconnect_attempts: 1,
-            reconnect_delay_secs: 1,
-        };
-
-        ConnectionPool::new(config).await
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::redis::test_config::RedisTestConfig;
     use deadpool_redis::redis::AsyncCommands;
 
     #[tokio::test]
     async fn test_connection_pool() {
-        // 跳過測試，除非環境中有Redis可用
-        let redis_available =
-            std::env::var("REDIS_TEST_AVAILABLE").unwrap_or_else(|_| "false".to_string());
-        if redis_available != "true" {
-            println!("跳過Redis連接池測試 - 無Redis環境可用");
+        if RedisTestConfig::skip_if_redis_unavailable("test_connection_pool")
+            .await
+            .is_none()
+        {
             return;
         }
 
         // 創建連接池
-        let config = RedisConfig {
-            url: "redis://localhost:6379".to_string(),
-            pool_size: 5,
-            connection_timeout_secs: 5,
-            read_timeout_secs: 5,
-            write_timeout_secs: 5,
-            reconnect_attempts: 3,
-            reconnect_delay_secs: 1,
-        };
-
+        let config = RedisTestConfig::create_test_config();
         let pool = ConnectionPool::new(config)
             .await
             .expect("無法創建Redis連接池");

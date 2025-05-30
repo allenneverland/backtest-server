@@ -7,6 +7,9 @@ pub mod client;
 pub mod operations;
 pub mod pool;
 
+#[cfg(test)]
+pub mod test_config;
+
 pub use client::*;
 pub use operations::cache::*;
 pub use pool::*;

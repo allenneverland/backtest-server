@@ -91,6 +91,12 @@ pub trait CacheOperations: Send + Sync + 'static {
     where
         K: AsRef<str> + Send + Sync,
         V: Serialize + Send + Sync;
+
+    /// Pipeline 操作：批量執行多個命令
+    async fn pipeline_mset<K, V>(&self, items: &[(K, V)], ttl_secs: Option<u64>) -> Result<(), CacheError>
+    where
+        K: AsRef<str> + Send + Sync,
+        V: Serialize + Send + Sync;
 }
 
 /// Redis 快取監控指標命名空間
@@ -130,13 +136,6 @@ impl<P: RedisPool> CacheManager<P> {
         Self { pool }
     }
 
-    /// 獲取 Redis 連接 - 用於 Pipeline 操作
-    pub async fn get_connection(&self) -> Result<deadpool_redis::Connection, CacheError> {
-        self.pool
-            .get_conn()
-            .await
-            .map_err(CacheError::ConnectionError)
-    }
 
     /// 生成快取鍵前綴
     fn prefix_key<K: AsRef<str>>(&self, key: K) -> String {
@@ -436,22 +435,8 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
         }
 
         if let Some(ttl) = ttl_secs {
-            // 使用 pipeline 進行批量設置帶TTL
-            let mut pipe = deadpool_redis::redis::pipe();
-            for (key, value) in &prefixed_items {
-                pipe.cmd("SET").arg(key).arg(value).arg("EX").arg(ttl);
-            }
-
-            match pipe.query_async::<()>(&mut conn).await {
-                Ok(_) => {
-                    debug!("批量快取設置成功 (帶TTL): {} 項", prefixed_items.len());
-                    Ok(())
-                }
-                Err(e) => {
-                    error!("批量快取設置失敗 (帶TTL): {}", e);
-                    Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
-                }
-            }
+            // 對於帶TTL的批量設置，使用 pipeline 方法
+            self.pipeline_mset(items, Some(ttl)).await
         } else {
             // 使用 MSET 進行批量設置不帶TTL
             match conn.mset::<String, String, ()>(&prefixed_items).await {
@@ -463,6 +448,52 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
                     error!("批量快取設置失敗: {}", e);
                     Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
                 }
+            }
+        }
+    }
+
+    async fn pipeline_mset<K, V>(&self, items: &[(K, V)], ttl_secs: Option<u64>) -> Result<(), CacheError>
+    where
+        K: AsRef<str> + Send + Sync,
+        V: Serialize + Send + Sync,
+    {
+        let start = Instant::now();
+        
+        if items.is_empty() {
+            return Ok(());
+        }
+
+        let mut conn = self.pool.get_conn().await?;
+        let mut pipe = deadpool_redis::redis::pipe();
+
+        // 構建 Pipeline 命令
+        for (key, value) in items {
+            let prefixed_key = self.prefix_key(key);
+            let serialized = serde_json::to_string(value)
+                .map_err(|e| CacheError::SerializationError(e.to_string()))?;
+
+            if let Some(ttl) = ttl_secs {
+                pipe.cmd("SET")
+                    .arg(&prefixed_key)
+                    .arg(&serialized)
+                    .arg("EX")
+                    .arg(ttl);
+            } else {
+                pipe.set(&prefixed_key, &serialized);
+            }
+        }
+
+        // 執行 Pipeline
+        match pipe.query_async::<()>(&mut conn).await {
+            Ok(_) => {
+                debug!("Pipeline 批量快取設置成功: {} 項", items.len());
+                self.record_redis_operation("pipeline_mset", true, start.elapsed());
+                Ok(())
+            }
+            Err(e) => {
+                error!("Pipeline 批量快取設置失敗: {}", e);
+                self.record_redis_operation("pipeline_mset", false, start.elapsed());
+                Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
             }
         }
     }
@@ -492,16 +523,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_operations() {
-        // 跳過測試，除非環境中有Redis可用
-        let redis_available =
-            std::env::var("REDIS_TEST_AVAILABLE").unwrap_or_else(|_| "false".to_string());
-        if redis_available != "true" {
-            println!("跳過Redis快取測試 - 無Redis環境可用");
+        use crate::redis::test_config::RedisTestConfig;
+
+        if RedisTestConfig::skip_if_redis_unavailable("test_cache_operations")
+            .await
+            .is_none()
+        {
             return;
         }
 
         // 創建Redis連接池和快取管理器
-        let pool = crate::redis::pool::test_helpers::create_test_pool()
+        let pool = RedisTestConfig::create_test_pool()
             .await
             .expect("無法創建測試Redis連接池");
 
@@ -562,16 +594,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_batch_operations() {
-        // 跳過測試，除非環境中有Redis可用
-        let redis_available =
-            std::env::var("REDIS_TEST_AVAILABLE").unwrap_or_else(|_| "false".to_string());
-        if redis_available != "true" {
-            println!("跳過Redis批量操作測試 - 無Redis環境可用");
+        use crate::redis::test_config::RedisTestConfig;
+
+        if RedisTestConfig::skip_if_redis_unavailable("test_batch_operations")
+            .await
+            .is_none()
+        {
             return;
         }
 
         // 創建Redis連接池和快取管理器
-        let pool = crate::redis::pool::test_helpers::create_test_pool()
+        let pool = RedisTestConfig::create_test_pool()
             .await
             .expect("無法創建測試Redis連接池");
 
@@ -625,15 +658,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_batch_operations() {
-        // 跳過測試，除非環境中有Redis可用
-        let redis_available =
-            std::env::var("REDIS_TEST_AVAILABLE").unwrap_or_else(|_| "false".to_string());
-        if redis_available != "true" {
-            println!("跳過Redis空批量操作測試 - 無Redis環境可用");
+        use crate::redis::test_config::RedisTestConfig;
+
+        if RedisTestConfig::skip_if_redis_unavailable("test_empty_batch_operations")
+            .await
+            .is_none()
+        {
             return;
         }
 
-        let pool = crate::redis::pool::test_helpers::create_test_pool()
+        let pool = RedisTestConfig::create_test_pool()
             .await
             .expect("無法創建測試Redis連接池");
 
@@ -653,5 +687,91 @@ mod tests {
         let empty_results: Vec<Option<TestObject>> =
             cache.mget(&empty_keys).await.expect("空批量獲取失敗");
         assert!(empty_results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_operations() {
+        use crate::redis::test_config::RedisTestConfig;
+
+        if RedisTestConfig::skip_if_redis_unavailable("test_pipeline_operations")
+            .await
+            .is_none()
+        {
+            return;
+        }
+
+        let pool = RedisTestConfig::create_test_pool()
+            .await
+            .expect("無法創建測試Redis連接池");
+
+        let cache = CacheManager::new(pool);
+
+        // 準備測試數據
+        let test_items = vec![
+            ("pipeline_key_1".to_string(), TestObject::new(1, "Pipeline測試1")),
+            ("pipeline_key_2".to_string(), TestObject::new(2, "Pipeline測試2")),
+            ("pipeline_key_3".to_string(), TestObject::new(3, "Pipeline測試3")),
+        ];
+
+        // 測試 Pipeline 批量設置（帶TTL）
+        cache
+            .pipeline_mset(&test_items, Some(60))
+            .await
+            .expect("Pipeline 批量設置失敗");
+
+        // 驗證所有項目都被正確設置
+        for (key, expected_obj) in &test_items {
+            let retrieved: TestObject = cache.get(key).await.expect("獲取Pipeline快取失敗");
+            assert_eq!(retrieved, *expected_obj);
+        }
+
+        // 測試 Pipeline 批量設置（不帶TTL）
+        let test_items_no_ttl = vec![
+            ("pipeline_key_4".to_string(), TestObject::new(4, "Pipeline測試4")),
+            ("pipeline_key_5".to_string(), TestObject::new(5, "Pipeline測試5")),
+        ];
+
+        cache
+            .pipeline_mset(&test_items_no_ttl, None)
+            .await
+            .expect("Pipeline 批量設置（不帶TTL）失敗");
+
+        // 驗證不帶TTL的項目
+        for (key, expected_obj) in &test_items_no_ttl {
+            let retrieved: TestObject = cache.get(key).await.expect("獲取Pipeline快取失敗");
+            assert_eq!(retrieved, *expected_obj);
+        }
+
+        // 清理測試數據
+        for (key, _) in test_items.iter().chain(test_items_no_ttl.iter()) {
+            let _ = cache.delete(key).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_empty_input() {
+        use crate::redis::test_config::RedisTestConfig;
+
+        if RedisTestConfig::skip_if_redis_unavailable("test_pipeline_empty_input")
+            .await
+            .is_none()
+        {
+            return;
+        }
+
+        let pool = RedisTestConfig::create_test_pool()
+            .await
+            .expect("無法創建測試Redis連接池");
+
+        let cache = CacheManager::new(pool);
+
+        // 測試空輸入的 Pipeline 操作
+        let empty_items: Vec<(String, TestObject)> = vec![];
+        
+        // 空 Pipeline 操作應該成功
+        cache
+            .pipeline_mset(&empty_items, Some(60))
+            .await
+            .expect("空Pipeline操作失敗");
     }
 }

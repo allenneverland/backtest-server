@@ -172,6 +172,11 @@ impl<P: RedisPool> MultiLevelCache<P> {
     }
 
     /// 設置 MinuteBars 資料 - 高性能版本
+    ///
+    /// # 快取一致性策略
+    /// - 先更新 Redis（持久化層）
+    /// - 只有在 Redis 更新成功後才更新內存快取
+    /// - 如果 Redis 更新失敗，內存快取保持不變
     pub async fn set_minute_bars(
         &self,
         key: &str,
@@ -180,16 +185,16 @@ impl<P: RedisPool> MultiLevelCache<P> {
         let start = Instant::now();
         let hash = Self::hash_key(key);
 
-        // 1. 更新內存快取
-        let arc_bars = Arc::new(bars.clone());
-        self.minute_bars_cache.insert(hash, arc_bars).await;
-
-        // 2. 更新 hash 映射
-        self.key_mapping.write().await.insert(hash, key.to_string());
-
-        // 3. 更新 Redis 快取
+        // 1. 先更新 Redis 快取
         match self.redis_cache.set(key, bars, Some(self.cache_ttl)).await {
             Ok(_) => {
+                // 2. Redis 更新成功後，更新內存快取
+                let arc_bars = Arc::new(bars.clone());
+                self.minute_bars_cache.insert(hash, arc_bars).await;
+
+                // 3. 更新 hash 映射
+                self.key_mapping.write().await.insert(hash, key.to_string());
+
                 counter!(
                     format!("{}.set", METRIC_NAMESPACE),
                     "type" => "minute_bars"
@@ -208,6 +213,11 @@ impl<P: RedisPool> MultiLevelCache<P> {
     /// 設置 MinuteBars 資料 (Arc 版本) - 避免不必要的複製
     ///
     /// 當調用者已經擁有 Arc<Vec<MinuteBar>> 時，可以使用此方法避免額外的 clone。
+    ///
+    /// # 快取一致性策略
+    /// - 先更新 Redis（持久化層）
+    /// - 只有在 Redis 更新成功後才更新內存快取
+    /// - 如果 Redis 更新失敗，內存快取保持不變
     pub async fn set_minute_bars_arc(
         &self,
         key: &str,
@@ -216,19 +226,19 @@ impl<P: RedisPool> MultiLevelCache<P> {
         let start = Instant::now();
         let hash = Self::hash_key(key);
 
-        // 1. 更新內存快取（使用 hash 作為鍵）
-        self.minute_bars_cache.insert(hash, bars.clone()).await;
-
-        // 2. 更新 hash 映射
-        self.key_mapping.write().await.insert(hash, key.to_string());
-
-        // 3. 更新 Redis 快取（需要解引用）
+        // 1. 先更新 Redis 快取（需要解引用）
         match self
             .redis_cache
             .set(key, &*bars, Some(self.cache_ttl))
             .await
         {
             Ok(_) => {
+                // 2. Redis 更新成功後，更新內存快取（使用 hash 作為鍵）
+                self.minute_bars_cache.insert(hash, bars.clone()).await;
+
+                // 3. 更新 hash 映射
+                self.key_mapping.write().await.insert(hash, key.to_string());
+
                 counter!(
                     format!("{}.set", METRIC_NAMESPACE),
                     "type" => "minute_bars"
@@ -287,20 +297,25 @@ impl<P: RedisPool> MultiLevelCache<P> {
     }
 
     /// 設置 Ticks 資料 - 帶監控指標
+    ///
+    /// # 快取一致性策略
+    /// - 先更新 Redis（持久化層）
+    /// - 只有在 Redis 更新成功後才更新內存快取
+    /// - 如果 Redis 更新失敗，內存快取保持不變
     pub async fn set_ticks(&self, key: &str, ticks: &Vec<DbTick>) -> Result<(), CacheError> {
         let start = Instant::now();
         let hash = Self::hash_key(key);
 
-        // 1. 更新內存快取（使用 hash 作為鍵）
-        let arc_ticks = Arc::new(ticks.clone());
-        self.ticks_cache.insert(hash, arc_ticks).await;
-
-        // 2. 更新 hash 映射
-        self.key_mapping.write().await.insert(hash, key.to_string());
-
-        // 3. 更新 Redis 快取
+        // 1. 先更新 Redis 快取
         match self.redis_cache.set(key, ticks, Some(self.cache_ttl)).await {
             Ok(_) => {
+                // 2. Redis 更新成功後，更新內存快取（使用 hash 作為鍵）
+                let arc_ticks = Arc::new(ticks.clone());
+                self.ticks_cache.insert(hash, arc_ticks).await;
+
+                // 3. 更新 hash 映射
+                self.key_mapping.write().await.insert(hash, key.to_string());
+
                 counter!(
                     format!("{}.set", METRIC_NAMESPACE),
                     "type" => "ticks"
@@ -319,6 +334,11 @@ impl<P: RedisPool> MultiLevelCache<P> {
     /// 設置 Ticks 資料 (Arc 版本) - 避免不必要的複製
     ///
     /// 當調用者已經擁有 Arc<Vec<DbTick>> 時，可以使用此方法避免額外的 clone。
+    ///
+    /// # 快取一致性策略
+    /// - 先更新 Redis（持久化層）
+    /// - 只有在 Redis 更新成功後才更新內存快取
+    /// - 如果 Redis 更新失敗，內存快取保持不變
     pub async fn set_ticks_arc(
         &self,
         key: &str,
@@ -327,19 +347,19 @@ impl<P: RedisPool> MultiLevelCache<P> {
         let start = Instant::now();
         let hash = Self::hash_key(key);
 
-        // 1. 更新內存快取（使用 hash 作為鍵）
-        self.ticks_cache.insert(hash, ticks.clone()).await;
-
-        // 2. 更新 hash 映射
-        self.key_mapping.write().await.insert(hash, key.to_string());
-
-        // 3. 更新 Redis 快取（需要解引用）
+        // 1. 先更新 Redis 快取（需要解引用）
         match self
             .redis_cache
             .set(key, &*ticks, Some(self.cache_ttl))
             .await
         {
             Ok(_) => {
+                // 2. Redis 更新成功後，更新內存快取（使用 hash 作為鍵）
+                self.ticks_cache.insert(hash, ticks.clone()).await;
+
+                // 3. 更新 hash 映射
+                self.key_mapping.write().await.insert(hash, key.to_string());
+
                 counter!(
                     format!("{}.set", METRIC_NAMESPACE),
                     "type" => "ticks"
@@ -359,6 +379,10 @@ impl<P: RedisPool> MultiLevelCache<P> {
     ///
     /// 如果快取命中，返回共享的數據；如果需要計算，返回新創建的數據。
     /// 這可以顯著減少記憶體分配和複製操作。
+    ///
+    /// # 快取一致性策略
+    /// - 先更新 Redis（持久化層）
+    /// - 只有在 Redis 更新成功後才更新內存快取
     pub async fn get_or_compute_minute_bars<F>(
         &self,
         key: &str,
@@ -393,23 +417,34 @@ impl<P: RedisPool> MultiLevelCache<P> {
                 let bars = compute();
                 let arc_bars = Arc::new(bars);
 
-                // 更新快取和映射
-                self.minute_bars_cache.insert(hash, arc_bars.clone()).await;
-
-                // 更新 hash 映射
-                self.key_mapping.write().await.insert(hash, key.to_string());
-
-                self.redis_cache
+                // 先嘗試更新 Redis
+                match self
+                    .redis_cache
                     .set(key, &*arc_bars, Some(self.cache_ttl))
-                    .await?;
-
-                Ok(arc_bars)
+                    .await
+                {
+                    Ok(_) => {
+                        // Redis 更新成功後，更新內存快取和映射
+                        self.minute_bars_cache.insert(hash, arc_bars.clone()).await;
+                        self.key_mapping.write().await.insert(hash, key.to_string());
+                        Ok(arc_bars)
+                    }
+                    Err(e) => {
+                        // Redis 更新失敗，不更新內存快取
+                        self.record_error("set_in_compute", "minute_bars");
+                        Err(e)
+                    }
+                }
             }
             Err(e) => Err(e),
         }
     }
 
     /// 獲取或計算 Ticks 資料 - 使用 Arc 避免不必要的複製
+    ///
+    /// # 快取一致性策略
+    /// - 先更新 Redis（持久化層）
+    /// - 只有在 Redis 更新成功後才更新內存快取
     pub async fn get_or_compute_ticks<F>(
         &self,
         key: &str,
@@ -444,17 +479,24 @@ impl<P: RedisPool> MultiLevelCache<P> {
                 let ticks = compute();
                 let arc_ticks = Arc::new(ticks);
 
-                // 更新快取和映射
-                self.ticks_cache.insert(hash, arc_ticks.clone()).await;
-
-                // 更新 hash 映射
-                self.key_mapping.write().await.insert(hash, key.to_string());
-
-                self.redis_cache
+                // 先嘗試更新 Redis
+                match self
+                    .redis_cache
                     .set(key, &*arc_ticks, Some(self.cache_ttl))
-                    .await?;
-
-                Ok(arc_ticks)
+                    .await
+                {
+                    Ok(_) => {
+                        // Redis 更新成功後，更新內存快取和映射
+                        self.ticks_cache.insert(hash, arc_ticks.clone()).await;
+                        self.key_mapping.write().await.insert(hash, key.to_string());
+                        Ok(arc_ticks)
+                    }
+                    Err(e) => {
+                        // Redis 更新失敗，不更新內存快取
+                        self.record_error("set_in_compute", "ticks");
+                        Err(e)
+                    }
+                }
             }
             Err(e) => Err(e),
         }
@@ -768,25 +810,15 @@ impl<P: RedisPool> MultiLevelCache<P> {
         }
         drop(key_mapping); // 釋放寫鎖
 
-        // 2. 使用 Redis Pipeline 批量設置
-        let mut conn = self.redis_cache.get_connection().await?;
-        let mut pipe = redis::pipe();
+        // 2. 使用 CacheManager 的 Pipeline 批量設置
+        let redis_items: Vec<(String, &Vec<MinuteBar>)> =
+            items.iter().map(|(k, v)| (k.clone(), &**v)).collect();
 
-        // 構建 Pipeline 命令
-        for (key, bars) in items {
-            let prefixed_key = format!("cache:{}", key);
-            let serialized = serde_json::to_string(&**bars)
-                .map_err(|e| CacheError::SerializationError(e.to_string()))?;
-
-            pipe.cmd("SET")
-                .arg(&prefixed_key)
-                .arg(&serialized)
-                .arg("EX")
-                .arg(self.cache_ttl);
-        }
-
-        // 一次性執行所有命令
-        match pipe.query_async::<()>(&mut conn).await {
+        match self
+            .redis_cache
+            .pipeline_mset(&redis_items, Some(self.cache_ttl))
+            .await
+        {
             Ok(_) => {
                 counter!("cache_pipeline_set", "type" => "minute_bars")
                     .increment(items.len() as u64);
@@ -796,9 +828,7 @@ impl<P: RedisPool> MultiLevelCache<P> {
             }
             Err(e) => {
                 counter!("cache_pipeline_set_error", "type" => "minute_bars").increment(1);
-                Err(CacheError::RedisError(
-                    crate::redis::client::RedisClientError::ConnectionError(e),
-                ))
+                Err(e)
             }
         }
     }
@@ -899,25 +929,15 @@ impl<P: RedisPool> MultiLevelCache<P> {
         }
         drop(key_mapping); // 釋放寫鎖
 
-        // 2. 使用 Redis Pipeline 批量設置
-        let mut conn = self.redis_cache.get_connection().await?;
-        let mut pipe = redis::pipe();
+        // 2. 使用 CacheManager 的 Pipeline 批量設置
+        let redis_items: Vec<(String, &Vec<DbTick>)> =
+            items.iter().map(|(k, v)| (k.clone(), &**v)).collect();
 
-        // 構建 Pipeline 命令
-        for (key, ticks) in items {
-            let prefixed_key = format!("cache:{}", key);
-            let serialized = serde_json::to_string(&**ticks)
-                .map_err(|e| CacheError::SerializationError(e.to_string()))?;
-
-            pipe.cmd("SET")
-                .arg(&prefixed_key)
-                .arg(&serialized)
-                .arg("EX")
-                .arg(self.cache_ttl);
-        }
-
-        // 一次性執行所有命令
-        match pipe.query_async::<()>(&mut conn).await {
+        match self
+            .redis_cache
+            .pipeline_mset(&redis_items, Some(self.cache_ttl))
+            .await
+        {
             Ok(_) => {
                 counter!("cache_pipeline_set", "type" => "ticks").increment(items.len() as u64);
                 histogram!("cache_pipeline_set_duration", "type" => "ticks")
@@ -926,9 +946,7 @@ impl<P: RedisPool> MultiLevelCache<P> {
             }
             Err(e) => {
                 counter!("cache_pipeline_set_error", "type" => "ticks").increment(1);
-                Err(CacheError::RedisError(
-                    crate::redis::client::RedisClientError::ConnectionError(e),
-                ))
+                Err(e)
             }
         }
     }
@@ -972,6 +990,26 @@ impl<P: RedisPool> MultiLevelCache<P> {
             counter!("cache_smart_eviction").increment(1);
             histogram!("cache_eviction_size").record((current_size - target_size) as f64);
         }
+    }
+
+    /// 新增方法：安全地刪除不一致的快取資料
+    ///
+    /// 當偵測到快取不一致時，此方法可以幫助清理相關數據
+    pub async fn invalidate_inconsistent_cache(&self, key: &str) {
+        let hash = Self::hash_key(key);
+
+        // 從內存快取中刪除
+        self.minute_bars_cache.invalidate(&hash).await;
+        self.ticks_cache.invalidate(&hash).await;
+
+        // 從映射中刪除
+        self.key_mapping.write().await.remove(&hash);
+
+        // 嘗試從 Redis 中刪除（忽略錯誤）
+        let _ = self.redis_cache.delete(key).await;
+
+        // 記錄清理操作
+        counter!("cache_inconsistent_cleanup").increment(1);
     }
 
     /// 獲取快取統計信息
@@ -1131,8 +1169,10 @@ impl<P: RedisPool> MultiLevelCache<P> {
 mod tests {
     use super::*;
     use crate::cache::keys::{generate_cache_key, OptimizedKeyBuilder};
+    use crate::redis::test_config::RedisTestConfig;
     use chrono::{DateTime, Utc};
     use rust_decimal_macros::dec;
+    use std::sync::Arc;
 
     fn create_test_minute_bars() -> Vec<MinuteBar> {
         vec![
@@ -1516,5 +1556,39 @@ mod tests {
         assert!(buffer.indices.is_empty());
         assert_eq!(buffer.keys.capacity(), keys_cap);
         assert_eq!(buffer.indices.capacity(), indices_cap);
+    }
+
+    #[tokio::test]
+    async fn test_cache_consistency_on_redis_failure() {
+        // 測試 Redis 失敗時的快取一致性
+        if RedisTestConfig::skip_if_redis_unavailable("test_cache_consistency_on_redis_failure")
+            .await
+            .is_none()
+        {
+            return;
+        }
+
+        // 建立測試用的 Redis 池
+        let pool = RedisTestConfig::create_test_pool()
+            .await
+            .expect("無法創建測試 Redis 池");
+
+        // TODO: 可以測試錯誤的 Redis URL 來模擬連接失敗
+        // 現在暫時只驗證池的健康狀態
+        assert!(pool.check_health().await);
+    }
+
+    #[tokio::test]
+    async fn test_cache_consistency_on_successful_update() {
+        // 測試成功更新時的快取一致性
+        // TODO: 實現完整的測試用例
+        // 確保 Redis 和內存快取都被正確更新
+    }
+
+    #[tokio::test]
+    async fn test_invalidate_inconsistent_cache() {
+        // 測試清理不一致快取的功能
+        // TODO: 實現完整的測試用例
+        // 確保 invalidate_inconsistent_cache 方法能正確清理所有層級的快取
     }
 }

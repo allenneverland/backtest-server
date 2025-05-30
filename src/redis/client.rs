@@ -337,31 +337,13 @@ impl RedisOperations for Client {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::types::RedisConfig;
-
-    fn create_test_config() -> RedisConfig {
-        RedisConfig {
-            url: "redis://localhost:6379".to_string(),
-            pool_size: 5,
-            connection_timeout_secs: 5,
-            read_timeout_secs: 5,
-            write_timeout_secs: 5,
-            reconnect_attempts: 3,
-            reconnect_delay_secs: 1,
-        }
-    }
+    use crate::redis::test_config::RedisTestConfig;
 
     #[tokio::test]
     async fn test_redis_operations() {
-        // 跳過測試，除非環境中有Redis可用
-        let redis_available =
-            std::env::var("REDIS_TEST_AVAILABLE").unwrap_or_else(|_| "false".to_string());
-        if redis_available != "true" {
-            println!("跳過Redis測試 - 無Redis環境可用");
-            return;
-        }
+        RedisTestConfig::ensure_redis_available("test_redis_operations").await;
 
-        let config = create_test_config();
+        let config = RedisTestConfig::create_test_config();
         let client = Client::new(config).expect("無法創建Redis客戶端");
 
         // 測試SET和GET

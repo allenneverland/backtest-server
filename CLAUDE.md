@@ -50,6 +50,28 @@ cargo make docker-c cargo lint
 cargo make docker-c cargo coverage
 ```
 
+### Local CI Testing
+
+```bash
+# Complete CI simulation (recommended before pushing)
+./scripts/test-ci-commands.sh
+
+# Quick CI check (format + clippy + tests)
+./scripts/test-ci-commands.sh --quick
+
+# Format check only
+./scripts/test-ci-commands.sh --format-only
+
+# Tests only
+./scripts/test-ci-commands.sh --test-only
+
+# Check CI readiness
+./scripts/test-ci-readiness.sh
+
+# Validate GitHub workflows
+./scripts/validate-github-workflows.sh
+```
+
 ### Database Management
 
 ```bash

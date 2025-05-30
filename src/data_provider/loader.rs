@@ -1,5 +1,7 @@
+use crate::cache::{generate_cache_key, MultiLevelCache};
 use crate::domain_types::*;
-use crate::redis::pool::RedisPool;
+use crate::redis::operations::cache::{CacheError, CacheManager};
+use crate::redis::pool::ConnectionPool;
 use crate::storage::{
     models::market_data::{MinuteBar, Tick as DbTick},
     repository::{
@@ -14,7 +16,7 @@ use rust_decimal::prelude::ToPrimitive;
 use sqlx::PgPool;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 
 /// 資料載入器的錯誤類型
 #[derive(Debug, Error)]
@@ -24,6 +26,9 @@ pub enum DataLoaderError {
 
     #[error("Redis 錯誤: {0}")]
     Redis(#[from] redis::RedisError),
+
+    #[error("快取錯誤: {0}")]
+    Cache(#[from] CacheError),
 
     #[error("Polars 錯誤: {0}")]
     Polars(#[from] PolarsError),
@@ -73,7 +78,8 @@ pub trait DataLoader: Send + Sync {
 /// 市場資料載入器實現
 pub struct MarketDataLoader {
     database: Arc<PgPool>,
-    redis_pool: Option<Arc<dyn RedisPool>>,
+    redis_pool: Option<Arc<ConnectionPool>>,
+    cache: Option<Arc<MultiLevelCache<Arc<ConnectionPool>>>>,
     cache_ttl_seconds: u64,
 }
 
@@ -83,13 +89,23 @@ impl MarketDataLoader {
         Self {
             database,
             redis_pool: None,
+            cache: None,
             cache_ttl_seconds: 300, // 預設 5 分鐘快取
         }
     }
 
     /// 設定 Redis 連接池以啟用快取功能
-    pub fn with_redis(mut self, redis_pool: Arc<dyn RedisPool>) -> Self {
+    pub fn with_redis(mut self, redis_pool: Arc<ConnectionPool>) -> Self {
+        // 創建多層級快取
+        let cache_manager = Arc::new(CacheManager::new(redis_pool.clone()));
+        let multi_level_cache = Arc::new(MultiLevelCache::new(
+            cache_manager,
+            1000, // 內存快取容量
+            self.cache_ttl_seconds,
+        ));
+        self.cache = Some(multi_level_cache);
         self.redis_pool = Some(redis_pool);
+
         self
     }
 
@@ -97,6 +113,44 @@ impl MarketDataLoader {
     pub fn with_cache_ttl(mut self, ttl_seconds: u64) -> Self {
         self.cache_ttl_seconds = ttl_seconds;
         self
+    }
+
+    /// 預熱快取
+    ///
+    /// 載入常用資料到快取中，以提高後續查詢效能
+    pub async fn warm_cache(
+        &self,
+        instrument_ids: &[i32],
+        frequencies: &[&str],
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<()> {
+        if let Some(ref cache) = self.cache {
+            let mut cache_keys = Vec::new();
+
+            // 生成所有需要預熱的快取鍵
+            for &instrument_id in instrument_ids {
+                for &frequency in frequencies {
+                    let key = generate_cache_key(
+                        instrument_id,
+                        frequency,
+                        start.timestamp_millis(),
+                        end.timestamp_millis(),
+                    );
+                    cache_keys.push(key);
+                }
+            }
+
+            // 批量預熱快取 - 預設為分鐘級資料
+            cache.warm_minute_bars_cache(cache_keys).await?;
+
+            debug!(
+                "快取預熱完成: {} 個項目",
+                instrument_ids.len() * frequencies.len()
+            );
+        }
+
+        Ok(())
     }
 }
 
@@ -122,6 +176,43 @@ impl DataLoader for MarketDataLoader {
             end
         );
 
+        // 生成快取鍵
+        let cache_key = generate_cache_key(
+            instrument_id,
+            F::name(),
+            start.timestamp_millis(),
+            end.timestamp_millis(),
+        );
+
+        // 如果快取可用，嘗試從快取獲取
+        if let Some(ref cache) = self.cache {
+            match cache.get_minute_bars(&cache_key).await {
+                Ok(Some(cached_bars)) => {
+                    debug!("從快取獲取 OHLCV 資料: {}", cache_key);
+                    // 轉換快取的資料並返回
+                    let df = minute_bars_to_dataframe(&cached_bars)?;
+                    let minute_ohlcv =
+                        OhlcvSeries::<Minute>::from_lazy(df.lazy(), instrument_id.to_string());
+
+                    if F::to_frequency() == Frequency::Minute {
+                        let df_collected = minute_ohlcv.collect()?;
+                        return Ok(OhlcvSeries::<F>::from_dataframe_unchecked(
+                            df_collected,
+                            instrument_id.to_string(),
+                        ));
+                    } else if F::to_frequency().is_ohlcv() {
+                        return Ok(minute_ohlcv.resample_to::<F>()?);
+                    }
+                }
+                Ok(None) => {
+                    debug!("快取未命中: {}", cache_key);
+                }
+                Err(e) => {
+                    warn!("快取讀取錯誤: {}, 將直接從資料庫讀取", e);
+                }
+            }
+        }
+
         // 從資料庫載入分鐘級資料作為基礎
         let market_data_repo = PgMarketDataRepository::new((*self.database).clone());
         let time_range = TimeRange::new(start, end);
@@ -137,8 +228,15 @@ impl DataLoader for MarketDataLoader {
             });
         }
 
+        // 如果快取可用，將資料存入快取
+        if let Some(ref cache) = self.cache {
+            if let Err(e) = cache.set_minute_bars(&cache_key, &bars).await {
+                warn!("快取寫入錯誤: {}", e);
+            }
+        }
+
         // 轉換為 Polars DataFrame
-        let df = minute_bars_to_dataframe(bars)?;
+        let df = minute_bars_to_dataframe(&bars)?;
 
         // 建立分鐘級 OHLCV
         let minute_ohlcv = OhlcvSeries::<Minute>::from_lazy(df.lazy(), instrument_id.to_string());
@@ -180,6 +278,35 @@ impl DataLoader for MarketDataLoader {
             instrument_id, start, end
         );
 
+        // 生成快取鍵
+        let cache_key = generate_cache_key(
+            instrument_id,
+            "tick",
+            start.timestamp_millis(),
+            end.timestamp_millis(),
+        );
+
+        // 如果快取可用，嘗試從快取獲取
+        if let Some(ref cache) = self.cache {
+            match cache.get_ticks(&cache_key).await {
+                Ok(Some(cached_ticks)) => {
+                    debug!("從快取獲取 Tick 資料: {}", cache_key);
+                    // 轉換快取的資料並返回
+                    let df = ticks_to_dataframe(&cached_ticks)?;
+                    return Ok(TickSeries::<Tick>::from_lazy(
+                        df.lazy(),
+                        instrument_id.to_string(),
+                    ));
+                }
+                Ok(None) => {
+                    debug!("快取未命中: {}", cache_key);
+                }
+                Err(e) => {
+                    warn!("快取讀取錯誤: {}, 將直接從資料庫讀取", e);
+                }
+            }
+        }
+
         // 從資料庫載入資料
         let market_data_repo = PgMarketDataRepository::new((*self.database).clone());
         let time_range = TimeRange::new(start, end);
@@ -195,8 +322,15 @@ impl DataLoader for MarketDataLoader {
             });
         }
 
+        // 如果快取可用，將資料存入快取
+        if let Some(ref cache) = self.cache {
+            if let Err(e) = cache.set_ticks(&cache_key, &ticks).await {
+                warn!("快取寫入錯誤: {}", e);
+            }
+        }
+
         // 轉換為 Polars DataFrame
-        let df = ticks_to_dataframe(ticks)?;
+        let df = ticks_to_dataframe(&ticks)?;
 
         // 建立 TickSeries
         Ok(TickSeries::<Tick>::from_lazy(
@@ -207,7 +341,7 @@ impl DataLoader for MarketDataLoader {
 }
 
 /// 將分鐘線資料轉換為 DataFrame
-fn minute_bars_to_dataframe(bars: Vec<MinuteBar>) -> Result<DataFrame> {
+fn minute_bars_to_dataframe(bars: &[MinuteBar]) -> Result<DataFrame> {
     let mut time_vec = Vec::with_capacity(bars.len());
     let mut open_vec = Vec::with_capacity(bars.len());
     let mut high_vec = Vec::with_capacity(bars.len());
@@ -240,7 +374,7 @@ fn minute_bars_to_dataframe(bars: Vec<MinuteBar>) -> Result<DataFrame> {
 }
 
 /// 將 Tick 資料轉換為 DataFrame
-fn ticks_to_dataframe(ticks: Vec<DbTick>) -> Result<DataFrame> {
+fn ticks_to_dataframe(ticks: &[DbTick]) -> Result<DataFrame> {
     let mut time_vec = Vec::with_capacity(ticks.len());
     let mut price_vec = Vec::with_capacity(ticks.len());
     let mut volume_vec = Vec::with_capacity(ticks.len());
@@ -302,7 +436,7 @@ mod tests {
             },
         ];
 
-        let df = minute_bars_to_dataframe(bars).unwrap();
+        let df = minute_bars_to_dataframe(&bars).unwrap();
 
         assert_eq!(df.height(), 2);
         assert_eq!(df.width(), 7);

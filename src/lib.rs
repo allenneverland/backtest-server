@@ -1,5 +1,6 @@
 // 模組定義
 pub mod backtest;
+pub mod cache;
 pub mod config;
 pub mod data_provider;
 pub mod domain_types;

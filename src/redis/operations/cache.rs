@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use deadpool_redis::redis::{cmd, AsyncCommands};
+use metrics::{counter, histogram};
 use serde::{de::DeserializeOwned, Serialize};
+use std::time::Instant;
 use thiserror::Error;
 use tracing::{debug, error, warn};
 
@@ -77,7 +79,32 @@ pub trait CacheOperations: Send + Sync + 'static {
         V: DeserializeOwned + Serialize + Send + Sync,
         F: FnOnce() -> Fut + Send + Sync,
         Fut: std::future::Future<Output = Result<V, CacheError>> + Send;
+
+    /// 批量獲取多個鍵的值
+    async fn mget<K, V>(&self, keys: &[K]) -> Result<Vec<Option<V>>, CacheError>
+    where
+        K: AsRef<str> + Send + Sync,
+        V: DeserializeOwned + Send + Sync;
+
+    /// 批量設置多個鍵值對
+    async fn mset<K, V>(&self, items: &[(K, V)], ttl_secs: Option<u64>) -> Result<(), CacheError>
+    where
+        K: AsRef<str> + Send + Sync,
+        V: Serialize + Send + Sync;
+
+    /// Pipeline 操作：批量執行多個命令
+    async fn pipeline_mset<K, V>(
+        &self,
+        items: &[(K, V)],
+        ttl_secs: Option<u64>,
+    ) -> Result<(), CacheError>
+    where
+        K: AsRef<str> + Send + Sync,
+        V: Serialize + Send + Sync;
 }
+
+/// Redis 快取監控指標命名空間
+const REDIS_METRIC_NAMESPACE: &str = "redis_cache";
 
 /// 快取操作實現
 pub struct CacheManager<P: RedisPool> {
@@ -85,6 +112,29 @@ pub struct CacheManager<P: RedisPool> {
 }
 
 impl<P: RedisPool> CacheManager<P> {
+    /// 記錄 Redis 操作指標
+    fn record_redis_operation(
+        &self,
+        operation: &str,
+        success: bool,
+        duration: std::time::Duration,
+    ) {
+        let status = if success { "success" } else { "error" };
+
+        counter!(
+            format!("{}.operation", REDIS_METRIC_NAMESPACE),
+            "operation" => operation.to_string(),
+            "status" => status.to_string()
+        )
+        .increment(1);
+
+        histogram!(
+            format!("{}.latency_ns", REDIS_METRIC_NAMESPACE),
+            "operation" => operation.to_string()
+        )
+        .record(duration.as_nanos() as f64);
+    }
+
     /// 創建新的快取管理器
     pub fn new(pool: P) -> Self {
         Self { pool }
@@ -136,6 +186,8 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
         K: AsRef<str> + Send + Sync,
         V: Serialize + Send + Sync,
     {
+        let start = Instant::now();
+
         // 序列化值
         let serialized = serde_json::to_string(value)
             .map_err(|e| CacheError::SerializationError(e.to_string()))?;
@@ -155,10 +207,12 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
             {
                 Ok(_) => {
                     debug!("快取設置成功 (帶TTL): {}", prefixed_key);
+                    self.record_redis_operation("set_with_ttl", true, start.elapsed());
                     Ok(())
                 }
                 Err(e) => {
                     error!("快取設置失敗 (帶TTL): {}", e);
+                    self.record_redis_operation("set_with_ttl", false, start.elapsed());
                     Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
                 }
             }
@@ -167,10 +221,12 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
             match conn.set::<_, _, String>(&prefixed_key, &serialized).await {
                 Ok(_) => {
                     debug!("快取設置成功: {}", prefixed_key);
+                    self.record_redis_operation("set", true, start.elapsed());
                     Ok(())
                 }
                 Err(e) => {
                     error!("快取設置失敗: {}", e);
+                    self.record_redis_operation("set", false, start.elapsed());
                     Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
                 }
             }
@@ -182,6 +238,7 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
         K: AsRef<str> + Send + Sync,
         V: DeserializeOwned + Send + Sync,
     {
+        let start = Instant::now();
         let prefixed_key = self.prefix_key(key);
         let mut conn = self.pool.get_conn().await?;
 
@@ -192,20 +249,28 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
                 match serde_json::from_str(&value) {
                     Ok(deserialized) => {
                         debug!("快取命中: {}", prefixed_key);
+                        self.record_redis_operation("get_hit", true, start.elapsed());
                         Ok(deserialized)
                     }
                     Err(e) => {
                         warn!("快取值反序列化失敗: {}", e);
+                        self.record_redis_operation(
+                            "get_deserialization_error",
+                            false,
+                            start.elapsed(),
+                        );
                         Err(CacheError::DeserializationError(e.to_string()))
                     }
                 }
             }
             Ok(None) => {
                 debug!("快取未命中: {}", prefixed_key);
+                self.record_redis_operation("get_miss", true, start.elapsed());
                 Err(CacheError::CacheMiss(prefixed_key))
             }
             Err(e) => {
                 error!("快取讀取失敗: {}", e);
+                self.record_redis_operation("get_error", false, start.elapsed());
                 Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
             }
         }
@@ -307,6 +372,138 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
             Err(e) => Err(e), // 其他錯誤直接返回
         }
     }
+
+    async fn mget<K, V>(&self, keys: &[K]) -> Result<Vec<Option<V>>, CacheError>
+    where
+        K: AsRef<str> + Send + Sync,
+        V: DeserializeOwned + Send + Sync,
+    {
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let prefixed_keys: Vec<String> = keys.iter().map(|k| self.prefix_key(k)).collect();
+        let mut conn = self.pool.get_conn().await?;
+
+        match conn.get::<_, Vec<Option<String>>>(&prefixed_keys).await {
+            Ok(values) => {
+                let mut results = Vec::with_capacity(values.len());
+
+                for (idx, value) in values.into_iter().enumerate() {
+                    match value {
+                        Some(serialized) => match serde_json::from_str::<V>(&serialized) {
+                            Ok(deserialized) => {
+                                debug!("批量快取命中: {}", prefixed_keys[idx]);
+                                results.push(Some(deserialized));
+                            }
+                            Err(e) => {
+                                warn!("批量快取值反序列化失敗: {}", e);
+                                results.push(None);
+                            }
+                        },
+                        None => {
+                            debug!("批量快取未命中: {}", prefixed_keys[idx]);
+                            results.push(None);
+                        }
+                    }
+                }
+
+                Ok(results)
+            }
+            Err(e) => {
+                error!("批量快取讀取失敗: {}", e);
+                Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
+            }
+        }
+    }
+
+    async fn mset<K, V>(&self, items: &[(K, V)], ttl_secs: Option<u64>) -> Result<(), CacheError>
+    where
+        K: AsRef<str> + Send + Sync,
+        V: Serialize + Send + Sync,
+    {
+        if items.is_empty() {
+            return Ok(());
+        }
+
+        let mut conn = self.pool.get_conn().await?;
+
+        // 準備批量設置的數據
+        let mut prefixed_items = Vec::with_capacity(items.len());
+        for (key, value) in items {
+            let prefixed_key = self.prefix_key(key);
+            let serialized = serde_json::to_string(value)
+                .map_err(|e| CacheError::SerializationError(e.to_string()))?;
+            prefixed_items.push((prefixed_key, serialized));
+        }
+
+        if let Some(ttl) = ttl_secs {
+            // 對於帶TTL的批量設置，使用 pipeline 方法
+            self.pipeline_mset(items, Some(ttl)).await
+        } else {
+            // 使用 MSET 進行批量設置不帶TTL
+            match conn.mset::<String, String, ()>(&prefixed_items).await {
+                Ok(_) => {
+                    debug!("批量快取設置成功: {} 項", items.len());
+                    Ok(())
+                }
+                Err(e) => {
+                    error!("批量快取設置失敗: {}", e);
+                    Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
+                }
+            }
+        }
+    }
+
+    async fn pipeline_mset<K, V>(
+        &self,
+        items: &[(K, V)],
+        ttl_secs: Option<u64>,
+    ) -> Result<(), CacheError>
+    where
+        K: AsRef<str> + Send + Sync,
+        V: Serialize + Send + Sync,
+    {
+        let start = Instant::now();
+
+        if items.is_empty() {
+            return Ok(());
+        }
+
+        let mut conn = self.pool.get_conn().await?;
+        let mut pipe = deadpool_redis::redis::pipe();
+
+        // 構建 Pipeline 命令
+        for (key, value) in items {
+            let prefixed_key = self.prefix_key(key);
+            let serialized = serde_json::to_string(value)
+                .map_err(|e| CacheError::SerializationError(e.to_string()))?;
+
+            if let Some(ttl) = ttl_secs {
+                pipe.cmd("SET")
+                    .arg(&prefixed_key)
+                    .arg(&serialized)
+                    .arg("EX")
+                    .arg(ttl);
+            } else {
+                pipe.set(&prefixed_key, &serialized);
+            }
+        }
+
+        // 執行 Pipeline
+        match pipe.query_async::<()>(&mut conn).await {
+            Ok(_) => {
+                debug!("Pipeline 批量快取設置成功: {} 項", items.len());
+                self.record_redis_operation("pipeline_mset", true, start.elapsed());
+                Ok(())
+            }
+            Err(e) => {
+                error!("Pipeline 批量快取設置失敗: {}", e);
+                self.record_redis_operation("pipeline_mset", false, start.elapsed());
+                Err(CacheError::RedisError(RedisClientError::ConnectionError(e)))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -333,16 +530,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_operations() {
-        // 跳過測試，除非環境中有Redis可用
-        let redis_available =
-            std::env::var("REDIS_TEST_AVAILABLE").unwrap_or_else(|_| "false".to_string());
-        if redis_available != "true" {
-            println!("跳過Redis快取測試 - 無Redis環境可用");
-            return;
-        }
+        use crate::redis::test_config::RedisTestConfig;
+
+        RedisTestConfig::ensure_redis_available("test_cache_operations").await;
 
         // 創建Redis連接池和快取管理器
-        let pool = crate::redis::pool::test_helpers::create_test_pool()
+        let pool = RedisTestConfig::create_test_pool()
             .await
             .expect("無法創建測試Redis連接池");
 
@@ -399,5 +592,183 @@ mod tests {
 
         // 清理
         let _ = cache.delete("new_key").await;
+    }
+
+    #[tokio::test]
+    async fn test_batch_operations() {
+        use crate::redis::test_config::RedisTestConfig;
+
+        RedisTestConfig::ensure_redis_available("test_batch_operations").await;
+
+        // 創建Redis連接池和快取管理器
+        let pool = RedisTestConfig::create_test_pool()
+            .await
+            .expect("無法創建測試Redis連接池");
+
+        let cache = CacheManager::new(pool);
+
+        // 準備測試數據
+        let test_items = vec![
+            ("batch_key_1".to_string(), TestObject::new(1, "批量測試1")),
+            ("batch_key_2".to_string(), TestObject::new(2, "批量測試2")),
+            ("batch_key_3".to_string(), TestObject::new(3, "批量測試3")),
+        ];
+
+        // 測試批量設置
+        cache
+            .mset(&test_items, Some(60))
+            .await
+            .expect("批量設置失敗");
+
+        // 測試批量獲取
+        let keys: Vec<String> = test_items.iter().map(|(k, _)| k.clone()).collect();
+        let results: Vec<Option<TestObject>> = cache.mget(&keys).await.expect("批量獲取失敗");
+
+        // 驗證結果
+        assert_eq!(results.len(), 3);
+        for (i, result) in results.iter().enumerate() {
+            assert!(result.is_some());
+            if let Some(obj) = result {
+                assert_eq!(obj.id, (i + 1) as i32);
+            }
+        }
+
+        // 測試部分存在的情況
+        let mixed_keys = vec![
+            "batch_key_1".to_string(),
+            "non_existent_key".to_string(),
+            "batch_key_3".to_string(),
+        ];
+        let mixed_results: Vec<Option<TestObject>> =
+            cache.mget(&mixed_keys).await.expect("混合批量獲取失敗");
+
+        assert_eq!(mixed_results.len(), 3);
+        assert!(mixed_results[0].is_some()); // batch_key_1 存在
+        assert!(mixed_results[1].is_none()); // non_existent_key 不存在
+        assert!(mixed_results[2].is_some()); // batch_key_3 存在
+
+        // 清理測試數據
+        for (key, _) in &test_items {
+            let _ = cache.delete(key).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn test_empty_batch_operations() {
+        use crate::redis::test_config::RedisTestConfig;
+
+        RedisTestConfig::ensure_redis_available("test_empty_batch_operations").await;
+
+        let pool = RedisTestConfig::create_test_pool()
+            .await
+            .expect("無法創建測試Redis連接池");
+
+        let cache = CacheManager::new(pool);
+
+        // 測試空的批量操作
+        let empty_items: Vec<(String, TestObject)> = vec![];
+        let empty_keys: Vec<String> = vec![];
+
+        // 空批量設置應該成功
+        cache
+            .mset(&empty_items, None)
+            .await
+            .expect("空批量設置失敗");
+
+        // 空批量獲取應該返回空結果
+        let empty_results: Vec<Option<TestObject>> =
+            cache.mget(&empty_keys).await.expect("空批量獲取失敗");
+        assert!(empty_results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_operations() {
+        use crate::redis::test_config::RedisTestConfig;
+
+        RedisTestConfig::ensure_redis_available("test_pipeline_operations").await;
+
+        let pool = RedisTestConfig::create_test_pool()
+            .await
+            .expect("無法創建測試Redis連接池");
+
+        let cache = CacheManager::new(pool);
+
+        // 準備測試數據
+        let test_items = vec![
+            (
+                "pipeline_key_1".to_string(),
+                TestObject::new(1, "Pipeline測試1"),
+            ),
+            (
+                "pipeline_key_2".to_string(),
+                TestObject::new(2, "Pipeline測試2"),
+            ),
+            (
+                "pipeline_key_3".to_string(),
+                TestObject::new(3, "Pipeline測試3"),
+            ),
+        ];
+
+        // 測試 Pipeline 批量設置（帶TTL）
+        cache
+            .pipeline_mset(&test_items, Some(60))
+            .await
+            .expect("Pipeline 批量設置失敗");
+
+        // 驗證所有項目都被正確設置
+        for (key, expected_obj) in &test_items {
+            let retrieved: TestObject = cache.get(key).await.expect("獲取Pipeline快取失敗");
+            assert_eq!(retrieved, *expected_obj);
+        }
+
+        // 測試 Pipeline 批量設置（不帶TTL）
+        let test_items_no_ttl = vec![
+            (
+                "pipeline_key_4".to_string(),
+                TestObject::new(4, "Pipeline測試4"),
+            ),
+            (
+                "pipeline_key_5".to_string(),
+                TestObject::new(5, "Pipeline測試5"),
+            ),
+        ];
+
+        cache
+            .pipeline_mset(&test_items_no_ttl, None)
+            .await
+            .expect("Pipeline 批量設置（不帶TTL）失敗");
+
+        // 驗證不帶TTL的項目
+        for (key, expected_obj) in &test_items_no_ttl {
+            let retrieved: TestObject = cache.get(key).await.expect("獲取Pipeline快取失敗");
+            assert_eq!(retrieved, *expected_obj);
+        }
+
+        // 清理測試數據
+        for (key, _) in test_items.iter().chain(test_items_no_ttl.iter()) {
+            let _ = cache.delete(key).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_empty_input() {
+        use crate::redis::test_config::RedisTestConfig;
+
+        RedisTestConfig::ensure_redis_available("test_pipeline_empty_input").await;
+
+        let pool = RedisTestConfig::create_test_pool()
+            .await
+            .expect("無法創建測試Redis連接池");
+
+        let cache = CacheManager::new(pool);
+
+        // 測試空輸入的 Pipeline 操作
+        let empty_items: Vec<(String, TestObject)> = vec![];
+
+        // 空 Pipeline 操作應該成功
+        cache
+            .pipeline_mset(&empty_items, Some(60))
+            .await
+            .expect("空Pipeline操作失敗");
     }
 }

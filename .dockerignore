@@ -1,7 +1,3 @@
-# 忽略版本控制文件
-.git
-.gitignore
-
 # 忽略構建輸出
 target/
 *.rs.bk
@@ -10,3 +6,9 @@ target/
 Dockerfile*
 docker-compose*.yml
 .dockerignore
+
+Cargo.lock
+*.log
+.DS_Store
+*.swp
+*.swo

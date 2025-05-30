@@ -190,7 +190,7 @@ impl DataLoader for MarketDataLoader {
                 Ok(Some(cached_bars)) => {
                     debug!("從快取獲取 OHLCV 資料: {}", cache_key);
                     // 轉換快取的資料並返回
-                    let df = minute_bars_to_dataframe(cached_bars)?;
+                    let df = minute_bars_to_dataframe(&cached_bars)?;
                     let minute_ohlcv =
                         OhlcvSeries::<Minute>::from_lazy(df.lazy(), instrument_id.to_string());
 
@@ -236,7 +236,7 @@ impl DataLoader for MarketDataLoader {
         }
 
         // 轉換為 Polars DataFrame
-        let df = minute_bars_to_dataframe(bars)?;
+        let df = minute_bars_to_dataframe(&bars)?;
 
         // 建立分鐘級 OHLCV
         let minute_ohlcv = OhlcvSeries::<Minute>::from_lazy(df.lazy(), instrument_id.to_string());
@@ -292,7 +292,7 @@ impl DataLoader for MarketDataLoader {
                 Ok(Some(cached_ticks)) => {
                     debug!("從快取獲取 Tick 資料: {}", cache_key);
                     // 轉換快取的資料並返回
-                    let df = ticks_to_dataframe(cached_ticks)?;
+                    let df = ticks_to_dataframe(&cached_ticks)?;
                     return Ok(TickSeries::<Tick>::from_lazy(
                         df.lazy(),
                         instrument_id.to_string(),
@@ -330,7 +330,7 @@ impl DataLoader for MarketDataLoader {
         }
 
         // 轉換為 Polars DataFrame
-        let df = ticks_to_dataframe(ticks)?;
+        let df = ticks_to_dataframe(&ticks)?;
 
         // 建立 TickSeries
         Ok(TickSeries::<Tick>::from_lazy(
@@ -341,7 +341,7 @@ impl DataLoader for MarketDataLoader {
 }
 
 /// 將分鐘線資料轉換為 DataFrame
-fn minute_bars_to_dataframe(bars: Vec<MinuteBar>) -> Result<DataFrame> {
+fn minute_bars_to_dataframe(bars: &[MinuteBar]) -> Result<DataFrame> {
     let mut time_vec = Vec::with_capacity(bars.len());
     let mut open_vec = Vec::with_capacity(bars.len());
     let mut high_vec = Vec::with_capacity(bars.len());
@@ -374,7 +374,7 @@ fn minute_bars_to_dataframe(bars: Vec<MinuteBar>) -> Result<DataFrame> {
 }
 
 /// 將 Tick 資料轉換為 DataFrame
-fn ticks_to_dataframe(ticks: Vec<DbTick>) -> Result<DataFrame> {
+fn ticks_to_dataframe(ticks: &[DbTick]) -> Result<DataFrame> {
     let mut time_vec = Vec::with_capacity(ticks.len());
     let mut price_vec = Vec::with_capacity(ticks.len());
     let mut volume_vec = Vec::with_capacity(ticks.len());
@@ -436,7 +436,7 @@ mod tests {
             },
         ];
 
-        let df = minute_bars_to_dataframe(bars).unwrap();
+        let df = minute_bars_to_dataframe(&bars).unwrap();
 
         assert_eq!(df.height(), 2);
         assert_eq!(df.width(), 7);

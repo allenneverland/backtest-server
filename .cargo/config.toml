@@ -1,43 +1,77 @@
-# 全局 Cargo 配置
-
-# 編譯設置
 [build]
-# 使用所有可用的CPU核心進行編譯
-jobs = 8
+# 限制並行任務數以控制記憶體使用
+jobs = 4
+# 使用 mold/lld 作為連結器（更快）
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+# 增量編譯
+incremental = true
+# 設定目標目錄以便快取
+target-dir = "/tmp/target"
 
-# 啟用增量編譯，以提高重複編譯速度
+[target.x86_64-unknown-linux-gnu]
+# 使用 clang 和 lld 進行連結
+linker = "clang"
+rustflags = [
+    "-C", "link-arg=-fuse-ld=lld",
+    "-C", "target-cpu=native",
+    "-C", "link-arg=-Wl,--compress-debug-sections=zlib"
+]
+
+[profile.dev]
+# 開發模式優化
+opt-level = 0
+debug = 1  # 減少 debug 資訊
+split-debuginfo = "packed"
+# 加快編譯速度
+incremental = true
+# 降低 codegen-units 以減少記憶體使用
+codegen-units = 256
+
+[profile.dev.package."*"]
+# 依賴項使用優化編譯
+opt-level = 2
+
+[profile.release]
+# 發布版本優化
+opt-level = 3
+lto = "thin"  # thin LTO 比 fat LTO 快
+codegen-units = 16  # 平衡編譯速度和運行效能
+debug = 0
+strip = true
+panic = "abort"  # 減少二進位大小
+
+[profile.release-fast]
+# 快速發布編譯
+inherits = "release"
+lto = false
+codegen-units = 256
 incremental = true
 
-# 針對發布版本的優化設置
-[profile.release]
-# 優化級別 (0-3)，3為最高級別優化
-opt-level = 3
-
-# 啟用鏈接時間優化 (LTO)
-lto = "thin"
-
-# 啟用調試信息，允許在發布模式下捕獲更好的錯誤信息
-debug = 1
-
-# 啟用代碼分割，減小二進制大小
+[profile.release-small]
+# 最小化二進位大小
+inherits = "release"
+opt-level = "z"
+lto = true
 codegen-units = 1
+strip = true
 
-# 針對開發版本的設置
-[profile.dev]
-# 開發版本使用較低的優化級別，以提高編譯速度
-opt-level = 0
+[net]
+# 網路優化
+git-fetch-with-cli = true
+retry = 2
+offline = false
 
-# 開發時啟用完整的調試信息
-debug = 2
+[registries.crates-io]
+# 使用 sparse protocol（Rust 1.68+）
+protocol = "sparse"
 
-# 包和依賴設置
-[source.crates-io]
+[http]
+# HTTP 設定優化
+multiplexing = false  # 避免某些代理問題
+timeout = 60
 
-# 添加自定義編譯目標(如果需要)
-# [target.x86_64-unknown-linux-gnu]
-# rustflags = ["-C", "target-cpu=native"]
-
-# 環境特定的配置
 [env]
-# 設置RUST_BACKTRACE=1，以便在崩潰時顯示完整堆棧跟踪
+# 環境變數
 RUST_BACKTRACE = "1"
+# 設定 rustc 包裝器
+RUSTC_WRAPPER = "sccache"

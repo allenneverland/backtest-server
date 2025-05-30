@@ -302,16 +302,34 @@ impl ExecutionLogRepository for PgExecutionLogRepository {
 mod tests {
     use super::*;
     use crate::storage::create_test_pool;
+    use crate::storage::models::execution_run::{ExecutionRunInsert, ExecutionStatus};
+    use crate::storage::repository::execution_run::{
+        ExecutionRunRepository, PgExecutionRunRepository,
+    };
     use sqlx::types::Json;
+    use uuid::Uuid;
 
     #[tokio::test]
     async fn test_execution_log_crud() {
         let pool = create_test_pool().await;
-        let repo = PgExecutionLogRepository::new(Arc::new(pool));
+        let pool_arc = Arc::new(pool);
+        let log_repo = PgExecutionLogRepository::new(pool_arc.clone());
+        let run_repo = PgExecutionRunRepository::new(pool_arc);
 
-        // Create test log
+        // First create an execution run for the foreign key constraint
+        let run_insert = ExecutionRunInsert {
+            external_backtest_id: 1,
+            request_id: Uuid::new_v4(),
+            strategy_dsl: "test strategy".to_string(),
+            parameters: Json(serde_json::json!({"initial_capital": 10000})),
+            status: Some(ExecutionStatus::Initializing.as_str().to_string()),
+            progress: Some(0),
+        };
+        let execution_run = run_repo.create_execution_run(run_insert).await.unwrap();
+
+        // Create test log with the actual run_id
         let log_insert = ExecutionLogInsert {
-            run_id: 1,
+            run_id: execution_run.run_id,
             timestamp: Some(Utc::now()),
             log_level: LogLevel::Info.as_str().to_string(),
             component: Some("test_component".to_string()),
@@ -320,21 +338,24 @@ mod tests {
         };
 
         // Test create
-        let created = repo.add_execution_log(log_insert).await.unwrap();
+        let created = log_repo.add_execution_log(log_insert).await.unwrap();
         assert_eq!(created.message, "Test log message");
         assert_eq!(created.log_level, LogLevel::Info.as_str());
 
         // Test get logs
         let filter = ExecutionLogFilter {
-            run_id: Some(1),
+            run_id: Some(execution_run.run_id),
             ..Default::default()
         };
         let page = PageQuery::new(1, 10);
-        let logs_page = repo.get_execution_logs(1, filter, page).await.unwrap();
+        let logs_page = log_repo
+            .get_execution_logs(execution_run.run_id, filter, page)
+            .await
+            .unwrap();
         assert!(!logs_page.data.is_empty());
 
         // Test get log stats
-        let stats = repo.get_log_stats(1).await.unwrap();
+        let stats = log_repo.get_log_stats(execution_run.run_id).await.unwrap();
         assert!(stats.total_logs > 0);
     }
 }

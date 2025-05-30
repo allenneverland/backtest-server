@@ -93,7 +93,11 @@ pub trait CacheOperations: Send + Sync + 'static {
         V: Serialize + Send + Sync;
 
     /// Pipeline 操作：批量執行多個命令
-    async fn pipeline_mset<K, V>(&self, items: &[(K, V)], ttl_secs: Option<u64>) -> Result<(), CacheError>
+    async fn pipeline_mset<K, V>(
+        &self,
+        items: &[(K, V)],
+        ttl_secs: Option<u64>,
+    ) -> Result<(), CacheError>
     where
         K: AsRef<str> + Send + Sync,
         V: Serialize + Send + Sync;
@@ -135,7 +139,6 @@ impl<P: RedisPool> CacheManager<P> {
     pub fn new(pool: P) -> Self {
         Self { pool }
     }
-
 
     /// 生成快取鍵前綴
     fn prefix_key<K: AsRef<str>>(&self, key: K) -> String {
@@ -452,13 +455,17 @@ impl<P: RedisPool> CacheOperations for CacheManager<P> {
         }
     }
 
-    async fn pipeline_mset<K, V>(&self, items: &[(K, V)], ttl_secs: Option<u64>) -> Result<(), CacheError>
+    async fn pipeline_mset<K, V>(
+        &self,
+        items: &[(K, V)],
+        ttl_secs: Option<u64>,
+    ) -> Result<(), CacheError>
     where
         K: AsRef<str> + Send + Sync,
         V: Serialize + Send + Sync,
     {
         let start = Instant::now();
-        
+
         if items.is_empty() {
             return Ok(());
         }
@@ -708,9 +715,18 @@ mod tests {
 
         // 準備測試數據
         let test_items = vec![
-            ("pipeline_key_1".to_string(), TestObject::new(1, "Pipeline測試1")),
-            ("pipeline_key_2".to_string(), TestObject::new(2, "Pipeline測試2")),
-            ("pipeline_key_3".to_string(), TestObject::new(3, "Pipeline測試3")),
+            (
+                "pipeline_key_1".to_string(),
+                TestObject::new(1, "Pipeline測試1"),
+            ),
+            (
+                "pipeline_key_2".to_string(),
+                TestObject::new(2, "Pipeline測試2"),
+            ),
+            (
+                "pipeline_key_3".to_string(),
+                TestObject::new(3, "Pipeline測試3"),
+            ),
         ];
 
         // 測試 Pipeline 批量設置（帶TTL）
@@ -727,8 +743,14 @@ mod tests {
 
         // 測試 Pipeline 批量設置（不帶TTL）
         let test_items_no_ttl = vec![
-            ("pipeline_key_4".to_string(), TestObject::new(4, "Pipeline測試4")),
-            ("pipeline_key_5".to_string(), TestObject::new(5, "Pipeline測試5")),
+            (
+                "pipeline_key_4".to_string(),
+                TestObject::new(4, "Pipeline測試4"),
+            ),
+            (
+                "pipeline_key_5".to_string(),
+                TestObject::new(5, "Pipeline測試5"),
+            ),
         ];
 
         cache
@@ -767,7 +789,7 @@ mod tests {
 
         // 測試空輸入的 Pipeline 操作
         let empty_items: Vec<(String, TestObject)> = vec![];
-        
+
         // 空 Pipeline 操作應該成功
         cache
             .pipeline_mset(&empty_items, Some(60))

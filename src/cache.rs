@@ -11,4 +11,4 @@ pub use keys::{generate_cache_key, CacheKeyHash, OptimizedKeyBuilder};
 pub use metrics::{CacheMetrics, MetricType, METRIC_NAMESPACE};
 pub use multi_level::MultiLevelCache;
 pub use stats::{CacheStats, MultiCacheStats};
-pub use traits::{Cacheable, CacheableData};
+pub use traits::CacheableData;

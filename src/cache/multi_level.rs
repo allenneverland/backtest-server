@@ -50,7 +50,12 @@ impl<P: RedisPool> MultiLevelCache<P> {
         // 1. 嘗試從內存快取獲取（使用 hash）
         if let Some(arc_data) = cache.get(&hash).await {
             self.record_metric::<T>(MetricType::Hit { layer: "memory" }, None);
-            self.record_metric::<T>(MetricType::Latency { operation: "get_memory" }, Some(start.elapsed()));
+            self.record_metric::<T>(
+                MetricType::Latency {
+                    operation: "get_memory",
+                },
+                Some(start.elapsed()),
+            );
             return Ok(Some(arc_data));
         }
 
@@ -58,7 +63,12 @@ impl<P: RedisPool> MultiLevelCache<P> {
         match self.redis_cache.get::<_, Vec<T>>(key).await {
             Ok(data) => {
                 self.record_metric::<T>(MetricType::Hit { layer: "redis" }, None);
-                self.record_metric::<T>(MetricType::Latency { operation: "get_redis" }, Some(start.elapsed()));
+                self.record_metric::<T>(
+                    MetricType::Latency {
+                        operation: "get_redis",
+                    },
+                    Some(start.elapsed()),
+                );
 
                 // 更新內存快取和映射
                 let arc_data = Arc::new(data);
@@ -71,7 +81,12 @@ impl<P: RedisPool> MultiLevelCache<P> {
             }
             Err(CacheError::CacheMiss(_)) => {
                 self.record_metric::<T>(MetricType::Miss, None);
-                self.record_metric::<T>(MetricType::Latency { operation: "get_miss" }, Some(start.elapsed()));
+                self.record_metric::<T>(
+                    MetricType::Latency {
+                        operation: "get_miss",
+                    },
+                    Some(start.elapsed()),
+                );
                 Ok(None)
             }
             Err(e) => {
@@ -102,7 +117,10 @@ impl<P: RedisPool> MultiLevelCache<P> {
                 self.key_mapping.write().await.insert(hash, key.to_string());
 
                 CacheMetrics::record_set(T::data_type_name());
-                self.record_metric::<T>(MetricType::Latency { operation: "set" }, Some(start.elapsed()));
+                self.record_metric::<T>(
+                    MetricType::Latency { operation: "set" },
+                    Some(start.elapsed()),
+                );
                 Ok(())
             }
             Err(e) => {
@@ -136,11 +154,21 @@ impl<P: RedisPool> MultiLevelCache<P> {
                 self.key_mapping.write().await.insert(hash, key.to_string());
 
                 CacheMetrics::record_set(T::data_type_name());
-                self.record_metric::<T>(MetricType::Latency { operation: "set_arc" }, Some(start.elapsed()));
+                self.record_metric::<T>(
+                    MetricType::Latency {
+                        operation: "set_arc",
+                    },
+                    Some(start.elapsed()),
+                );
                 Ok(())
             }
             Err(e) => {
-                self.record_metric::<T>(MetricType::Error { operation: "set_arc" }, None);
+                self.record_metric::<T>(
+                    MetricType::Error {
+                        operation: "set_arc",
+                    },
+                    None,
+                );
                 Err(e)
             }
         }
@@ -185,7 +213,8 @@ impl<P: RedisPool> MultiLevelCache<P> {
         &self,
         key: &str,
     ) -> Result<Option<Arc<Vec<MinuteBar>>>, CacheError> {
-        self.get_cached_data::<MinuteBar>(key, &self.minute_bars_cache).await
+        self.get_cached_data::<MinuteBar>(key, &self.minute_bars_cache)
+            .await
     }
 
     /// 設置 MinuteBars 資料 - 高性能版本
@@ -199,7 +228,8 @@ impl<P: RedisPool> MultiLevelCache<P> {
         key: &str,
         bars: &Vec<MinuteBar>,
     ) -> Result<(), CacheError> {
-        self.set_cached_data::<MinuteBar>(key, bars, &self.minute_bars_cache).await
+        self.set_cached_data::<MinuteBar>(key, bars, &self.minute_bars_cache)
+            .await
     }
 
     /// 設置 MinuteBars 資料 (Arc 版本) - 避免不必要的複製
@@ -215,7 +245,8 @@ impl<P: RedisPool> MultiLevelCache<P> {
         key: &str,
         bars: Arc<Vec<MinuteBar>>,
     ) -> Result<(), CacheError> {
-        self.set_cached_data_arc::<MinuteBar>(key, bars, &self.minute_bars_cache).await
+        self.set_cached_data_arc::<MinuteBar>(key, bars, &self.minute_bars_cache)
+            .await
     }
 
     /// 獲取 Ticks 資料 - 帶監控指標
@@ -233,7 +264,8 @@ impl<P: RedisPool> MultiLevelCache<P> {
     /// - 只有在 Redis 更新成功後才更新內存快取
     /// - 如果 Redis 更新失敗，內存快取保持不變
     pub async fn set_ticks(&self, key: &str, ticks: &Vec<DbTick>) -> Result<(), CacheError> {
-        self.set_cached_data::<DbTick>(key, ticks, &self.ticks_cache).await
+        self.set_cached_data::<DbTick>(key, ticks, &self.ticks_cache)
+            .await
     }
 
     /// 設置 Ticks 資料 (Arc 版本) - 避免不必要的複製
@@ -249,7 +281,8 @@ impl<P: RedisPool> MultiLevelCache<P> {
         key: &str,
         ticks: Arc<Vec<DbTick>>,
     ) -> Result<(), CacheError> {
-        self.set_cached_data_arc::<DbTick>(key, ticks, &self.ticks_cache).await
+        self.set_cached_data_arc::<DbTick>(key, ticks, &self.ticks_cache)
+            .await
     }
 
     /// 獲取或計算 MinuteBars 資料 - 使用 Arc 避免不必要的複製
@@ -308,7 +341,12 @@ impl<P: RedisPool> MultiLevelCache<P> {
                     }
                     Err(e) => {
                         // Redis 更新失敗，不更新內存快取
-                        self.record_metric::<MinuteBar>(MetricType::Error { operation: "set_in_compute" }, None);
+                        self.record_metric::<MinuteBar>(
+                            MetricType::Error {
+                                operation: "set_in_compute",
+                            },
+                            None,
+                        );
                         Err(e)
                     }
                 }
@@ -370,7 +408,12 @@ impl<P: RedisPool> MultiLevelCache<P> {
                     }
                     Err(e) => {
                         // Redis 更新失敗，不更新內存快取
-                        self.record_metric::<DbTick>(MetricType::Error { operation: "set_in_compute" }, None);
+                        self.record_metric::<DbTick>(
+                            MetricType::Error {
+                                operation: "set_in_compute",
+                            },
+                            None,
+                        );
                         Err(e)
                     }
                 }
@@ -396,12 +439,22 @@ impl<P: RedisPool> MultiLevelCache<P> {
             Ok(deleted) => {
                 CacheMetrics::record_delete(deleted);
                 // Note: Using MinuteBar as placeholder for general delete operations
-                self.record_metric::<MinuteBar>(MetricType::Latency { operation: "delete" }, Some(start.elapsed()));
+                self.record_metric::<MinuteBar>(
+                    MetricType::Latency {
+                        operation: "delete",
+                    },
+                    Some(start.elapsed()),
+                );
                 Ok(deleted)
             }
             Err(e) => {
                 // Note: Using MinuteBar as placeholder for general delete operations
-                self.record_metric::<MinuteBar>(MetricType::Error { operation: "delete" }, None);
+                self.record_metric::<MinuteBar>(
+                    MetricType::Error {
+                        operation: "delete",
+                    },
+                    None,
+                );
                 Err(e)
             }
         }
@@ -483,7 +536,13 @@ impl<P: RedisPool> MultiLevelCache<P> {
             }
         }
 
-        self.record_metric::<MinuteBar>(MetricType::BatchOperation { operation: "get", count: keys.len() }, Some(start.elapsed()));
+        self.record_metric::<MinuteBar>(
+            MetricType::BatchOperation {
+                operation: "get",
+                count: keys.len(),
+            },
+            Some(start.elapsed()),
+        );
 
         Ok(results)
     }
@@ -555,7 +614,13 @@ impl<P: RedisPool> MultiLevelCache<P> {
             }
         }
 
-        self.record_metric::<DbTick>(MetricType::BatchOperation { operation: "get", count: keys.len() }, Some(start.elapsed()));
+        self.record_metric::<DbTick>(
+            MetricType::BatchOperation {
+                operation: "get",
+                count: keys.len(),
+            },
+            Some(start.elapsed()),
+        );
 
         Ok(results)
     }
@@ -994,7 +1059,13 @@ impl<P: RedisPool> MultiLevelCache<P> {
             }
         }
 
-        self.record_metric::<MinuteBar>(MetricType::BatchOperation { operation: "get", count: keys.len() }, Some(start.elapsed()));
+        self.record_metric::<MinuteBar>(
+            MetricType::BatchOperation {
+                operation: "get",
+                count: keys.len(),
+            },
+            Some(start.elapsed()),
+        );
 
         Ok(results)
     }
@@ -1054,7 +1125,13 @@ impl<P: RedisPool> MultiLevelCache<P> {
             }
         }
 
-        self.record_metric::<DbTick>(MetricType::BatchOperation { operation: "get", count: keys.len() }, Some(start.elapsed()));
+        self.record_metric::<DbTick>(
+            MetricType::BatchOperation {
+                operation: "get",
+                count: keys.len(),
+            },
+            Some(start.elapsed()),
+        );
 
         Ok(results)
     }

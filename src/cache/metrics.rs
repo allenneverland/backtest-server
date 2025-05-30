@@ -7,11 +7,20 @@ pub const METRIC_NAMESPACE: &str = "backtest_cache";
 /// 監控指標類型
 #[derive(Debug, Clone, Copy)]
 pub enum MetricType {
-    Hit { layer: &'static str },
+    Hit {
+        layer: &'static str,
+    },
     Miss,
-    Latency { operation: &'static str },
-    Error { operation: &'static str },
-    BatchOperation { operation: &'static str, count: usize },
+    Latency {
+        operation: &'static str,
+    },
+    Error {
+        operation: &'static str,
+    },
+    BatchOperation {
+        operation: &'static str,
+        count: usize,
+    },
 }
 
 /// 快取監控指標記錄器
@@ -120,7 +129,7 @@ impl CacheMetrics {
     /// 記錄快取大小指標
     pub fn record_cache_size(cache_type: &'static str, size: usize, mapping_size: Option<usize>) {
         histogram!("cache_memory_entries", "type" => cache_type).record(size as f64);
-        
+
         if let Some(mapping_sz) = mapping_size {
             histogram!("cache_mapping_size").record(mapping_sz as f64);
         }

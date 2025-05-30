@@ -1,5 +1,6 @@
 pub mod buffer;
 pub mod keys;
+pub mod macros;
 pub mod metrics;
 pub mod multi_level;
 pub mod stats;

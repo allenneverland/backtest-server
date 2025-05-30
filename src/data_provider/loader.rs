@@ -1,4 +1,4 @@
-use crate::data_provider::cache::{generate_cache_key, MultiLevelCache};
+use crate::cache::{generate_cache_key, MultiLevelCache};
 use crate::domain_types::*;
 use crate::redis::operations::cache::{CacheError, CacheManager};
 use crate::redis::pool::ConnectionPool;

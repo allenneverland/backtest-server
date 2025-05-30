@@ -1,46 +1,16 @@
+use crate::cache::buffer::CacheBuffer;
+use crate::cache::keys::CacheKeyHash;
+use crate::cache::stats::{CacheStats, MultiCacheStats};
 use crate::redis::operations::cache::{CacheError, CacheManager, CacheOperations};
 use crate::redis::pool::RedisPool;
 use crate::storage::models::market_data::{MinuteBar, Tick as DbTick};
 use futures::stream::{self, StreamExt};
 use metrics::{counter, histogram};
 use moka::future::Cache;
-use rustc_hash::{FxHashMap, FxHasher};
-use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
-use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
+use rustc_hash::FxHashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
-
-/// 可快取的數據特徵
-pub trait Cacheable:
-    Clone + Send + Sync + Debug + Serialize + for<'de> Deserialize<'de> + 'static
-{
-    /// 快取鍵前綴
-    const CACHE_PREFIX: &'static str;
-}
-
-impl Cacheable for Vec<MinuteBar> {
-    const CACHE_PREFIX: &'static str = "minute_bars";
-}
-
-impl Cacheable for Vec<DbTick> {
-    const CACHE_PREFIX: &'static str = "ticks";
-}
-
-/// 預計算的快取鍵雜湊值，用於加速查找
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct CacheKeyHash(u64);
-
-impl CacheKeyHash {
-    /// 使用 FxHasher 計算鍵的雜湊值
-    pub fn new(key: &str) -> Self {
-        let mut hasher = FxHasher::default();
-        key.hash(&mut hasher);
-        Self(hasher.finish())
-    }
-}
 
 /// 高性能多層級快取實現，使用 u64 hash 作為內存快取鍵
 ///
@@ -847,53 +817,7 @@ impl<P: RedisPool> MultiLevelCache<P> {
             mapping_size,
         }
     }
-}
 
-/// 單一快取統計信息
-#[derive(Debug, Clone)]
-pub struct CacheStats {
-    /// 當前快取項目數
-    pub size: usize,
-    /// 快取容量
-    pub capacity: usize,
-}
-
-/// 多快取統計信息
-#[derive(Debug, Clone)]
-pub struct MultiCacheStats {
-    /// MinuteBars 快取統計
-    pub minute_bars: CacheStats,
-    /// Ticks 快取統計
-    pub ticks: CacheStats,
-    /// Hash 映射大小
-    pub mapping_size: usize,
-}
-
-/// 快取緩衝區，用於減少記憶體分配
-pub struct CacheBuffer {
-    /// 快取鍵緩衝區
-    pub keys: Vec<String>,
-    /// 索引緩衝區
-    pub indices: Vec<usize>,
-}
-
-impl CacheBuffer {
-    /// 創建具有指定容量的緩衝區
-    pub fn with_capacity(cap: usize) -> Self {
-        Self {
-            keys: Vec::with_capacity(cap),
-            indices: Vec::with_capacity(cap),
-        }
-    }
-
-    /// 清空緩衝區內容（保留容量）
-    pub fn clear(&mut self) {
-        self.keys.clear();
-        self.indices.clear();
-    }
-}
-
-impl<P: RedisPool> MultiLevelCache<P> {
     /// 使用預分配緩衝區的批量獲取 MinuteBars
     ///
     /// 通過重用緩衝區來減少記憶體分配，提升批量操作性能。
@@ -1021,91 +945,10 @@ impl<P: RedisPool> MultiLevelCache<P> {
     }
 }
 
-/// 快取鍵構建器，重用內部緩衝區以提升性能
-pub struct OptimizedKeyBuilder {
-    buffer: Vec<u8>,
-}
-
-impl OptimizedKeyBuilder {
-    pub fn new() -> Self {
-        Self {
-            buffer: Vec::with_capacity(128),
-        }
-    }
-
-    pub fn generate_key(
-        &mut self,
-        instrument_id: i32,
-        frequency: &str,
-        start_ts: i64,
-        end_ts: i64,
-    ) -> &str {
-        use std::io::Write;
-
-        self.buffer.clear();
-
-        // 使用 Write trait 和 itoa 進行快速格式化
-        let _ = write!(
-            &mut self.buffer,
-            "market_data:{}:{}:{}:{}",
-            itoa::Buffer::new().format(instrument_id),
-            frequency,
-            itoa::Buffer::new().format(start_ts),
-            itoa::Buffer::new().format(end_ts),
-        );
-
-        // 安全：我們知道內容是有效的 UTF-8
-        unsafe { std::str::from_utf8_unchecked(&self.buffer) }
-    }
-
-    pub fn generate_key_owned(
-        &mut self,
-        instrument_id: i32,
-        frequency: &str,
-        start_ts: i64,
-        end_ts: i64,
-    ) -> String {
-        self.generate_key(instrument_id, frequency, start_ts, end_ts)
-            .to_owned()
-    }
-}
-
-impl Default for OptimizedKeyBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-thread_local! {
-    static KEY_BUILDER: RefCell<OptimizedKeyBuilder> = RefCell::new(OptimizedKeyBuilder::new());
-}
-
-/// 生成市場數據快取鍵（優化版本）
-///
-/// 使用高性能的實現，適合高頻調用場景。
-/// 使用 thread_local 重用內部緩衝區，避免頻繁的記憶體分配。
-///
-/// # Arguments
-/// * `instrument_id` - 金融工具 ID
-/// * `frequency` - 數據頻率
-/// * `start_ts` - 開始時間戳
-/// * `end_ts` - 結束時間戳
-pub fn generate_cache_key(
-    instrument_id: i32,
-    frequency: &str,
-    start_ts: i64,
-    end_ts: i64,
-) -> String {
-    KEY_BUILDER.with(|builder| {
-        builder
-            .borrow_mut()
-            .generate_key_owned(instrument_id, frequency, start_ts, end_ts)
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cache::keys::{generate_cache_key, OptimizedKeyBuilder};
     use chrono::{DateTime, Utc};
     use rust_decimal_macros::dec;
 
@@ -1187,12 +1030,6 @@ mod tests {
                 created_at: Utc::now(),
             },
         ]
-    }
-
-    #[test]
-    fn test_cacheable_trait() {
-        assert_eq!(Vec::<MinuteBar>::CACHE_PREFIX, "minute_bars");
-        assert_eq!(Vec::<DbTick>::CACHE_PREFIX, "ticks");
     }
 
     #[test]

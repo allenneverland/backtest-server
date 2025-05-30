@@ -609,13 +609,13 @@ mod tests {
         let test_bars = create_test_minute_bars();
         let test_ticks = create_test_ticks();
 
-        let minute_bars_items = vec![
+        let minute_bars_items = [
             ("key1".to_string(), test_bars.clone()),
             ("key2".to_string(), test_bars),
         ];
         assert_eq!(minute_bars_items.len(), 2);
 
-        let ticks_items = vec![
+        let ticks_items = [
             ("key1".to_string(), test_ticks.clone()),
             ("key2".to_string(), test_ticks),
         ];
@@ -761,7 +761,7 @@ mod tests {
 
         for bucket_count in distribution.values() {
             assert!(
-                *bucket_count as i32 > (expected_per_bucket as i32 - tolerance as i32),
+                *bucket_count > (expected_per_bucket - tolerance),
                 "分佈不均勻，某些桶太少: {}",
                 bucket_count
             );
@@ -876,7 +876,7 @@ mod tests {
         let test_ticks = create_test_ticks();
 
         // Pipeline MinuteBars 數據準備
-        let minute_bars_items = vec![
+        let minute_bars_items = [
             ("pipeline_key1".to_string(), Arc::new(test_bars.clone())),
             ("pipeline_key2".to_string(), Arc::new(test_bars.clone())),
             ("pipeline_key3".to_string(), Arc::new(test_bars)),
@@ -884,7 +884,7 @@ mod tests {
         assert_eq!(minute_bars_items.len(), 3);
 
         // Pipeline Ticks 數據準備
-        let ticks_items = vec![
+        let ticks_items = [
             (
                 "pipeline_tick_key1".to_string(),
                 Arc::new(test_ticks.clone()),
